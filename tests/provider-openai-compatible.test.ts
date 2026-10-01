@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test"
 import { Hono } from "hono"
 
 import type { ResolvedProviderConfig } from "~/lib/config"
+import { installModelsDevCatalog } from "~/lib/models-dev-cache"
+
+import { modelsDevCatalogFixture } from "./fixtures/models-dev-catalog"
 
 const actualConfigModule = await import("~/lib/config")
 const actualTokenUsageModule = await import("~/lib/token-usage")
@@ -102,6 +105,7 @@ const parseSseData = (text: string): Array<Record<string, unknown>> =>
     )
 
 beforeEach(() => {
+  installModelsDevCatalog(modelsDevCatalogFixture)
   providerConfig = {
     name: "dashscope",
     type: "openai-compatible",

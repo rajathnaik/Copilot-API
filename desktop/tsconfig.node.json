@@ -21,6 +21,7 @@
     "../src/lib/deviceid.ts",
     "../src/lib/error.ts",
     "../src/lib/model-policy.ts",
+    "../src/lib/models-dev-cache.ts",
     "../src/lib/oauth/**/*.ts",
     "../src/lib/opencode.ts",
     "../src/lib/paths.ts",

@@ -8,6 +8,7 @@ import {
 } from "bun:test"
 import { Hono } from "hono"
 
+import { installModelsDevCatalog } from "~/lib/models-dev-cache"
 import { requestContext } from "~/lib/request-context"
 import { state } from "~/lib/state"
 import {
@@ -29,6 +30,8 @@ import {
 } from "~/lib/token-usage/pricing"
 import { traceIdMiddleware } from "~/lib/trace"
 import { tokenUsageRoute } from "~/routes/token-usage/route"
+
+import { modelsDevCatalogFixture } from "./fixtures/models-dev-catalog"
 
 const DB_PATH_ENV = "COPILOT_API_SQLITE_DB_PATH"
 
@@ -393,6 +396,39 @@ describe("token usage storage", () => {
     }
   })
 
+  test("prices GPT-6.1 Sol cache usage at the 272K input tier boundary", () => {
+    const expectedCosts = [
+      {
+        cache_creation_input_tokens: 1_000,
+        cache_read_input_tokens: 2_000,
+        input_tokens: 269_000,
+        totalCostNanos: 570_700_000,
+      },
+      {
+        cache_creation_input_tokens: 1_000,
+        cache_read_input_tokens: 2_000,
+        input_tokens: 269_001,
+        totalCostNanos: 1_126_404_000,
+      },
+    ]
+
+    for (const { totalCostNanos, ...usage } of expectedCosts) {
+      expect(
+        resolveTokenUsageCost({
+          ...usage,
+          model: "gpt-6.1-sol",
+          output_tokens: 3_000,
+          providerName: "codex",
+          source: "provider",
+        }),
+      ).toEqual({
+        currency: "USD",
+        source: "builtin",
+        total_cost_nanos: totalCostNanos,
+      })
+    }
+  })
+
   test("prices DashScope Qwen3.8 Max with explicit cache prices", () => {
     expect(
       resolveTokenUsageCost({
@@ -462,17 +498,18 @@ describe("token usage storage", () => {
     }
   })
 
-  test("prices OpenCode Go DeepSeek models with peak and off-peak prices in USD", () => {
+  test("prices OpenCode Go models from the models.dev catalog in USD", () => {
+    installModelsDevCatalog(modelsDevCatalogFixture)
     const expectedCosts = [
       {
         model: "deepseek-v4.1-flash",
         offPeakCostNanos: 1_956_000,
-        peakCostNanos: 3_912_000,
+        peakCostNanos: 1_956_000,
       },
       {
         model: "deepseek-v4-pro",
         offPeakCostNanos: 6_644_000,
-        peakCostNanos: 13_288_000,
+        peakCostNanos: 6_644_000,
       },
     ]
 

@@ -11,6 +11,7 @@ import {
 import { builtinProviderModelRegistry } from "~/lib/builtin-provider-models"
 import { forwardError } from "~/lib/error"
 import { createHandlerLogger } from "~/lib/logger"
+import { getOpencodeGoModelRecords } from "~/lib/models-dev-cache"
 import { toClientModelId } from "~/lib/models"
 import { resolveProviderConfig } from "~/lib/provider-resolver"
 import { state } from "~/lib/state"
@@ -139,6 +140,10 @@ async function getProviderModelRecords(
   providerConfig: ResolvedProviderConfig,
   requestHeaders: Headers,
 ): Promise<Array<Record<string, unknown>>> {
+  if (providerConfig.name === "opencode-go") {
+    return getOpencodeGoModelRecords()
+  }
+
   try {
     const response = await forwardProviderModels(providerConfig, requestHeaders)
     if (!response.ok) {

@@ -36,6 +36,17 @@ const STRIPPED_RESPONSE_HEADERS = [
   "upgrade",
 ] as const
 
+export function resolveProviderEndpointUrl(
+  providerConfig: ResolvedProviderConfig,
+  endpoint: string,
+): string {
+  const apiBaseUrl =
+    providerConfig.modelsDevProviderId ?
+      providerConfig.baseUrl.replace(/\/(?:chat\/completions|responses)$/u, "")
+    : `${providerConfig.baseUrl}/v1`
+  return `${apiBaseUrl}/${endpoint}`
+}
+
 export function buildProviderUpstreamHeaders(
   providerConfig: ResolvedProviderConfig,
   requestHeaders: Headers,
@@ -62,6 +73,10 @@ export function buildProviderUpstreamHeaders(
 
   if (providerConfig.type !== "anthropic") {
     return headers
+  }
+
+  if (providerConfig.modelsDevProviderId) {
+    headers["anthropic-version"] = "2023-06-01"
   }
 
   for (const headerName of ANTHROPIC_FORWARDABLE_HEADERS) {
@@ -143,7 +158,7 @@ export async function forwardProviderMessages(
   )
   const transportConfig = getUpstreamTransportConfig()
   return await fetchUpstreamWithLifecycle(
-    `${providerConfig.baseUrl}/v1/messages`,
+    resolveProviderEndpointUrl(providerConfig, "messages"),
     {
       method: "POST",
       headers,
@@ -172,7 +187,7 @@ export async function forwardProviderChatCompletions(
   )
   const transportConfig = getUpstreamTransportConfig()
   return await fetchUpstreamWithLifecycle(
-    `${providerConfig.baseUrl}/v1/chat/completions`,
+    resolveProviderEndpointUrl(providerConfig, "chat/completions"),
     {
       method: "POST",
       headers,
@@ -201,7 +216,7 @@ export async function forwardProviderResponses(
     payload.prompt_cache_key?.trim() || undefined,
   )
   return await fetchUpstreamWithLifecycle(
-    `${providerConfig.baseUrl}/v1/responses`,
+    resolveProviderEndpointUrl(providerConfig, "responses"),
     {
       method: "POST",
       headers,
@@ -221,7 +236,7 @@ export async function forwardProviderModels(
   providerConfig: ResolvedProviderConfig,
   requestHeaders: Headers,
 ): Promise<Response> {
-  return await fetch(`${providerConfig.baseUrl}/v1/models`, {
+  return await fetch(resolveProviderEndpointUrl(providerConfig, "models"), {
     method: "GET",
     headers: buildProviderUpstreamHeaders(providerConfig, requestHeaders),
     signal: AbortSignal.timeout(PROVIDER_MODELS_TIMEOUT_MS),
@@ -240,7 +255,9 @@ function resolveProviderRequestUrl(
   requestUrl: string,
   path: string,
 ): string {
-  const upstreamUrl = new URL(`${providerConfig.baseUrl}${path}`)
+  const upstreamUrl = new URL(
+    resolveProviderEndpointUrl(providerConfig, path.replace(/^\/v1\//u, "")),
+  )
   upstreamUrl.search = new URL(requestUrl, "http://localhost").search
   return upstreamUrl.toString()
 }

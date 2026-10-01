@@ -4,6 +4,10 @@ import {
 } from "./token-usage/peak-windows"
 import type { TokenUsagePricingConfig } from "./token-usage/pricing"
 import type { CodexReasoningEffort, ModelReasoningField } from "./config-store"
+import {
+  getOpencodeGoModelConfig,
+  getOpencodeGoModelIds,
+} from "./models-dev-cache"
 
 export type BuiltinProviderInputModality = "text" | "image"
 
@@ -12,7 +16,7 @@ export interface BuiltinProviderModelConfig {
   defaultReasoningEffort?: CodexReasoningEffort
   inputModalities?: Array<BuiltinProviderInputModality>
   maxOutputTokens?: number
-  pricing: TokenUsagePricingConfig
+  pricing?: TokenUsagePricingConfig
   reasoningEfforts?: Array<CodexReasoningEffort>
   // Message field carrying assistant thinking text in upstream requests,
   // for models that do not follow the default "reasoning_content"
@@ -201,6 +205,25 @@ export class BuiltinProviderModelRegistry {
           ],
         },
       },
+      "gpt-6.1-sol": {
+        pricing: {
+          tiers: [
+            {
+              cacheCreationInput: 2.5,
+              cachedInput: 0.1,
+              input: 2,
+              maxInputTokens: 272_000,
+              output: 10,
+            },
+            {
+              cacheCreationInput: 5,
+              cachedInput: 0.2,
+              input: 4,
+              output: 15,
+            },
+          ],
+        },
+      },
     },
     dashscope: {
       "glm-5.3": {
@@ -214,38 +237,21 @@ export class BuiltinProviderModelRegistry {
         },
         reasoningEfforts: ["low", "high", "max"],
       },
-      "ZHIPU/GLM-5.3": {
-        contextWindow: 1_048_576,
-        inputModalities: ["text"],
-        maxOutputTokens: 131_072,
-        pricing: {
-          cachedInput: 2,
-          input: 8,
-          output: 28,
-        },
-        reasoningEfforts: ["low", "high", "max"],
-      },
-      "ZHIPU/GLM-5.3-Flash": {
-        contextWindow: 1_048_576,
+      "deepseek-v4.1-flash": {
+        contextWindow: 1_000_000,
         inputModalities: ["text", "image"],
-        maxOutputTokens: 131_072,
+        maxOutputTokens: 393_216,
         pricing: {
-          cachedInput: 0.23,
-          input: 0.8,
-          output: 2.8,
-        },
-        reasoningEfforts: ["low", "high", "max"],
-      },
-      "ZHIPU/GLM-5.3-FlashX": {
-        contextWindow: 1_048_576,
-        inputModalities: ["text", "image"],
-        maxOutputTokens: 131_072,
-        pricing: {
-          cachedInput: 0.57,
+          cachedInput: 0.2,
           input: 2,
-          output: 7,
+          offPeak: {
+            cachedInput: 0.1,
+            input: 1,
+            output: 4,
+          },
+          output: 8,
+          peakWindows: dashscopePeakWindows,
         },
-        reasoningEfforts: ["low", "high", "max"],
       },
       "qwen3.8-max": {
         contextWindow: 1_000_000,
@@ -283,22 +289,6 @@ export class BuiltinProviderModelRegistry {
           output: 2.7,
         },
       },
-      "deepseek-v4.1-flash": {
-        contextWindow: 1_000_000,
-        inputModalities: ["text", "image"],
-        maxOutputTokens: 393_216,
-        pricing: {
-          cachedInput: 0.2,
-          input: 2,
-          offPeak: {
-            cachedInput: 0.1,
-            input: 1,
-            output: 4,
-          },
-          output: 8,
-          peakWindows: dashscopePeakWindows,
-        },
-      },
       "qwen3.7-plus": {
         contextWindow: 1_000_000,
         inputModalities: ["text", "image"],
@@ -333,6 +323,39 @@ export class BuiltinProviderModelRegistry {
           input: 20,
           output: 100,
         },
+      },
+      "ZHIPU/GLM-5.3": {
+        contextWindow: 1_048_576,
+        inputModalities: ["text"],
+        maxOutputTokens: 131_072,
+        pricing: {
+          cachedInput: 2,
+          input: 8,
+          output: 28,
+        },
+        reasoningEfforts: ["low", "high", "max"],
+      },
+      "ZHIPU/GLM-5.3-Flash": {
+        contextWindow: 1_048_576,
+        inputModalities: ["text", "image"],
+        maxOutputTokens: 131_072,
+        pricing: {
+          cachedInput: 0.23,
+          input: 0.8,
+          output: 2.8,
+        },
+        reasoningEfforts: ["low", "high", "max"],
+      },
+      "ZHIPU/GLM-5.3-FlashX": {
+        contextWindow: 1_048_576,
+        inputModalities: ["text", "image"],
+        maxOutputTokens: 131_072,
+        pricing: {
+          cachedInput: 0.57,
+          input: 2,
+          output: 7,
+        },
+        reasoningEfforts: ["low", "high", "max"],
       },
     },
     deepseek: {
@@ -371,223 +394,6 @@ export class BuiltinProviderModelRegistry {
         reasoningEfforts: ["low", "high", "max"],
       },
     },
-    "opencode-go": {
-      "hy4-preview": {
-        contextWindow: 1_024_000,
-        inputModalities: ["text"],
-        maxOutputTokens: 64_000,
-        pricing: {
-          cachedInput: 0.042,
-          input: 0.834,
-          output: 2.501,
-        },
-        reasoningEfforts: ["high"],
-        reasoningField: "reasoning",
-      },
-      "gpt-6-luna": {
-        pricing: {
-          tiers: [
-            {
-              cacheCreationInput: 0.125,
-              cachedInput: 0.01,
-              input: 0.1,
-              maxInputTokens: 272_000,
-              output: 0.5,
-            },
-            {
-              cacheCreationInput: 0.25,
-              cachedInput: 0.02,
-              input: 0.2,
-              output: 0.75,
-            },
-          ],
-        },
-      },
-      "glm-5.3": {
-        contextWindow: 1_000_000,
-        inputModalities: ["text"],
-        maxOutputTokens: 64_000,
-        pricing: {
-          cachedInput: 0.26,
-          input: 1.4,
-          output: 4.4,
-        },
-      },
-      "glm-5.3-flash": {
-        contextWindow: 1_000_000,
-        inputModalities: ["text", "image"],
-        maxOutputTokens: 131_072,
-        pricing: {
-          cachedInput: 0.015,
-          input: 0.075,
-          output: 0.25,
-        },
-        reasoningEfforts: ["low", "high", "max"],
-      },
-      "muse-spark-1.3-contributor": {
-        contextWindow: 1_048_576,
-        inputModalities: ["text", "image"],
-        maxOutputTokens: 131_072,
-        pricing: {
-          cachedInput: 0.002,
-          input: 0.1,
-          output: 0.2,
-        },
-        reasoningEfforts: ["minimal", "low", "medium", "high", "xhigh"],
-      },
-      "grok-4.7": {
-        contextWindow: 500_000,
-        defaultReasoningEffort: "high",
-        inputModalities: ["text", "image"],
-        maxOutputTokens: 64_000,
-        pricing: {
-          tiers: [
-            {
-              cachedInput: 0.5,
-              input: 2,
-              maxInputTokens: 200_000,
-              output: 6,
-            },
-            {
-              cachedInput: 1,
-              input: 4,
-              output: 12,
-            },
-          ],
-        },
-        reasoningEfforts: ["low", "medium", "high", "xhigh"],
-      },
-      "deepseek-v4.1-flash": {
-        contextWindow: 1_000_000,
-        inputModalities: ["text", "image"],
-        maxOutputTokens: 384_000,
-        pricing: {
-          cachedInput: 0.006,
-          input: 0.3,
-          offPeak: {
-            cachedInput: 0.003,
-            input: 0.15,
-            output: 0.6,
-          },
-          output: 1.2,
-          peakWindows: deepseekPeakWindows,
-        },
-        reasoningEfforts: ["low", "high", "max"],
-      },
-      "deepseek-v4-pro": {
-        contextWindow: 1_000_000,
-        inputModalities: ["text"],
-        maxOutputTokens: 64_000,
-        pricing: {
-          cachedInput: 0.044,
-          input: 1.32,
-          offPeak: {
-            cachedInput: 0.022,
-            input: 0.66,
-            output: 1.98,
-          },
-          output: 3.96,
-          peakWindows: deepseekPeakWindows,
-        },
-      },
-      "kimi-k3": {
-        contextWindow: 1_048_576,
-        inputModalities: ["text", "image"],
-        maxOutputTokens: 64_000,
-        pricing: {
-          cachedInput: 0.3,
-          input: 3,
-          output: 15,
-        },
-      },
-      "mimo-v2.6-flash": {
-        contextWindow: 1_048_576,
-        inputModalities: ["text", "image"],
-        maxOutputTokens: 131_072,
-        pricing: {
-          cachedInput: 0.0028,
-          input: 0.14,
-          output: 0.28,
-        },
-      },
-      "mimo-v2.6-pro": {
-        contextWindow: 1_048_576,
-        inputModalities: ["text", "image"],
-        maxOutputTokens: 131_072,
-        pricing: {
-          cachedInput: 0.003625,
-          input: 0.435,
-          output: 0.87,
-        },
-      },
-      "qwen3.7-plus": {
-        contextWindow: 1_000_000,
-        inputModalities: ["text", "image"],
-        maxOutputTokens: 64_000,
-        pricing: {
-          tiers: [
-            {
-              cacheCreationInput: 0.5,
-              cachedInput: 0.04,
-              input: 0.4,
-              maxInputTokens: 200_000,
-              output: 1.6,
-            },
-            {
-              cacheCreationInput: 1.5,
-              cachedInput: 0.12,
-              input: 1.2,
-              maxInputTokens: 256_000,
-              output: 4.8,
-            },
-          ],
-        },
-      },
-      "qwen3.8-max": {
-        contextWindow: 1_000_000,
-        inputModalities: ["text", "image"],
-        maxOutputTokens: 64_000,
-        pricing: {
-          cacheCreationInput: 2.5,
-          cachedInput: 0.25,
-          input: 2,
-          output: 6,
-        },
-      },
-      "qwen3.8-flash": {
-        contextWindow: 1_000_000,
-        inputModalities: ["text", "image"],
-        maxOutputTokens: 131_072,
-        pricing: {
-          cacheCreationInput: 0.2,
-          cachedInput: 0.016,
-          input: 0.15,
-          output: 0.47,
-        },
-        reasoningEfforts: ["low", "medium", "xhigh"],
-      },
-      "minimax-m3": {
-        contextWindow: 1_000_000,
-        inputModalities: ["text", "image"],
-        maxOutputTokens: 64_000,
-        pricing: {
-          tiers: [
-            {
-              cachedInput: 0.06,
-              input: 0.3,
-              maxInputTokens: 200_000,
-              output: 1.2,
-            },
-            {
-              cachedInput: 0.12,
-              input: 0.6,
-              maxInputTokens: 512_000,
-              output: 2.4,
-            },
-          ],
-        },
-      },
-    },
     kimi: {
       k3: {
         contextWindow: 1_048_576,
@@ -622,12 +428,16 @@ export class BuiltinProviderModelRegistry {
     providerName: string,
     modelName: string,
   ): BuiltinProviderModelConfig | undefined {
-    const models = this.modelCatalog[this.normalizeKey(providerName)]
+    const provider = this.normalizeKey(providerName)
+    if (provider === "opencode-go") return getOpencodeGoModelConfig(modelName)
+    const models = this.modelCatalog[provider]
     return models?.[modelName.trim()] ?? models?.[this.normalizeKey(modelName)]
   }
 
   getModelIds(providerName: string): Array<string> {
-    return Object.keys(this.modelCatalog[this.normalizeKey(providerName)] ?? {})
+    const provider = this.normalizeKey(providerName)
+    if (provider === "opencode-go") return getOpencodeGoModelIds()
+    return Object.keys(this.modelCatalog[provider] ?? {})
   }
 
   private normalizeKey(value: string): string {

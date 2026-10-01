@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { beforeAll, describe, expect, test } from "bun:test"
 
 import {
   builtinProviderModelRegistry,
@@ -8,6 +8,13 @@ import {
   dashscopePeakWindows,
   deepseekPeakWindows,
 } from "~/lib/token-usage/pricing"
+import { installModelsDevCatalog } from "~/lib/models-dev-cache"
+
+import { modelsDevCatalogFixture } from "./fixtures/models-dev-catalog"
+
+beforeAll(() => {
+  installModelsDevCatalog(modelsDevCatalogFixture)
+})
 
 describe("builtin provider model registry", () => {
   test("normalizes provider and model names when resolving model config", () => {
@@ -44,16 +51,19 @@ describe("builtin provider model registry", () => {
     }
   })
 
-  test("does not keep Ox Alpha models in the catalog", () => {
+  test("filters deprecated OpenCode Go models", () => {
     expect(
       builtinProviderModelRegistry.getModelConfig(
         "opencode-go",
         "ox-alpha-free",
       ),
     ).toBeUndefined()
+    expect(
+      builtinProviderModelRegistry.getModelIds("opencode-go"),
+    ).not.toContain("grok-4.5")
   })
 
-  test("defines the GLM-5.3 Flash model pricing", () => {
+  test("maps OpenCode Go metadata and pricing from models.dev", () => {
     expect(
       builtinProviderModelRegistry.getModelConfig(
         "opencode-go",
@@ -64,9 +74,9 @@ describe("builtin provider model registry", () => {
       inputModalities: ["text", "image"],
       maxOutputTokens: 131_072,
       pricing: {
-        cachedInput: 0.015,
-        input: 0.075,
-        output: 0.25,
+        cachedInput: 0.03,
+        input: 0.15,
+        output: 0.5,
       },
       reasoningEfforts: ["low", "high", "max"],
     })
@@ -78,6 +88,12 @@ describe("builtin provider model registry", () => {
     ).toMatchObject({
       reasoningField: "reasoning",
     })
+  })
+
+  test("preserves the Grok high reasoning default from its family metadata", () => {
+    expect(
+      builtinProviderModelRegistry.getModelConfig("opencode-go", "grok-4.7"),
+    ).toMatchObject({ defaultReasoningEffort: "high" })
   })
 
   test("keeps GPT entries pricing-only", () => {
@@ -98,6 +114,28 @@ describe("builtin provider model registry", () => {
             cachedInput: 0.8,
             input: 8,
             output: 30,
+          },
+        ],
+      },
+    })
+
+    expect(
+      builtinProviderModelRegistry.getModelConfig("codex", "gpt-6.1-sol"),
+    ).toEqual({
+      pricing: {
+        tiers: [
+          {
+            cacheCreationInput: 2.5,
+            cachedInput: 0.1,
+            input: 2,
+            maxInputTokens: 272_000,
+            output: 10,
+          },
+          {
+            cacheCreationInput: 5,
+            cachedInput: 0.2,
+            input: 4,
+            output: 15,
           },
         ],
       },
@@ -176,29 +214,17 @@ describe("builtin provider model registry", () => {
     })
   })
 
-  test("applies the DeepSeek windows to every OpenCode Go DeepSeek model", () => {
+  test("uses models.dev prices for OpenCode Go DeepSeek models", () => {
     const expectedPricing = {
       "deepseek-v4-pro": {
-        cachedInput: 0.044,
-        input: 1.32,
-        offPeak: {
-          cachedInput: 0.022,
-          input: 0.66,
-          output: 1.98,
-        },
-        output: 3.96,
-        peakWindows: deepseekPeakWindows,
+        cachedInput: 0.022,
+        input: 0.66,
+        output: 1.98,
       },
       "deepseek-v4.1-flash": {
-        cachedInput: 0.006,
-        input: 0.3,
-        offPeak: {
-          cachedInput: 0.003,
-          input: 0.15,
-          output: 0.6,
-        },
-        output: 1.2,
-        peakWindows: deepseekPeakWindows,
+        cachedInput: 0.003,
+        input: 0.15,
+        output: 0.6,
       },
     }
 
