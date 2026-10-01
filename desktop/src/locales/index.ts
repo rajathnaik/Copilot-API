@@ -60,6 +60,7 @@ export interface Locale {
     tabDashboard: string
     tabTokenUsage: string
     tabPlayground: string
+    tabRemoteAccess: string
     tabLogs: string
     overviewStatus: string
     overviewRunning: string
@@ -264,6 +265,54 @@ export interface Locale {
     copy: string
     copied: string
     noModels: string
+  }
+  remoteAccess: {
+    description: string
+    refresh: string
+    stepCli: string
+    cliInstalled: string
+    cliMissing: string
+    install: string
+    installing: string
+    installManual: string
+    installGuide: string
+    stepSignIn: string
+    signedInAs: string
+    signInGithub: string
+    signInMicrosoft: string
+    signOut: string
+    deviceCodeHint: string
+    openPage: string
+    cancel: string
+    waitingForLogin: string
+    stepKey: string
+    keyConfigured: string
+    keyMissing: string
+    stepTunnel: string
+    start: string
+    stop: string
+    starting: string
+    stateRunning: string
+    stateStopped: string
+    stateStarting: string
+    stateError: string
+    autoStart: string
+    publicUrl: string
+    publicUrlHint: string
+    copy: string
+    copied: string
+    open: string
+    clientsTitle: string
+    clientsHint: string
+    clientsEmpty: string
+    activity: string
+    errorServerNotRunning: string
+    errorKeyRequired: string
+    errorCliMissing: string
+    errorNotSignedIn: string
+    errorHostReplaced: string
+    errorInstallFailed: string
+    errorInstallNotFound: string
   }
 }
 

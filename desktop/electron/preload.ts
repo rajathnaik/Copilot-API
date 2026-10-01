@@ -63,6 +63,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.off('playground:chunk', handler)
   },
 
+  tunnelGetStatus: () => ipcRenderer.invoke('tunnel:get-status'),
+  tunnelInstall: () => ipcRenderer.invoke('tunnel:install'),
+  tunnelLogin: (provider: string) =>
+    ipcRenderer.invoke('tunnel:login', provider),
+  tunnelCancelLogin: () => ipcRenderer.invoke('tunnel:cancel-login'),
+  tunnelLogout: () => ipcRenderer.invoke('tunnel:logout'),
+  tunnelStart: () => ipcRenderer.invoke('tunnel:start'),
+  tunnelStop: () => ipcRenderer.invoke('tunnel:stop'),
+  onTunnelStatus: (callback: (status: unknown) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, status: unknown) =>
+      callback(status)
+    ipcRenderer.on('tunnel:status', handler)
+    return () => ipcRenderer.off('tunnel:status', handler)
+  },
+
   onAuthSuccess: (callback: (result: unknown) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, result: unknown) =>
       callback(result)

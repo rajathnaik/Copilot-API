@@ -44,6 +44,17 @@ import {
   readServerKeysConfig,
   writeServerKeysConfig,
 } from './server-auth-config'
+import {
+  cancelTunnelLogin,
+  handleServerStarted,
+  installTunnelCli,
+  logoutTunnel,
+  onTunnelStatusChange,
+  refreshTunnelStatus,
+  startTunnel,
+  startTunnelLogin,
+  stopTunnel,
+} from './tunnel-manager'
 import type {
   CodexLoginInput,
   DesktopAuthMode,
@@ -53,6 +64,7 @@ import type {
   ProviderAuthInput,
   ServerAuthInfo,
   ServerKeysConfigUpdate,
+  TunnelLoginProvider,
 } from '../src/types/ipc'
 
 const PLAYGROUND_ALLOWED_PATHS = new Set(Object.values(PLAYGROUND_API_PATHS))
@@ -340,6 +352,7 @@ export function registerIpcHandlers(
             lastPort: port,
             ...(host === undefined ? {} : { host: effectiveHost }),
           })
+          void handleServerStarted(port, settings.autoStartTunnel)
         }
         return status
       } catch (err) {
@@ -589,6 +602,22 @@ export function registerIpcHandlers(
   ipcMain.handle('playground:cancel', (_event, requestId: string) => {
     playgroundRequests.get(requestId)?.abort()
   })
+
+  // Remote access: Microsoft Dev Tunnels managed via the devtunnel CLI
+  onTunnelStatusChange((tunnelStatus) => {
+    if (!mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('tunnel:status', tunnelStatus)
+    }
+  })
+  ipcMain.handle('tunnel:get-status', () => refreshTunnelStatus())
+  ipcMain.handle('tunnel:install', () => installTunnelCli())
+  ipcMain.handle('tunnel:login', (_event, provider: TunnelLoginProvider) =>
+    startTunnelLogin(provider === 'microsoft' ? 'microsoft' : 'github'),
+  )
+  ipcMain.handle('tunnel:cancel-login', () => cancelTunnelLogin())
+  ipcMain.handle('tunnel:logout', () => logoutTunnel())
+  ipcMain.handle('tunnel:start', () => startTunnel(getPort()))
+  ipcMain.handle('tunnel:stop', () => stopTunnel())
 
   // Server: Return the in-memory log buffer
   ipcMain.handle('server:get-logs', () => getLogs())

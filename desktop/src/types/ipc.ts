@@ -92,6 +92,24 @@ export interface PlaygroundSendResult {
   aborted?: boolean
 }
 
+export type TunnelState = 'stopped' | 'starting' | 'running' | 'error'
+
+export type TunnelLoginProvider = 'github' | 'microsoft'
+
+export interface TunnelStatus {
+  cliInstalled: boolean
+  installSupported: boolean
+  installing: boolean
+  user: { name: string; provider: string } | null
+  loggingIn: boolean
+  login: { code: string; url: string } | null
+  state: TunnelState
+  url?: string
+  port?: number
+  error?: string
+  logs: string[]
+}
+
 export type TokenUsagePeriod =
   | 'today'
   | 'this_week'
@@ -211,6 +229,7 @@ export interface DesktopSettings {
   lastPort: number
   launchAtLogin: boolean
   autoStartServer: boolean
+  autoStartTunnel: boolean
   minimizeToTray: boolean
   accountType: 'individual' | 'business' | 'enterprise'
   verbose: boolean
@@ -272,6 +291,14 @@ declare global {
       onPlaygroundChunk: (
         callback: (requestId: string, chunk: string) => void,
       ) => () => void
+      tunnelGetStatus: () => Promise<TunnelStatus>
+      tunnelInstall: () => Promise<TunnelStatus>
+      tunnelLogin: (provider: TunnelLoginProvider) => Promise<TunnelStatus>
+      tunnelCancelLogin: () => Promise<void>
+      tunnelLogout: () => Promise<TunnelStatus>
+      tunnelStart: () => Promise<TunnelStatus>
+      tunnelStop: () => Promise<TunnelStatus>
+      onTunnelStatus: (callback: (status: TunnelStatus) => void) => () => void
       onAuthSuccess: (callback: (result: AuthResult) => void) => () => void
       onServerStatus: (callback: (status: ServerStatus) => void) => () => void
       onServerLog: (callback: (log: string) => void) => () => void

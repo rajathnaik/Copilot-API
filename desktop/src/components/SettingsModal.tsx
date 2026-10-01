@@ -244,6 +244,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     lastPort: 4141,
     launchAtLogin: false,
     autoStartServer: false,
+    autoStartTunnel: false,
     minimizeToTray: false,
     accountType: 'individual',
     verbose: false,

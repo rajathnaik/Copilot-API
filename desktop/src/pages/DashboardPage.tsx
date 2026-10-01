@@ -18,6 +18,7 @@ import { formatTokenCost, formatTokenCosts } from '../lib/token-usage-format'
 import { buildServerBaseUrl } from '../lib/server-url'
 import ModelMappingsPage from './ModelMappingsPage'
 import PlaygroundPage from './PlaygroundPage'
+import RemoteAccessPage from './RemoteAccessPage'
 import type {
   DesktopAuthMode,
   ServerAuthInfo,
@@ -63,7 +64,12 @@ interface Model {
 
 type TranslateFn = ReturnType<typeof useLanguage>['t']
 type DashboardTab =
-  'dashboard' | 'tokenUsage' | 'playground' | 'advancedConfig' | 'logs'
+  | 'dashboard'
+  | 'tokenUsage'
+  | 'playground'
+  | 'remoteAccess'
+  | 'advancedConfig'
+  | 'logs'
 
 const numberFormatter = new Intl.NumberFormat()
 const TOKEN_USAGE_EVENTS_PAGE_SIZE = 10
@@ -192,6 +198,24 @@ const IconPlayground = () => (
     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
     <path d="M8 9h8" />
     <path d="M8 13h5" />
+  </svg>
+)
+
+const IconRemoteAccess = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <circle cx="12" cy="12" r="10" />
+    <path d="M2 12h20" />
+    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
   </svg>
 )
 
@@ -750,6 +774,11 @@ export default function DashboardPage({
       label: t('dashboard.tabPlayground'),
     },
     {
+      icon: <IconRemoteAccess />,
+      key: 'remoteAccess',
+      label: t('dashboard.tabRemoteAccess'),
+    },
+    {
       icon: <IconMappings />,
       key: 'advancedConfig',
       label: t('header.advancedConfig'),
@@ -761,6 +790,7 @@ export default function DashboardPage({
     && tab !== 'advancedConfig'
     && tab !== 'logs'
     && tab !== 'playground'
+    && tab !== 'remoteAccess'
 
   return (
     <div className="flex flex-col h-screen bg-canvas">
@@ -1138,6 +1168,9 @@ export default function DashboardPage({
             }
           />
         )}
+
+        {/* Remote access tab */}
+        {started && tab === 'remoteAccess' && <RemoteAccessPage />}
 
         {/* Model mappings tab */}
         {started && tab === 'advancedConfig' && (
