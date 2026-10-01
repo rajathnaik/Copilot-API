@@ -17,6 +17,7 @@ import {
 import { formatTokenCost, formatTokenCosts } from '../lib/token-usage-format'
 import { buildServerBaseUrl } from '../lib/server-url'
 import ModelMappingsPage from './ModelMappingsPage'
+import PlaygroundPage from './PlaygroundPage'
 import type {
   DesktopAuthMode,
   ServerAuthInfo,
@@ -61,7 +62,8 @@ interface Model {
 }
 
 type TranslateFn = ReturnType<typeof useLanguage>['t']
-type DashboardTab = 'dashboard' | 'tokenUsage' | 'advancedConfig' | 'logs'
+type DashboardTab =
+  'dashboard' | 'tokenUsage' | 'playground' | 'advancedConfig' | 'logs'
 
 const numberFormatter = new Intl.NumberFormat()
 const TOKEN_USAGE_EVENTS_PAGE_SIZE = 10
@@ -172,6 +174,24 @@ const IconMappings = () => (
     <path d="m12 4 3 3-3 3" />
     <path d="M20 17H9" />
     <path d="m12 14-3 3 3 3" />
+  </svg>
+)
+
+const IconPlayground = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    <path d="M8 9h8" />
+    <path d="M8 13h5" />
   </svg>
 )
 
@@ -725,6 +745,11 @@ export default function DashboardPage({
       label: t('dashboard.tabTokenUsage'),
     },
     {
+      icon: <IconPlayground />,
+      key: 'playground',
+      label: t('dashboard.tabPlayground'),
+    },
+    {
       icon: <IconMappings />,
       key: 'advancedConfig',
       label: t('header.advancedConfig'),
@@ -732,7 +757,10 @@ export default function DashboardPage({
     { icon: <IconLogs />, key: 'logs', label: t('dashboard.tabLogs') },
   ]
   const showRefreshButton =
-    started && tab !== 'advancedConfig' && tab !== 'logs'
+    started
+    && tab !== 'advancedConfig'
+    && tab !== 'logs'
+    && tab !== 'playground'
 
   return (
     <div className="flex flex-col h-screen bg-canvas">
@@ -1097,6 +1125,18 @@ export default function DashboardPage({
               t={t}
             />
           </div>
+        )}
+
+        {/* Playground tab */}
+        {started && tab === 'playground' && (
+          <PlaygroundPage
+            models={models}
+            openaiUrl={openaiUrl}
+            anthropicUrl={anthropicUrl}
+            authHeaderName={
+              serverAuthInfo.enabled ? serverAuthInfo.headerName : undefined
+            }
+          />
         )}
 
         {/* Model mappings tab */}

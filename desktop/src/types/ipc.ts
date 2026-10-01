@@ -84,6 +84,14 @@ export interface ModelMappingsConfig {
   modelMappings: Record<string, string>
 }
 
+export interface PlaygroundSendResult {
+  ok: boolean
+  status: number
+  text?: string
+  streamed?: boolean
+  aborted?: boolean
+}
+
 export type TokenUsagePeriod =
   | 'today'
   | 'this_week'
@@ -255,6 +263,15 @@ declare global {
         keys: ServerKeysConfigUpdate,
       ) => Promise<ServerKeysConfig>
       getLogs: () => Promise<string[]>
+      playgroundSend: (
+        requestId: string,
+        path: string,
+        body: unknown,
+      ) => Promise<PlaygroundSendResult>
+      playgroundCancel: (requestId: string) => Promise<void>
+      onPlaygroundChunk: (
+        callback: (requestId: string, chunk: string) => void,
+      ) => () => void
       onAuthSuccess: (callback: (result: AuthResult) => void) => () => void
       onServerStatus: (callback: (status: ServerStatus) => void) => () => void
       onServerLog: (callback: (log: string) => void) => () => void

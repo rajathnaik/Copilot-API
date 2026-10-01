@@ -5,6 +5,7 @@
     "electron/**/*",
     "tests/**/*",
     "src/lib/auto-start-server.ts",
+    "src/lib/playground.ts",
     "src/lib/server-url.ts",
     "src/locales/**/*",
     "src/types/**/*",

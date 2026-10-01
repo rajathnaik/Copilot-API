@@ -59,6 +59,7 @@ export interface Locale {
     startServer: string
     tabDashboard: string
     tabTokenUsage: string
+    tabPlayground: string
     tabLogs: string
     overviewStatus: string
     overviewRunning: string
@@ -233,6 +234,36 @@ export interface Locale {
     serverRequired: string
     validationIncomplete: string
     validationDuplicate: string
+  }
+  playground: {
+    model: string
+    api: string
+    apiHint: string
+    system: string
+    systemPlaceholder: string
+    maxTokens: string
+    stream: string
+    send: string
+    stop: string
+    clear: string
+    placeholder: string
+    attach: string
+    attachHint: string
+    attachDisabled: string
+    removeAttachment: string
+    emptyTitle: string
+    emptyDescription: string
+    you: string
+    assistant: string
+    waiting: string
+    stopped: string
+    usage: string
+    viewCode: string
+    hideCode: string
+    codeHint: string
+    copy: string
+    copied: string
+    noModels: string
   }
 }
 

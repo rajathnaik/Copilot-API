@@ -8,6 +8,7 @@ import {
   isValidServerHost,
   resolveEffectiveServerHost,
 } from '../src/lib/server-url'
+import { PLAYGROUND_API_PATHS } from '../src/lib/playground'
 import {
   getDeviceCode,
   pollAccessToken,
@@ -53,6 +54,8 @@ import type {
   ServerAuthInfo,
   ServerKeysConfigUpdate,
 } from '../src/types/ipc'
+
+const PLAYGROUND_ALLOWED_PATHS = new Set(Object.values(PLAYGROUND_API_PATHS))
 
 interface ConfigApiErrorResponse {
   error?: {
@@ -517,6 +520,75 @@ export function registerIpcHandlers(
   )
 
   ipcMain.handle('server:get-auth-info', async () => getServerAuthInfo())
+
+  // Playground: proxy a model request to the local gateway, forwarding
+  // streamed bytes to the renderer. Only the three chat APIs are allowed.
+  const playgroundRequests = new Map<string, AbortController>()
+  ipcMain.handle(
+    'playground:send',
+    async (event, requestId: string, path: string, body: unknown) => {
+      if (!PLAYGROUND_ALLOWED_PATHS.has(path)) {
+        return { ok: false, status: 400, text: `Unsupported path: ${path}` }
+      }
+      if (!isRunning()) {
+        return { ok: false, status: 503, text: 'Server is not running.' }
+      }
+      const controller = new AbortController()
+      playgroundRequests.set(requestId, controller)
+      try {
+        const headers = {
+          'content-type': 'application/json',
+          ...(await getServerRequestHeaders()),
+        }
+        const response = await fetch(`${getServerBaseUrl()}${path}`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        })
+        const contentType = response.headers.get('content-type') ?? ''
+        if (
+          !response.ok
+          || !contentType.includes('text/event-stream')
+          || !response.body
+        ) {
+          return {
+            ok: response.ok,
+            status: response.status,
+            text: await response.text(),
+          }
+        }
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        for (;;) {
+          const { done, value } = await reader.read()
+          if (done) break
+          if (!event.sender.isDestroyed()) {
+            event.sender.send(
+              'playground:chunk',
+              requestId,
+              decoder.decode(value, { stream: true }),
+            )
+          }
+        }
+        return { ok: true, status: response.status, streamed: true }
+      } catch (error) {
+        if (controller.signal.aborted) {
+          return { ok: false, status: 0, aborted: true }
+        }
+        return {
+          ok: false,
+          status: 0,
+          text: error instanceof Error ? error.message : String(error),
+        }
+      } finally {
+        playgroundRequests.delete(requestId)
+      }
+    },
+  )
+  ipcMain.handle('playground:cancel', (_event, requestId: string) => {
+    playgroundRequests.get(requestId)?.abort()
+  })
 
   // Server: Return the in-memory log buffer
   ipcMain.handle('server:get-logs', () => getLogs())

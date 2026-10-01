@@ -49,6 +49,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('auth:save-server-keys', keys),
   getLogs: () => ipcRenderer.invoke('server:get-logs'),
 
+  playgroundSend: (requestId: string, path: string, body: unknown) =>
+    ipcRenderer.invoke('playground:send', requestId, path, body),
+  playgroundCancel: (requestId: string) =>
+    ipcRenderer.invoke('playground:cancel', requestId),
+  onPlaygroundChunk: (callback: (requestId: string, chunk: string) => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      requestId: string,
+      chunk: string,
+    ) => callback(requestId, chunk)
+    ipcRenderer.on('playground:chunk', handler)
+    return () => ipcRenderer.off('playground:chunk', handler)
+  },
+
   onAuthSuccess: (callback: (result: unknown) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, result: unknown) =>
       callback(result)
