@@ -86,6 +86,57 @@ Windows x64 (`.exe`), macOS Apple Silicon (`.dmg`), and Linux x64 (`.AppImage`) 
 
 ## Documentation
 
+### Generate VS Code custom endpoint models
+
+VS Code versions without custom endpoint discovery require an explicit model
+list. Generate that list from this gateway with Python 3.9+ (standard library only):
+
+```sh
+python3 scripts/generate-vscode-models.py \
+  --base-url "https://YOUR-TUNNEL-HOST/v1" \
+  --secret-ref '${input:YOUR_EXISTING_VSCODE_SECRET}'
+```
+
+Copy the secret reference from the provider created by **Chat: Manage Language
+Models > Add Models > Custom Endpoint**. The script prompts for the gateway key
+without echoing it, or reads `COPILOT_API_KEY` if set. It never writes that key.
+
+Open `vscode-models.generated.json` and copy its provider into the language-model
+configuration opened by VS Code, replacing only the matching provider and
+preserving other providers. Save and reload VS Code. The generator does not
+modify VS Code settings automatically.
+
+The script excludes embedding models, chooses Chat Completions, Responses, or
+Messages from each model's advertised endpoints, and maps capabilities and token
+limits. It fails explicitly when required metadata is missing. A listed model
+is not proof of subscription access or successful inference; test chat and tools
+after importing. Re-run with `--force` to refresh the generated file when the
+catalog changes. Use `--catalog catalog.json` for an offline JSON catalog.
+
+To update the existing Ubuntu VS Code configuration directly:
+
+```sh
+python3 scripts/generate-vscode-models.py \
+  --base-url "https://YOUR-TUNNEL-HOST/v1" \
+  --update-vscode "$HOME/.config/Code/User/chatLanguageModels.json"
+```
+
+Save and close the configuration editor before running this command, then reload
+VS Code afterward. The script requires exactly one Custom Endpoint provider
+named `My Copilot API` (override with `--name`), reuses its secure key reference,
+preserves other providers and provider settings, removes its discovery URL, and
+updates its model list. It creates a uniquely named backup beside the original
+and replaces the configuration atomically. Concurrent file changes are checked
+before replacement. JSON comments and trailing commas are rejected explicitly
+without changing the file. Use the actual path from VS Code's **Copy Path**
+command when using another profile, Insiders, or a different installation.
+
+Run the generator tests with:
+
+```sh
+python3 -m unittest discover -s tests -p 'test_generate_vscode_models.py'
+```
+
 | Guide | Contents |
 | --- | --- |
 | [Installation and Startup](docs/guides/en/getting-started.md) | Prerequisites, project overview, `npx` and source runs, provider-only mode without Copilot, and gateway API key setup |
