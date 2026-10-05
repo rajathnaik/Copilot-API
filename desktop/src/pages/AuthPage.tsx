@@ -12,6 +12,7 @@ import type {
 import { useLanguage } from '../contexts/LanguageContext'
 import Header from '../components/Header'
 import { refreshProviderAuthStatus } from '../lib/provider-management-auth'
+import appIconUrl from '../../assets/app-icon.svg'
 
 interface AuthPageProps {
   onBack?: () => void
@@ -431,9 +432,12 @@ export default function AuthPage({ onBack, onSuccess }: AuthPageProps) {
           {/* Logo and title */}
           {!isExpandedInput && (
             <div className="text-center">
-              <div className="w-14 h-14 bg-accent-strong rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-[0_10px_26px_rgba(30,41,59,0.20)] dark:bg-[#4f94f8]">
-                <span className="text-white text-base font-extrabold">CA</span>
-              </div>
+              <img
+                alt=""
+                className="w-14 h-14 mx-auto mb-3 shadow-[0_10px_26px_rgba(30,41,59,0.20)]"
+                draggable={false}
+                src={appIconUrl}
+              />
               <h1 className="text-lg font-bold text-ink">Copilot API</h1>
               <p className="text-[13px] text-ink-faint mt-1">
                 {t('auth.subtitle')}

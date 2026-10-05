@@ -50,6 +50,7 @@
     "src/components/TitleBarMenu.tsx",
     "src/components/WindowControls.tsx",
     "src/components/TokenUsageMetric.tsx",
+    "src/vite-env.d.ts",
     "src/contexts/ThemeContext.tsx",
     "src/contexts/LanguageContext.tsx",
     "../src/lib/quick-providers.ts",

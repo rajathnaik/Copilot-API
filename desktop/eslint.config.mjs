@@ -34,6 +34,7 @@ export default defineConfig(
           allowDefaultProject: [
             'eslint.config.mjs',
             'scripts/ensure-electron.mjs',
+            'scripts/generate-icons.mjs',
           ],
         },
         tsconfigRootDir: configDir,
@@ -73,8 +74,10 @@ export default defineConfig(
     files: [
       'eslint.config.mjs',
       'scripts/ensure-electron.mjs',
+      'scripts/generate-icons.mjs',
       'desktop/eslint.config.mjs',
       'desktop/scripts/ensure-electron.mjs',
+      'desktop/scripts/generate-icons.mjs',
     ],
     ...tseslint.configs.disableTypeChecked,
   },

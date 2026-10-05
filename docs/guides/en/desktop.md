@@ -30,3 +30,23 @@ macOS builds are unsigned and offer a link to download and manually install the 
 The desktop release workflow uploads `latest.yml`, Windows `.blockmap` files, and `latest-linux.yml` alongside installers. Installers are uploaded before update metadata. Existing releases such as v2.6.29 do not contain these files; users must install a build with this feature once before subsequent releases can update automatically. No GitHub token is needed on users' machines.
 
 The desktop app's Advanced Config page reads and writes the shared model mappings through `GET/POST /admin/config/model-mappings`. The same mappings apply across `POST /v1/messages`, `POST /v1/messages/count_tokens`, `POST /v1/responses`, and `POST /v1/chat/completions` instead of being split per interface. It uses `auth.adminApiKey` instead of the regular `auth.apiKeys`, and the app reads that key directly from `config.json` after the server has generated it on startup.
+
+### Application icon
+
+The original robot artwork in `desktop/assets/app-icon.svg` is shared by the
+header and sign-in screen. Its generated PNG is the runtime window icon, and
+`desktop/build/icon.ico` supplies the Windows installer and executable icon.
+The Windows/Linux tray uses small versions of the same artwork; macOS retains
+its monochrome template tray icon.
+
+To regenerate the PNG, tray images, and multi-resolution Windows ICO after
+editing the SVG, install `rsvg-convert` from librsvg and run:
+
+```sh
+cd desktop
+bun run gen-icons
+```
+
+Commit the SVG and generated assets together. Restart the desktop app after
+changing its window icon. Installed or pinned Windows shortcuts may retain a
+cached icon until they are recreated or updated by a new installer.

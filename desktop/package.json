@@ -15,7 +15,7 @@
     "test": "bun test tests",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "preview": "electron-vite preview",
-    "gen-icons": "rsvg-convert -w 1024 -h 1024 assets/tray-icon-colored.svg -o assets/icon.png",
+    "gen-icons": "node scripts/generate-icons.mjs",
     "lint": "eslint --cache .",
     "lint:fix": "eslint --cache --fix .",
     "package": "bun run build:server && electron-vite build && electron-builder --publish never",

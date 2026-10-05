@@ -5,6 +5,7 @@ import ProviderManagementModal from './ProviderManagementModal'
 import TitleBarMenu from './TitleBarMenu'
 import WindowControls from './WindowControls'
 import { useLanguage } from '../contexts/LanguageContext'
+import appIconUrl from '../../assets/app-icon.svg'
 
 type ElectronAppRegionStyle = CSSProperties & {
   WebkitAppRegion?: 'drag' | 'no-drag'
@@ -115,9 +116,12 @@ export default function Header({
       >
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-accent-strong rounded-md flex items-center justify-center dark:bg-[#4f94f8]">
-              <span className="text-white text-[9px] font-bold">CA</span>
-            </div>
+            <img
+              alt=""
+              className="w-6 h-6"
+              draggable={false}
+              src={appIconUrl}
+            />
             <span className="text-sm font-bold text-ink">Copilot API</span>
           </div>
           <div className="w-px h-4 bg-line" />
