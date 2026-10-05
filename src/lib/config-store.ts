@@ -131,6 +131,7 @@ export interface ProviderConfig {
   accountId?: string
   pricingCurrency?: string
   models?: Record<string, ModelConfig>
+  codexModels?: Array<string>
 }
 
 const modelResponsesApiCompactThresholds = {
@@ -148,7 +149,10 @@ export const defaultConfig: AppConfig = {
     apiKeys: [],
   },
   providers: {},
-  modelMappings: {},
+  modelMappings: {
+    "codex-auto-review": "codex/codex-auto-review",
+    "gpt-reserve": "codex/gpt-reserve",
+  },
   smallModels: {
     codex: "gpt-6-luna",
     copilot: "gpt-6-luna",
@@ -278,6 +282,8 @@ function mergeDefaultConfig(config: AppConfig): {
   mergedConfig: AppConfig
   changed: boolean
 } {
+  const modelMappings = config.modelMappings ?? {}
+  const defaultModelMappings = defaultConfig.modelMappings ?? {}
   const extraPrompts = config.extraPrompts ?? {}
   const defaultExtraPrompts = defaultConfig.extraPrompts ?? {}
   const responsesApiCompactThresholds =
@@ -299,6 +305,9 @@ function mergeDefaultConfig(config: AppConfig): {
   )
   const defaultContextManagementConfig = defaultConfig.contextManagement ?? {}
 
+  const missingModelMappings = Object.keys(defaultModelMappings).filter(
+    (model) => !Object.hasOwn(modelMappings, model),
+  )
   const missingExtraPromptModels = Object.keys(defaultExtraPrompts).filter(
     (model) => !Object.hasOwn(extraPrompts, model),
   )
@@ -313,6 +322,7 @@ function mergeDefaultConfig(config: AppConfig): {
     defaultContextManagementConfig,
   ).filter((key) => !Object.hasOwn(contextManagement, key))
 
+  const hasModelMappingChanges = missingModelMappings.length > 0
   const hasExtraPromptChanges = missingExtraPromptModels.length > 0
   const hasReasoningEffortChanges = missingReasoningEffortModels.length > 0
   const hasResponsesApiCompactThresholdChanges =
@@ -324,7 +334,8 @@ function mergeDefaultConfig(config: AppConfig): {
   )
 
   if (
-    !hasExtraPromptChanges
+    !hasModelMappingChanges
+    && !hasExtraPromptChanges
     && !hasReasoningEffortChanges
     && !hasResponsesApiCompactThresholdChanges
     && !hasContextManagementChanges
@@ -341,6 +352,10 @@ function mergeDefaultConfig(config: AppConfig): {
   return {
     mergedConfig: {
       ...persistedConfig,
+      modelMappings: {
+        ...defaultModelMappings,
+        ...modelMappings,
+      },
       contextManagement: {
         ...defaultContextManagementConfig,
         ...contextManagement,
@@ -484,6 +499,11 @@ export function mergeConfigWithDefaults(): AppConfig {
 export function getConfig(): AppConfig {
   cachedConfig ??= mergeDefaultConfig(readConfigFromDisk()).mergedConfig
   return cachedConfig
+}
+
+// Refresh this process on its next read without rewriting defaults to disk.
+export function invalidateConfigCache(): void {
+  cachedConfig = null
 }
 
 export function reloadConfig(): AppConfig {

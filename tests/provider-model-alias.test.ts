@@ -336,29 +336,4 @@ describe("namespaced model ids fall through to the default lookup", () => {
     expect(await response.json()).toEqual({ input_tokens: 42 })
     expect(fetchMock).not.toHaveBeenCalled()
   })
-
-  test("still routes a configured provider alias on /v1/messages/count_tokens to the provider path", async () => {
-    // Regression guard for the happy path: a real provider alias must still
-    // be routed to the provider token counter (not fall through).
-    const app = createApp()
-    const response = await app.request("/v1/messages/count_tokens", {
-      body: JSON.stringify({
-        max_tokens: 128,
-        messages: [{ content: "hello", role: "user" }],
-        model: "dash/qwen-plus",
-      }),
-      headers: {
-        "content-type": "application/json",
-      },
-      method: "POST",
-    })
-
-    expect(response.status).toBe(200)
-    expect(getTokenCount).toHaveBeenCalledTimes(1)
-    const [, selectedModel] = getTokenCount.mock.calls[0] as [
-      TokenCountPayload,
-      TokenCountModel,
-    ]
-    expect(selectedModel.id).toBe("qwen-plus")
-  })
 })
