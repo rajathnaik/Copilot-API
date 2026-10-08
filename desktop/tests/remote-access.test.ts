@@ -151,6 +151,9 @@ describe('client setup snippets', () => {
     expect(byId.codex).toContain(
       'base_url = "https://abc-4141.inc1.devtunnels.ms"',
     )
+    expect(byId.codex).toContain(
+      'model_catalog_url = "https://abc-4141.inc1.devtunnels.ms/models"',
+    )
     expect(byId.openaiSdk).toContain(
       'base_url="https://abc-4141.inc1.devtunnels.ms/v1"',
     )

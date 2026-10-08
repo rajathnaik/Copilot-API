@@ -2,6 +2,7 @@
   "extends": "./tsconfig.base.json",
   "include": [
     "electron.vite.config.*",
+    "electron.connector.config.*",
     "electron/**/*",
     "tests/**/*",
     "src/lib/auto-start-server.ts",
@@ -9,6 +10,7 @@
     "src/lib/remote-access.ts",
     "src/lib/server-url.ts",
     "src/locales/**/*",
+    "src/connector/**/*",
     "src/types/**/*",
     "../src/lib/api-config.ts",
     "../src/lib/atomic-file.ts",

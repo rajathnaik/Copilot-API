@@ -2,6 +2,55 @@ import en from './en'
 import zh from './zh'
 
 export interface Locale {
+  connector: {
+    title: string
+    subtitle: string
+    gatewayUrl: string
+    apiKey: string
+    keyPlaceholder: string
+    showKey: string
+    hideKey: string
+    connect: string
+    connecting: string
+    discover: string
+    discovering: string
+    defaultModel: string
+    automatic: string
+    notDetected: string
+    selectExecutable: string
+    secureReady: string
+    secureUnavailable: string
+    inferenceNotice: string
+    configurationNotice: string
+    hostNotice: string
+    connected: string
+    modelCount: string
+    catalogMode: string
+    remoteCatalog: string
+    localCatalog: string
+    verifiedAt: string
+    configPath: string
+    refresh: string
+    refreshing: string
+    undo: string
+    undoing: string
+    confirmUndo: string
+    cancel: string
+    undone: string
+    restartNotice: string
+    excludedModels: string
+    otherHarnesses: string
+    otherHarnessesNote: string
+    statusLoading: string
+    noBridge: string
+    retry: string
+    savedKeyNote: string
+    language: string
+    wslNotice: string
+    download: string
+    consumerSetup: string
+    downloadError: string
+  }
   updates: {
     title: string
     description: string

@@ -56,6 +56,7 @@ export function buildClientSetups(
         '[model_providers.copilot_api]',
         'name = "OpenAI"',
         `base_url = "${baseUrl}"`,
+        `model_catalog_url = "${baseUrl}/models"`,
         'env_key = "GITHUB_COPILOT_API_KEY"',
         'requires_openai_auth = true',
         'supports_websockets = false',

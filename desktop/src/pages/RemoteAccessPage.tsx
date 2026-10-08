@@ -61,6 +61,7 @@ export default function RemoteAccessPage() {
   const [busy, setBusy] = useState(false)
   const [copied, setCopied] = useState('')
   const [clientTab, setClientTab] = useState<ClientSetupId>('curl')
+  const [connectorDownloadError, setConnectorDownloadError] = useState('')
 
   const refresh = useCallback(async () => {
     const [tunnelStatus, keys, desktopSettings] = await Promise.all([
@@ -106,6 +107,18 @@ export default function RemoteAccessPage() {
 
   const handleLogin = (provider: TunnelLoginProvider) =>
     run(() => window.electronAPI.tunnelLogin(provider))
+
+  const downloadConnector = async () => {
+    setConnectorDownloadError('')
+    try {
+      await window.electronAPI.openUrl(
+        'https://github.com/caozhiyuan/copilot-api/releases',
+      )
+    } catch (error) {
+      console.error('Could not open connector releases page', error)
+      setConnectorDownloadError(t('connector.downloadError'))
+    }
+  }
 
   const clientSetups = useMemo(
     () => (status?.url ? buildClientSetups(status.url) : []),
@@ -404,6 +417,26 @@ export default function RemoteAccessPage() {
         <div className="bg-surface border border-line rounded-xl p-4 flex flex-col gap-3 min-h-0 flex-1">
           <div className="text-[14px] font-semibold text-ink">
             {t('remoteAccess.clientsTitle')}
+          </div>
+          <div className="space-y-2 rounded-md border border-line bg-sunken p-3">
+            <p className="text-[12px] text-ink-soft">
+              {t('connector.consumerSetup')}
+            </p>
+            <button
+              type="button"
+              className={buttonClass}
+              onClick={downloadConnector}
+            >
+              {t('connector.download')}
+            </button>
+            {connectorDownloadError && (
+              <p
+                role="alert"
+                className="text-[12px] text-red-600 dark:text-red-400"
+              >
+                {connectorDownloadError}
+              </p>
+            )}
           </div>
           {activeSetup ?
             <>

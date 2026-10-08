@@ -1,6 +1,66 @@
 import type { Locale } from './index'
 
 const zh: Locale = {
+  connector: {
+    title: 'Copilot API Connector',
+    subtitle: '将编程工具连接到现有网关，无需在本机运行网关或登录 Copilot。',
+    gatewayUrl: '网关 URL',
+    apiKey: '网关 API 密钥',
+    keyPlaceholder: '输入网关密钥',
+    showKey: '显示密钥',
+    hideKey: '隐藏密钥',
+    connect: '连接 Codex',
+    connecting: '正在发现模型、配置并验证 Codex...',
+    discover: '发现模型',
+    discovering: '正在发现模型...',
+    defaultModel: '默认模型',
+    automatic: '从发现的模型中自动选择',
+    notDetected:
+      '未检测到 Codex。请安装 Codex CLI 0.160.0+ 或选择其可执行文件。',
+    selectExecutable: '选择 Codex 可执行文件',
+    secureReady: '操作系统保护的凭据存储可用。',
+    secureUnavailable: '请先启用系统密钥链。不支持明文存储密钥。',
+    inferenceNotice:
+      '连接和同步会对所选模型进行两次小规模推理验证，包括流式工具调用，可能消耗订阅额度。其他模型仅被发现，未进行推理验证。',
+    configurationNotice:
+      '配置将修改模型和 Provider 设置，清除全局上下文和推理强度覆盖值，以使用模型元数据。其他设置和 Provider 保持不变；撤销会恢复原来的模型设置。',
+    hostNotice:
+      '主机网关和隧道必须保持运行。配置完成后可关闭此窗口，正常使用 Codex。',
+    connected: 'Codex 已连接',
+    modelCount: '{{count}} 个兼容模型',
+    catalogMode: '模型目录',
+    remoteCatalog: '远程发现',
+    localCatalog: '完整本地目录（使用同步模型刷新）',
+    verifiedAt: '所选模型验证时间',
+    configPath: 'Codex 配置',
+    refresh: '同步模型',
+    refreshing: '正在刷新并验证...',
+    undo: '撤销连接',
+    undoing: '正在恢复原来的设置...',
+    confirmUndo:
+      '撤销此连接？请先关闭 Codex 会话。将恢复原来的模型设置并删除保存的网关密钥。',
+    cancel: '取消',
+    undone: '连接已移除，原来的模型设置已恢复。',
+    restartNotice:
+      '请重启 Codex 以加载设置。请保留 Connector 安装：Codex 会调用其凭据助手，但无需保持此窗口打开。',
+    excludedModels:
+      '{{count}} 个发现的模型因缺少兼容的 Codex 元数据或工具支持而被排除。',
+    otherHarnesses: '更多编程工具',
+    otherHarnessesNote:
+      '此版本支持 Codex。后续可添加 Claude Code 等适配器，无需更改网关。',
+    statusLoading: '正在检查 Codex 和安全存储...',
+    noBridge: '请在桌面应用中运行 Connector。浏览器预览无法配置 Codex。',
+    retry: '重新检测',
+    savedKeyNote:
+      '凭据已保存，同步时会使用它。仅重新连接或轮换密钥时需要在此输入密钥。',
+    language: '语言',
+    wslNotice: '此应用配置本机操作系统中的 Codex，不会配置独立的 WSL 安装。',
+    download: '下载 Copilot API Connector',
+    consumerSetup:
+      '请在客户端机器安装独立的 Copilot API Connector，输入此隧道 URL 和网关 API 密钥，无需运行本地网关或登录 Copilot。',
+    downloadError:
+      '无法打开发布页面。请访问 https://github.com/caozhiyuan/copilot-api/releases 下载 Connector。',
+  },
   updates: {
     title: '应用更新',
     description:

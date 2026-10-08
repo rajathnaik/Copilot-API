@@ -45,3 +45,7 @@ jobs:
 
       - name: Build
         run: bun run build
+
+      - name: Build client-only connector
+        working-directory: desktop
+        run: bun run build:connector

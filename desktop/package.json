@@ -11,6 +11,8 @@
   "scripts": {
     "dev": "node scripts/ensure-electron.mjs && electron-vite dev",
     "build": "electron-vite build",
+    "dev:connector": "node scripts/ensure-electron.mjs && electron-vite dev --config electron.connector.config.ts",
+    "build:connector": "electron-vite build --config electron.connector.config.ts",
     "build:server": "bun run --cwd .. build:desktop",
     "test": "bun test tests",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
@@ -21,10 +23,15 @@
     "package": "bun run build:server && electron-vite build && electron-builder --publish never",
     "package:mac": "bun run build:server && electron-vite build && electron-builder --mac --publish never",
     "package:win": "bun run build:server && electron-vite build && electron-builder --win --publish never",
-    "package:linux": "bun run build:server && electron-vite build && electron-builder --linux --publish never"
+    "package:linux": "bun run build:server && electron-vite build && electron-builder --linux --publish never",
+    "package:connector": "bun run build:connector && electron-builder --config connector-builder.json --publish never",
+    "package:connector:win": "bun run build:connector && electron-builder --config connector-builder.json --win --publish never",
+    "package:connector:mac": "bun run build:connector && electron-builder --config connector-builder.json --mac --publish never",
+    "package:connector:linux": "bun run build:connector && electron-builder --config connector-builder.json --linux --publish never"
   },
   "dependencies": {
-    "electron-updater": "^6.3.4"
+    "electron-updater": "^6.3.4",
+    "toml-eslint-parser": "^0.10.0"
   },
   "build": {
     "appId": "com.copilot-api.desktop",

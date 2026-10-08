@@ -15,7 +15,9 @@ export default defineConfig(
     ignores: [
       'node_modules/**',
       'out/**',
+      'out-connector/**',
       'release/**',
+      'release-connector/**',
       'dist/**',
       '*.tsbuildinfo',
       'electron.vite.config.*.mjs',

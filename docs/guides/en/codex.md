@@ -6,6 +6,11 @@
 
 This AI gateway can also power Codex.
 
+For automatic setup on a consumer machine, use
+[Copilot API Connector](connector.md). It is a separate client-only installer:
+enter your existing gateway URL and API key, then click **Connect Codex**.
+The manual configuration below remains available.
+
 Recommended Codex version: `0.160.0` or newer. These clients can load the model catalog from `model_catalog_url`, so the local `model_catalog_json` file is optional.
 
 Remote catalog responses are limited to 1 MiB of JSON. When the merged catalog is larger, the gateway keeps models selected through provider `codexModels` first and drops the rest. Select the models you need on the Providers page, or generate a local catalog for the complete list.

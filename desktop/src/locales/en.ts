@@ -1,6 +1,70 @@
 import type { Locale } from './index'
 
 const en: Locale = {
+  connector: {
+    title: 'Copilot API Connector',
+    subtitle:
+      'Connect your coding harness to an existing gateway. No local gateway or Copilot sign-in required.',
+    gatewayUrl: 'Gateway URL',
+    apiKey: 'Gateway API key',
+    keyPlaceholder: 'Enter your gateway key',
+    showKey: 'Show key',
+    hideKey: 'Hide key',
+    connect: 'Connect Codex',
+    connecting: 'Discovering, configuring, and verifying Codex...',
+    discover: 'Discover models',
+    discovering: 'Discovering models...',
+    defaultModel: 'Default model',
+    automatic: 'Choose automatically from discovered models',
+    notDetected:
+      'Codex was not detected. Install Codex CLI 0.160.0+ or select its executable.',
+    selectExecutable: 'Select Codex executable',
+    secureReady: 'OS-protected credential storage is available.',
+    secureUnavailable:
+      'Enable your OS keychain before connecting. Plaintext key storage is not supported.',
+    inferenceNotice:
+      'Connect and Sync run two small inference checks on the selected model, including a streaming tool call. These can consume subscription allowance. Other models are discovered, not inference-verified.',
+    configurationNotice:
+      'Setup changes model/provider settings and clears global context and reasoning-effort overrides so model metadata can apply. Unrelated settings and providers are preserved; Undo restores your previous model settings.',
+    hostNotice:
+      'Your host gateway and tunnel must stay running. After setup, close this connector and use Codex normally.',
+    connected: 'Codex connected',
+    modelCount: '{{count}} compatible models',
+    catalogMode: 'Model catalog',
+    remoteCatalog: 'Remote discovery',
+    localCatalog: 'Complete local catalog (refresh with Sync models)',
+    verifiedAt: 'Selected model verified',
+    configPath: 'Codex configuration',
+    refresh: 'Sync models',
+    refreshing: 'Refreshing and verifying...',
+    undo: 'Undo connection',
+    undoing: 'Restoring previous settings...',
+    confirmUndo:
+      'Undo this connection? Close Codex sessions first. Your previous model settings will be restored and the saved gateway key removed.',
+    cancel: 'Cancel',
+    undone: 'Connection removed. Your previous model settings were restored.',
+    restartNotice:
+      'Restart Codex to load these settings. Keep the connector installed: Codex uses its credential helper, but its window does not need to stay open.',
+    excludedModels:
+      '{{count}} discovered models were excluded because they lack compatible Codex metadata or tool support.',
+    otherHarnesses: 'More harnesses',
+    otherHarnessesNote:
+      'Codex is supported in this release. Claude Code and other adapters can be added without changing your gateway.',
+    statusLoading: 'Checking Codex and secure storage...',
+    noBridge:
+      'The connector must run in its desktop application. A browser preview cannot configure Codex.',
+    retry: 'Retry detection',
+    savedKeyNote:
+      'A credential is already saved. Sync uses it; enter a key here only to reconnect or rotate it.',
+    language: 'Language',
+    wslNotice:
+      'This app configures Codex in its native OS environment, not a separate WSL installation.',
+    download: 'Download Copilot API Connector',
+    consumerSetup:
+      'On the consumer machine, use the separate Copilot API Connector installer. Enter this tunnel URL and a gateway API key; no local gateway or Copilot sign-in is needed.',
+    downloadError:
+      'Could not open the releases page. Visit https://github.com/caozhiyuan/copilot-api/releases to download the connector.',
+  },
   updates: {
     title: 'Updates',
     description:

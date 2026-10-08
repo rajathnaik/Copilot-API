@@ -44,10 +44,18 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
+      - name: Build macOS arm64 connector
+        working-directory: desktop
+        run: bun run package:connector:mac
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
       - uses: actions/upload-artifact@v4
         with:
           name: mac-arm64
-          path: desktop/release/*.dmg
+          path: |
+            desktop/release/*.dmg
+            desktop/release-connector/*.dmg
           if-no-files-found: warn
 
   # ─── Windows ─────────────────────────────────────────────────────────────
@@ -92,6 +100,12 @@ jobs:
             throw 'Windows update metadata was not generated'
           }
 
+      - name: Build Windows connector
+        working-directory: desktop
+        run: bun run package:connector:win
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
       - uses: actions/upload-artifact@v4
         with:
           name: win
@@ -100,6 +114,7 @@ jobs:
             desktop/release/*.msi
             desktop/release/*.blockmap
             desktop/release/latest.yml
+            desktop/release-connector/*.exe
           if-no-files-found: error
 
   # ─── Linux (x64) ────────────────────────────────────────────────────────
@@ -139,12 +154,17 @@ jobs:
         working-directory: desktop
         run: test -f release/latest-linux.yml
 
+      - name: Build Linux x64 connector
+        working-directory: desktop
+        run: bun run package:connector:linux -- --x64
+
       - uses: actions/upload-artifact@v4
         with:
           name: linux-x64
           path: |
             desktop/release/*.AppImage
             desktop/release/latest-linux.yml
+            desktop/release-connector/*.AppImage
           if-no-files-found: error
 
   # ─── Upload all artifacts to the GitHub Release ──────────────────────────

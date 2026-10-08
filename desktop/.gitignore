@@ -1,6 +1,9 @@
 node_modules/
 out/
+out-connector/
 release/
+release-connector/
 *.tsbuildinfo
 .DS_Store
 electron.vite.config.*.mjs
+electron.connector.config.*.mjs

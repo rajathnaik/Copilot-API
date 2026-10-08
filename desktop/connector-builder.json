@@ -1,0 +1,48 @@
+{
+  "appId": "com.copilot-api.connector",
+  "productName": "Copilot API Connector",
+  "extraMetadata": {
+    "name": "copilot-api-connector",
+    "desktopName": "copilot-api-connector.desktop",
+    "description": "Connect coding harnesses to a remote Copilot API gateway",
+    "main": "out-connector/main/index.js"
+  },
+  "directories": {
+    "buildResources": "build",
+    "output": "release-connector"
+  },
+  "files": ["out-connector/**/*", "!node_modules/**/*"],
+  "extraResources": [
+    { "from": "assets/icon.png", "to": "icon.png" },
+    { "from": "../LICENSE", "to": "licenses/copilot-api.txt" },
+    { "from": "node_modules/toml-eslint-parser/LICENSE", "to": "licenses/toml-eslint-parser.txt" },
+    { "from": "node_modules/eslint-visitor-keys/LICENSE", "to": "licenses/eslint-visitor-keys.txt" },
+    { "from": "node_modules/react/LICENSE", "to": "licenses/react.txt" },
+    { "from": "node_modules/react-dom/LICENSE", "to": "licenses/react-dom.txt" },
+    { "from": "node_modules/scheduler/LICENSE", "to": "licenses/scheduler.txt" },
+    { "from": "node_modules/tailwindcss/LICENSE", "to": "licenses/tailwindcss.txt" }
+  ],
+  "publish": null,
+  "mac": {
+    "target": "dmg",
+    "artifactName": "Copilot.API.Connector-${version}-${arch}.${ext}",
+    "category": "public.app-category.developer-tools",
+    "icon": "assets/icon.png"
+  },
+  "win": {
+    "target": "nsis",
+    "artifactName": "Copilot.API.Connector.Setup.${version}.${ext}",
+    "icon": "build/icon.ico"
+  },
+  "nsis": {
+    "installerIcon": "build/icon.ico",
+    "uninstallerIcon": "build/icon.ico"
+  },
+  "linux": {
+    "target": "AppImage",
+    "artifactName": "Copilot-API-Connector-${version}-linux-${arch}.${ext}",
+    "category": "Development",
+    "executableName": "copilot-api-connector",
+    "icon": "assets/icon.png"
+  }
+}
