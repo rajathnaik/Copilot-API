@@ -99,8 +99,10 @@ export type ConnectorResult<T> =
 
 export interface ConnectorAPI {
   status(harness?: ConnectorHarness): Promise<ConnectorResult<ConnectorStatus>>
+  revealKey(harness: ConnectorHarness): Promise<ConnectorResult<string>>
   discover(input: ConnectorInput): Promise<ConnectorResult<ConnectorDiscovery>>
   connect(input: ConnectorInput): Promise<ConnectorResult<ConnectorConnection>>
+  repair(input: ConnectorInput): Promise<ConnectorResult<ConnectorConnection>>
   refresh(
     harness?: ConnectorHarness,
   ): Promise<ConnectorResult<ConnectorConnection>>

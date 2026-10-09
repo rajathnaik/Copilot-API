@@ -793,6 +793,153 @@ describe('persistent configuration transactions', () => {
 })
 
 describe('complete connector lifecycle', () => {
+  test('reveals only an existing saved profile and preserves its encrypted credential', async () => {
+    const storage = store()
+    await expect(storage.revealKey()).rejects.toThrow('no saved connection')
+    await service(storage).connect(input)
+    const encrypted = storage.read('credential')
+    expect(await storage.revealKey()).toBe(input.apiKey)
+    expect(storage.read('credential')).toBe(encrypted)
+    expect(storage.read('state')).not.toContain(input.apiKey)
+  })
+
+  test('reveal reports unavailable storage, damaged state and decryption failures explicitly', async () => {
+    let available = true
+    let decryptFails = false
+    const storage = store({
+      ...testCodec,
+      available: () => available,
+      decrypt: (value) => {
+        if (decryptFails) throw new Error('Synthetic decryption failure')
+        return testCodec.decrypt(value)
+      },
+    })
+    await service(storage).connect(input)
+    const encrypted = storage.read('credential')
+    available = false
+    await expect(storage.revealKey()).rejects.toThrow('OS-protected')
+    available = true
+    decryptFails = true
+    await expect(storage.revealKey()).rejects.toThrow('cannot be decrypted')
+    expect(storage.read('credential')).toBe(encrypted)
+    fs.writeFileSync(storage.files.state, '{}')
+    await expect(storage.revealKey()).rejects.toThrow('state is invalid')
+  })
+
+  test('confirmed repair backs up external edits, preserves unrelated settings and retains the first Undo baseline', async () => {
+    const storage = store()
+    fs.mkdirSync(path.dirname(storage.files.config), { recursive: true })
+    const original = 'model = "old"\nsandbox_mode = "workspace-write"\n'
+    fs.writeFileSync(storage.files.config, original)
+    const connector = service(storage)
+    await connector.connect(input)
+    const edited =
+      (storage.read('config') ?? '').replace(
+        'model = "gpt-test"',
+        'model = "external"',
+      ) + '\n[features]\nuser_added = true\n'
+    fs.writeFileSync(storage.files.config, edited)
+    await expect(connector.connect(input)).rejects.toThrow('Repair connection')
+    await connector.connect(input, true)
+    const backupDirectory = path.join(storage.directory, 'config-backups')
+    const backups = fs.readdirSync(backupDirectory)
+    expect(backups).toHaveLength(1)
+    expect(
+      fs.readFileSync(path.join(backupDirectory, backups[0]), 'utf8'),
+    ).toBe(edited)
+    expect(storage.state()?.originalConfig).toBe(original)
+    expect(
+      getStaticTOMLValue(parseTOML(storage.read('config') ?? '')),
+    ).toMatchObject({
+      model: 'gpt-test',
+      sandbox_mode: 'workspace-write',
+      features: { user_added: true },
+    })
+    await connector.undo()
+    expect(
+      getStaticTOMLValue(parseTOML(storage.read('config') ?? '')),
+    ).toMatchObject({
+      model: 'old',
+      features: { user_added: true },
+    })
+    expect(
+      fs.readFileSync(path.join(backupDirectory, backups[0]), 'utf8'),
+    ).toBe(edited)
+  })
+
+  test('repair keeps its backup and rolls back external edits and credentials on native verification failure', async () => {
+    const storage = store()
+    await service(storage).connect(input)
+    const edited = (storage.read('config') ?? '').replace(
+      'model = "gpt-test"',
+      'model = "external"',
+    )
+    fs.writeFileSync(storage.files.config, edited)
+    const savedState = storage.read('state')
+    const failing: CommandRunner = () =>
+      Promise.reject(new Error('Synthetic native failure'))
+    await expect(
+      service(storage, failing).connect(
+        { ...input, apiKey: 'synthetic-rotated-key' },
+        true,
+      ),
+    ).rejects.toThrow('Synthetic native failure')
+    expect(storage.read('config')).toBe(edited)
+    expect(storage.read('state')).toBe(savedState)
+    expect(storage.key()).toBe(input.apiKey)
+    expect(
+      fs.readdirSync(path.join(storage.directory, 'config-backups')),
+    ).toHaveLength(1)
+  })
+
+  test('repair requires known ownership and valid existing configuration and never overwrites edits during backup', async () => {
+    const storage = store()
+    await expect(service(storage).connect(input, true)).rejects.toThrow(
+      'saved connection',
+    )
+    await service(storage).connect(input)
+    fs.unlinkSync(storage.files.config)
+    await expect(service(storage).connect(input, true)).rejects.toThrow(
+      'existing Codex configuration',
+    )
+    fs.writeFileSync(storage.files.config, 'model = "unfinished')
+    await expect(service(storage).connect(input, true)).rejects.toThrow(
+      'valid TOML',
+    )
+    const current = configureCodex('', options)
+    fs.writeFileSync(storage.files.config, current)
+    const backup = storage.backupConfig.bind(storage)
+    storage.backupConfig = (content) => {
+      backup(content)
+      fs.appendFileSync(
+        storage.files.config,
+        '\n# external edit during backup\n',
+      )
+    }
+    await expect(service(storage).connect(input, true)).rejects.toThrow(
+      'no external edits were overwritten',
+    )
+    expect(storage.read('config')).toBe(
+      `${current}\n# external edit during backup\n`,
+    )
+    expect(storage.key()).toBe(input.apiKey)
+  })
+
+  test('a failed backup blocks repair before any configuration or credential writes', async () => {
+    const storage = store()
+    await service(storage).connect(input)
+    const current = storage.read('config')
+    const state = storage.read('state')
+    fs.writeFileSync(
+      path.join(storage.directory, 'config-backups'),
+      'not a directory',
+    )
+    await expect(service(storage).connect(input, true)).rejects.toThrow()
+    expect(storage.read('config')).toBe(current)
+    expect(storage.read('state')).toBe(state)
+    expect(storage.key()).toBe(input.apiKey)
+  })
+
   test('connects, persists credentials, refreshes after restart and safely undoes', async () => {
     const storage = store()
     fs.mkdirSync(path.dirname(storage.files.config), { recursive: true })

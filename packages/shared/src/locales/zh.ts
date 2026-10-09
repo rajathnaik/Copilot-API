@@ -25,8 +25,10 @@ const zh: Locale = {
     gatewayUrl: '网关 URL',
     apiKey: '网关 API 密钥',
     keyPlaceholder: '输入网关密钥',
+    savedKeyPlaceholder: '密钥已保存，点击显示密钥查看',
     showKey: '显示密钥',
     hideKey: '隐藏密钥',
+    revealingKey: '正在从操作系统保护的存储中读取已保存的密钥...',
     connect: '连接 {{harness}}',
     connecting: '正在发现模型、配置并验证 {{harness}}...',
     discover: '发现模型',
@@ -69,6 +71,13 @@ const zh: Locale = {
       '撤销此连接？请先关闭 {{harness}} 会话。将恢复原来的模型设置并删除此连接保存的网关密钥。',
     cancel: '取消',
     undone: '连接已移除，原来的模型设置已恢复。',
+    repair: '修复连接',
+    confirmRepair:
+      '修复此连接？请先关闭 {{harness}}。当前配置将备份到 Connector 私有目录中的 config-backups 文件夹。将使用上方表单替换 Connector 管理的模型和 Provider 设置，其他设置及原始撤销基准保持不变。修复会执行与连接相同的推理验证。备份可能包含密钥，请勿分享。',
+    repairConfirm: '备份并重新连接',
+    repairing: '正在备份、修复并验证 {{harness}}...',
+    repaired:
+      '连接已修复。此前的配置已保存到 Connector 私有目录的 config-backups 文件夹。',
     restartNotice:
       '请重启 {{harness}} 以加载设置。请保留 Connector 安装：它会提供凭据，但无需保持此窗口打开。轮换密钥后请重新加载或重启 OpenClaw Gateway。',
     excludedModels:
@@ -80,7 +89,7 @@ const zh: Locale = {
     noBridge: '请在桌面应用中运行 Connector。浏览器预览无法配置编程工具。',
     retry: '重新检测',
     savedKeyNote:
-      '凭据已保存，同步时会使用它。仅重新连接或轮换密钥时需要在此输入密钥。',
+      '密钥已安全保存，仅点击显示密钥时读取。隐藏密钥或离开此窗口会清除显示副本。同一 URL 的重新连接会使用已保存的密钥，除非输入替换密钥。',
     language: '语言',
     wslNotice:
       '此应用配置本机系统安装，不会配置独立的 WSL 环境。请在 WSL 环境中配置对应客户端。',

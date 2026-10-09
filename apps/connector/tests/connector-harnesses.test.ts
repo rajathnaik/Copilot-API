@@ -95,6 +95,38 @@ const original: Record<AdditionalHarness, string> = {
 
 describe('native harness configuration adapters', () => {
   for (const harness of harnesses) {
+    test(`${harness} repairs only owned settings with a durable backup and preserves the original Undo baseline`, async () => {
+      const { service, storage, dependencies } = fixture(harness)
+      const input = { url, apiKey: key, allowPlaintext: harness === 'opencode' }
+      await service.connect(input)
+      const changed = doc(
+        harness,
+        configureHarness(harness, storage.read('config') ?? '', {
+          ...options,
+          baseUrl: 'https://externally-edited.example',
+          helperCommand: dependencies.helperCommand,
+          helperArgs: dependencies.helperArgs,
+        }),
+      )
+      changed.set(['later'], 9)
+      const edited = changed.toString()
+      fs.writeFileSync(storage.files.config, edited)
+      await expect(service.connect(input)).rejects.toThrow('Repair connection')
+      await service.connect(input, true)
+      const backupDirectory = path.join(storage.directory, 'config-backups')
+      const backups = fs.readdirSync(backupDirectory)
+      expect(backups).toHaveLength(1)
+      expect(
+        fs.readFileSync(path.join(backupDirectory, backups[0]), 'utf8'),
+      ).toBe(edited)
+      expect(storage.state()?.originalConfig).toBe(original[harness])
+      expect(doc(harness, storage.read('config') ?? '').get(['later'])).toBe(9)
+      await service.undo()
+      expect(doc(harness, storage.read('config') ?? '').get(['later'])).toBe(9)
+      expect(storage.state()).toBeNull()
+      expect(fs.existsSync(path.join(backupDirectory, backups[0]))).toBe(true)
+    })
+
     test(`${harness} preserves unrelated settings and safely restores ownership`, () => {
       const configured = configureHarness(harness, original[harness], options)
       const current = doc(harness, configured)
@@ -565,6 +597,68 @@ describe('independent persistent harness lifecycles', () => {
     )
     expect(storage.read('credential')).toBeNull()
     expect(storage.read('config')).toBe(original.opencode)
+  })
+
+  test('repair does not bypass ownership, missing files, consent or invalid configuration', async () => {
+    const { service, storage } = fixture('opencode')
+    const input = { url, apiKey: key, allowPlaintext: true }
+    await expect(service.connect(input, true)).rejects.toThrow(
+      'saved connection',
+    )
+    await service.connect(input)
+    await expect(
+      service.connect({ ...input, allowPlaintext: false }, true),
+    ).rejects.toThrow('permission')
+    fs.unlinkSync(storage.files.config)
+    await expect(service.connect(input, true)).rejects.toThrow(
+      'existing harness configuration',
+    )
+    fs.writeFileSync(storage.files.config, '{invalid')
+    await expect(service.connect(input, true)).rejects.toThrow()
+    expect(storage.key()).toBe(key)
+    expect(fs.existsSync(path.join(storage.directory, 'config-backups'))).toBe(
+      false,
+    )
+  })
+
+  test('repair rolls back native validation failure and refuses concurrent edits during backup', async () => {
+    const { service, storage, dependencies } = fixture('hermes')
+    const input = { url, apiKey: key }
+    await service.connect(input)
+    const current = storage.read('config')
+    const state = storage.read('state')
+    const failing = new HarnessService('hermes', storage, {
+      ...dependencies,
+      runner: async (_command, args) => {
+        if (args.includes('config'))
+          throw new Error('Synthetic validation failure')
+        return { stdout: storage.key(), stderr: '' }
+      },
+    })
+    await expect(
+      failing.connect({ ...input, apiKey: 'synthetic-rotated-key' }, true),
+    ).rejects.toThrow('rolled back')
+    expect(storage.read('config')).toBe(current)
+    expect(storage.read('state')).toBe(state)
+    expect(storage.key()).toBe(key)
+    const backup = storage.backupConfig.bind(storage)
+    storage.backupConfig = (content) => {
+      backup(content)
+      fs.appendFileSync(
+        storage.files.config,
+        '\n# concurrent external change\n',
+      )
+    }
+    await expect(service.connect(input, true)).rejects.toThrow(
+      'no external edits were overwritten',
+    )
+    expect(storage.read('config')).toBe(
+      `${current}\n# concurrent external change\n`,
+    )
+    expect(storage.key()).toBe(key)
+    expect(
+      fs.readdirSync(path.join(storage.directory, 'config-backups')),
+    ).toHaveLength(2)
   })
 
   test('unsupported clients, invalid models, lost ownership and edited fields fail explicitly', async () => {

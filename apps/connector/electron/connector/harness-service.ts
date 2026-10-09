@@ -94,7 +94,10 @@ export class HarnessService {
     return discovery
   }
 
-  async connect(input: ConnectorInput): Promise<ConnectorConnection> {
+  async connect(
+    input: ConnectorInput,
+    repair = false,
+  ): Promise<ConnectorConnection> {
     const key = validateApiKey(input.apiKey)
     try {
       return await this.store.exclusive(async () => {
@@ -106,13 +109,18 @@ export class HarnessService {
             'OpenCode requires explicit permission to save a readable gateway key in its configuration.',
           )
         const original = this.store.read('config')
+        if (repair && (!state || original === null))
+          throw new Error(
+            'Repair requires a saved connection and an existing harness configuration. Restore missing files before retrying.',
+          )
         if (
           state
+          && !repair
           && harnessFingerprint(this.harness, original ?? '')
             !== state.fingerprint
         )
           throw new Error(
-            'Connector-managed settings were edited externally. Restore them before reconnecting or undoing.',
+            'Connector-managed settings were edited externally. Use Repair connection to back them up and reconnect, or restore them before undoing.',
           )
         if (!state && hasHarnessProvider(this.harness, original ?? ''))
           throw new Error(
@@ -165,6 +173,7 @@ export class HarnessService {
           originalConfig: state ? state.originalConfig : original,
           fingerprint: harnessFingerprint(this.harness, configured),
         }
+        if (repair && original !== null) this.store.backupConfig(original)
         await this.store.transaction(
           {
             config: configured,
@@ -236,6 +245,7 @@ export class HarnessService {
             }
             return JSON.stringify(next)
           },
+          original,
         )
         return connection
       })
@@ -266,7 +276,7 @@ export class HarnessService {
       const current = this.store.read('config') ?? ''
       if (harnessFingerprint(this.harness, current) !== state.fingerprint)
         throw new Error(
-          'Connector-managed settings were edited externally. Undo will not overwrite them.',
+          'Connector-managed settings were edited externally. Undo will not overwrite them. Use Repair connection to back them up and reconnect, or restore them first.',
         )
       const restored = restoreHarness(
         this.harness,

@@ -26,8 +26,10 @@ const en: Locale = {
     gatewayUrl: 'Gateway URL',
     apiKey: 'Gateway API key',
     keyPlaceholder: 'Enter your gateway key',
+    savedKeyPlaceholder: 'Saved key — click Show key to view',
     showKey: 'Show key',
     hideKey: 'Hide key',
+    revealingKey: 'Retrieving the saved key from OS-protected storage...',
     connect: 'Connect {{harness}}',
     connecting: 'Discovering, configuring, and verifying {{harness}}...',
     discover: 'Discover models',
@@ -72,6 +74,13 @@ const en: Locale = {
       'Undo this connection? Close {{harness}} sessions first. Your previous model settings will be restored and this connection’s saved gateway key removed.',
     cancel: 'Cancel',
     undone: 'Connection removed. Your previous model settings were restored.',
+    repair: 'Repair connection',
+    confirmRepair:
+      'Repair this connection? Close {{harness}} first. Your current configuration will be backed up in Connector’s private config-backups folder. Connector-managed model/provider settings will be replaced using the form above; unrelated settings and the original Undo baseline are preserved. This runs the same inference checks as Connect. Backups may contain secrets: do not share them.',
+    repairConfirm: 'Back up and reconnect',
+    repairing: 'Backing up, repairing, and verifying {{harness}}...',
+    repaired:
+      'Connection repaired. The previous configuration is saved in Connector’s private config-backups folder.',
     restartNotice:
       'Restart {{harness}} to load these settings. Keep the connector installed: it supplies credentials, but its window does not need to stay open. Reload or restart the OpenClaw Gateway after key rotation.',
     excludedModels:
@@ -84,7 +93,7 @@ const en: Locale = {
       'The connector must run in its desktop application. A browser preview cannot configure your harness.',
     retry: 'Retry detection',
     savedKeyNote:
-      'A credential is already saved. Sync uses it; enter a key here only to reconnect or rotate it.',
+      'A key is saved securely. Show key reveals it only on request; Hide key or leaving this window clears the revealed copy. Reconnect uses the saved key for the same URL unless you enter a replacement.',
     language: 'Language',
     wslNotice:
       'This app configures native OS installations, not separate WSL environments. Configure WSL clients from their own environment.',

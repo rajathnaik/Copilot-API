@@ -26,8 +26,9 @@ On the consumer:
    accept the readable-key warning before connecting.
 
 The **Gateway connection** selector can copy the URL and encrypted saved key
-from an existing configuration. The key is copied in the main process, never
-returned to the renderer. Each harness still owns an independent credential,
+from an existing configuration. Copying stays in the main process; the key is
+returned to the renderer only if **Show key** is explicitly requested. Each
+harness still owns an independent credential,
 default model, transaction journal, Sync and Undo history. Rotating or undoing
 one connection does not change the others. A copied key cannot be silently
 sent to a different URL: switch to entering a new gateway/key instead.
@@ -81,7 +82,7 @@ saved profiles and OS-encrypted credentials; uninstalling first is unnecessary.
 
 The connector has its own release version in
 `apps/connector/package.json` (`version`), independent of the
-gateway's package version. The multi-harness follow-up release is **2.7.2**,
+gateway's package version. The published multi-harness follow-up release is **2.7.2**,
 with installer **Copilot.API.Connector.Setup.2.7.2.exe**. Earlier Codex-only and
 multi-harness builds both used 2.7.0 and the same installer filename, so an older
 downloaded copy is not distinguishable by its name/version alone.
@@ -89,6 +90,10 @@ downloaded copy is not distinguishable by its name/version alone.
 [Download the Windows Connector installer](https://github.com/rajathnaik/Copilot-API/releases/download/connector-v2.7.2/Copilot.API.Connector.Setup.2.7.2.exe).
 This single setup file installs the packaged app; consumers do not need to
 download, clone or build the source project.
+
+Saved-key reveal and confirmed **Repair connection** are available in the
+2.7.3 source/local installer. The public download remains 2.7.2 until a separate
+release is approved; updating the source does not update an installed app.
 
 After installation, open Copilot API Connector from the Start menu and verify
 **Connector version 2.7.2** in its header and all five harness options. If an old
@@ -298,6 +303,14 @@ user tools, plugins and personal agent sessions are not invoked for validation.
 
 ## Sync, key rotation, and Undo
 
+- Saved keys stay out of the renderer until **Show key** is clicked. It reveals
+  the selected connection's key (or the explicitly selected reused connection).
+  **Hide key**, leaving the window, switching connections, and successful
+  setup/Undo clear the revealed copy. Unsaved replacement keys are not discarded
+  by Hide key. Nothing writes the revealed key to logs or browser storage.
+- Reconnecting to the same saved URL can reuse its encrypted key without
+  displaying it. Changing the URL requires an explicitly entered key or a
+  matching saved connection; a saved key is never silently sent to another URL.
 - **Sync models** reuses the encrypted saved key, updates the catalog, and
   verifies the existing selected model. A removed selected model requires an
   explicit replacement; the connector does not silently reroute requests.
@@ -315,8 +328,25 @@ dead-process locks. If files were edited externally during setup or recovery,
 the connector refuses to overwrite those edits and retains the recovery
 journal with an actionable error.
 
-Connector-managed fields edited outside the app also block reconnect and Undo.
-Restore those fields first. For ambiguous stale locks, the error identifies the
+Connector-managed fields edited outside the app also block ordinary reconnect,
+Sync, and Undo. Changing a model or its reasoning settings in the harness can
+trigger this protection. **Repair connection**, followed by **Back up and
+reconnect**, is the explicit recovery path: close the harness first, check the
+form's URL/model and saved or replacement key, then confirm. Repair backs up
+the current configuration before writing, reapplies only Connector-managed
+settings, runs the normal verification, and preserves unrelated edits and the
+first pre-Connector Undo baseline. Verification failure restores the current
+configuration and retains the backup. Unknown provider ownership, invalid or
+missing configuration, concurrent edits, and recovery-journal conflicts still
+block repair; it is not a force-write option.
+
+Backups are timestamped files under `config-backups` in that harness's private
+Connector profile. On Windows, Codex uses
+`%APPDATA%\Copilot API Connector\config-backups`; other harnesses use their own
+subdirectory under `connections`. Backups can contain existing configuration
+secrets, are retained through Undo, and must not be shared or committed.
+Alternatively, restore the Connector-managed settings manually before Undo.
+For ambiguous stale locks, the error identifies the
 exact lock file that can be removed after closing the connector. Recovery data
 can contain prior configuration secrets: keep the user-data directory private
 and do not upload its contents when reporting a problem.

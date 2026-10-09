@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLanguage } from '@copilot-api/shared/language'
 import {
   useThemePreference,
@@ -25,6 +25,8 @@ type Action =
   | 'detect'
   | 'auto'
   | 'install'
+  | 'reveal'
+  | 'repair'
   | null
 
 const THEME_KEY = 'copilot-api-connector-theme'
@@ -67,7 +69,24 @@ export default function ConnectorApp() {
   )
   const [notice, setNotice] = useState('')
   const [showKey, setShowKey] = useState(false)
+  const [revealedKey, setRevealedKey] = useState('')
+  const keyRequest = useRef(0)
   const [confirmUndo, setConfirmUndo] = useState(false)
+  const [confirmRepair, setConfirmRepair] = useState(false)
+
+  useEffect(() => {
+    function hideSavedKey() {
+      keyRequest.current += 1
+      setRevealedKey('')
+      setShowKey(false)
+      setAction((previous) => (previous === 'reveal' ? null : previous))
+    }
+    window.addEventListener('blur', hideSavedKey)
+    return () => {
+      window.removeEventListener('blur', hideSavedKey)
+      keyRequest.current += 1
+    }
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -99,6 +118,7 @@ export default function ConnectorApp() {
       })
     return () => {
       active = false
+      keyRequest.current += 1
     }
     // Initial detection should not replace user input on language changes.
   }, [harness])
@@ -117,7 +137,37 @@ export default function ConnectorApp() {
     )
   }
 
-  async function perform(nextAction: Exclude<Action, null>) {
+  async function toggleKey() {
+    if (showKey) {
+      setShowKey(false)
+      setRevealedKey('')
+      return
+    }
+    if (apiKey || !savedKeyHarness) {
+      setShowKey(true)
+      return
+    }
+    const request = ++keyRequest.current
+    setAction('reveal')
+    setError('')
+    try {
+      if (!window.connectorAPI) throw new Error(t('connector.noBridge'))
+      const key = unwrap(await window.connectorAPI.revealKey(savedKeyHarness))
+      if (keyRequest.current === request) {
+        setRevealedKey(key)
+        setShowKey(true)
+      }
+    } catch (failure) {
+      if (keyRequest.current === request)
+        setError(
+          failure instanceof Error ? failure.message : t('connector.noBridge'),
+        )
+    } finally {
+      if (keyRequest.current === request) setAction(null)
+    }
+  }
+
+  async function perform(nextAction: Exclude<Action, null | 'reveal'>) {
     setAction(nextAction)
     setError('')
     setNotice('')
@@ -135,7 +185,7 @@ export default function ConnectorApp() {
             harness,
             url,
             apiKey,
-            copyFrom: copyFrom || undefined,
+            copyFrom: credentialSource,
           }),
         )
         setDiscovery(next)
@@ -145,9 +195,12 @@ export default function ConnectorApp() {
         unwrap(await window.connectorAPI.undo(harness))
         updateConnection(null)
         setApiKey('')
+        setRevealedKey('')
+        setShowKey(false)
         setModel('')
         setDiscovery(null)
         setConfirmUndo(false)
+        setConfirmRepair(false)
         setCopyFrom('')
         setAllowPlaintext(false)
         setNotice(t('connector.undone'))
@@ -155,12 +208,14 @@ export default function ConnectorApp() {
         const connection = unwrap(
           nextAction === 'refresh' ?
             await window.connectorAPI.refresh(harness)
-          : await window.connectorAPI.connect({
+          : await window.connectorAPI[
+              nextAction === 'repair' ? 'repair' : 'connect'
+            ]({
               url,
               apiKey,
               model: model || discovery?.defaultModel,
               harness,
-              copyFrom: copyFrom || undefined,
+              copyFrom: credentialSource,
               allowPlaintext,
             }),
         )
@@ -168,18 +223,23 @@ export default function ConnectorApp() {
         setUrl(connection.baseUrl)
         setModel(connection.model)
         setApiKey('')
+        setRevealedKey('')
         setShowKey(false)
+        setConfirmRepair(false)
         setCopyFrom('')
         setDiscovery(null)
+        const restartNotice = t(
+          connection.credentialMode === 'config' ?
+            'connector.plaintextRestartNotice'
+          : 'connector.restartNotice',
+          {
+            harness: HARNESS_NAMES[harness],
+          },
+        )
         setNotice(
-          t(
-            connection.credentialMode === 'config' ?
-              'connector.plaintextRestartNotice'
-            : 'connector.restartNotice',
-            {
-              harness: HARNESS_NAMES[harness],
-            },
-          ),
+          nextAction === 'repair' ?
+            `${t('connector.repaired')} ${restartNotice}`
+          : restartNotice,
         )
       }
     } catch (failure) {
@@ -206,14 +266,20 @@ export default function ConnectorApp() {
   }
 
   const busy = action !== null
+  const connection = status?.connection
+  const savedKeyHarness = copyFrom || (connection ? harness : null)
+  const credentialSource =
+    copyFrom
+    || (!apiKey.trim() && connection?.baseUrl === url.trim() ?
+      harness
+    : undefined)
   const canConnect =
     !busy
     && !!status?.installation
     && status.secureStorage
     && !!url.trim()
-    && (!!apiKey.trim() || !!copyFrom)
+    && (!!apiKey.trim() || !!credentialSource)
     && (harness !== 'opencode' || allowPlaintext)
-  const connection = status?.connection
   const name = HARNESS_NAMES[harness]
   const inputClass =
     'w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-ink-soft disabled:opacity-50'
@@ -320,12 +386,14 @@ export default function ConnectorApp() {
                 setStatus(null)
                 setUrl('')
                 setApiKey('')
+                setRevealedKey('')
                 setModel('')
                 setDiscovery(null)
                 setCopyFrom('')
                 setAllowPlaintext(false)
                 setShowKey(false)
                 setConfirmUndo(false)
+                setConfirmRepair(false)
                 setError('')
                 setNotice('')
                 setAction('detect')
@@ -438,9 +506,11 @@ export default function ConnectorApp() {
                   setCopyFrom(selected)
                   setUrl(source?.baseUrl ?? connection?.baseUrl ?? '')
                   setApiKey('')
+                  setRevealedKey('')
                   setModel('')
                   setDiscovery(null)
                   setShowKey(false)
+                  setConfirmRepair(false)
                 }}
               >
                 <option value="">{t('connector.newGateway')}</option>
@@ -476,6 +546,9 @@ export default function ConnectorApp() {
               readOnly={!!copyFrom}
               onChange={(event) => {
                 setUrl(event.target.value)
+                setRevealedKey('')
+                setShowKey(false)
+                setConfirmRepair(false)
                 setDiscovery(null)
                 setModel('')
               }}
@@ -493,24 +566,33 @@ export default function ConnectorApp() {
                 id="gateway-key"
                 className={inputClass}
                 type={showKey ? 'text' : 'password'}
-                required={!copyFrom}
+                required={!credentialSource}
                 autoComplete="off"
                 spellCheck={false}
-                placeholder={t('connector.keyPlaceholder')}
-                value={apiKey}
+                placeholder={t(
+                  savedKeyHarness ?
+                    'connector.savedKeyPlaceholder'
+                  : 'connector.keyPlaceholder',
+                )}
+                value={apiKey || revealedKey}
                 disabled={busy || !!copyFrom}
                 onChange={(event) => {
                   setApiKey(event.target.value)
+                  setRevealedKey('')
+                  setConfirmRepair(false)
                   setDiscovery(null)
                 }}
               />
               <button
                 type="button"
                 className={`${buttonClass} shrink-0`}
-                disabled={busy}
+                disabled={
+                  busy
+                  || (!apiKey && !!savedKeyHarness && !status?.secureStorage)
+                }
                 aria-controls="gateway-key"
                 aria-pressed={showKey}
-                onClick={() => setShowKey(!showKey)}
+                onClick={() => void toggleKey()}
               >
                 {t(showKey ? 'connector.hideKey' : 'connector.showKey')}
               </button>
@@ -527,7 +609,7 @@ export default function ConnectorApp() {
                 <span>{t('connector.plaintextConsent')}</span>
               </label>
             )}
-            {connection && (
+            {savedKeyHarness && (
               <p className="mt-2 text-xs text-ink-soft">
                 {t('connector.savedKeyNote')}
               </p>
@@ -546,7 +628,10 @@ export default function ConnectorApp() {
                 className={inputClass}
                 value={model}
                 disabled={busy}
-                onChange={(event) => setModel(event.target.value)}
+                onChange={(event) => {
+                  setModel(event.target.value)
+                  setConfirmRepair(false)
+                }}
               >
                 <option value="">{t('connector.automatic')}</option>
                 {discovery.models.map((candidate) => (
@@ -582,7 +667,7 @@ export default function ConnectorApp() {
                 busy
                 || !status?.installation
                 || !url.trim()
-                || (!apiKey.trim() && !copyFrom)
+                || (!apiKey.trim() && !credentialSource)
               }
               onClick={() => perform('discover')}
             >
@@ -650,6 +735,8 @@ export default function ConnectorApp() {
               : action === 'discover' ? 'connector.discovering'
               : action === 'refresh' ? 'connector.refreshing'
               : action === 'undo' ? 'connector.undoing'
+              : action === 'repair' ? 'connector.repairing'
+              : action === 'reveal' ? 'connector.revealingKey'
               : 'connector.statusLoading',
               { harness: name },
             )}
@@ -753,7 +840,37 @@ export default function ConnectorApp() {
                 </button>
               </div>
             </div>
+          : confirmRepair ?
+            <div className="space-y-3">
+              <p>{t('connector.confirmRepair', { harness: name })}</p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className={buttonClass}
+                  disabled={!canConnect}
+                  onClick={() => perform('repair')}
+                >
+                  {t('connector.repairConfirm')}
+                </button>
+                <button
+                  type="button"
+                  className={buttonClass}
+                  disabled={busy}
+                  onClick={() => setConfirmRepair(false)}
+                >
+                  {t('connector.cancel')}
+                </button>
+              </div>
+            </div>
           : <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className={buttonClass}
+                disabled={!canConnect}
+                onClick={() => setConfirmRepair(true)}
+              >
+                {t('connector.repair')}
+              </button>
               <button
                 type="button"
                 className={buttonClass}

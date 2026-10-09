@@ -56,17 +56,27 @@ export class ConnectorService {
     return discovery
   }
 
-  async connect(input: ConnectorInput): Promise<ConnectorConnection> {
+  async connect(
+    input: ConnectorInput,
+    repair = false,
+  ): Promise<ConnectorConnection> {
     return this.store.exclusive(async () => {
       const installation = await this.installation()
       const apiKey = validateApiKey(input.apiKey)
       const encryptedKey = this.store.encryptKey(apiKey)
       const state = this.store.state()
       const original = this.store.read('config')
+      if (repair && (!state || original === null))
+        throw new Error(
+          'Repair requires a saved connection and an existing Codex configuration. Restore missing files before retrying.',
+        )
       if (state) {
-        if (managedConfigFingerprint(original ?? '') !== state.fingerprint) {
+        if (
+          !repair
+          && managedConfigFingerprint(original ?? '') !== state.fingerprint
+        ) {
           throw new Error(
-            'Connector-managed Codex settings were edited outside the connector. Restore those settings before reconnecting or undoing.',
+            'Connector-managed Codex settings were edited outside the connector. Use Repair connection to back them up and reconnect, or restore those settings before undoing.',
           )
         }
       } else if (hasConnectorProvider(original ?? '')) {
@@ -123,6 +133,7 @@ export class ConnectorService {
         fingerprint: managedConfigFingerprint(configured),
         connection,
       }
+      if (repair && original !== null) this.store.backupConfig(original)
       await this.store
         .transaction(
           {
@@ -149,6 +160,7 @@ export class ConnectorService {
             connection.verifiedAt = new Date().toISOString()
             return JSON.stringify(nextState)
           },
+          original,
         )
         .catch((error: unknown) => {
           const message =
@@ -177,7 +189,7 @@ export class ConnectorService {
       const current = this.store.read('config') ?? ''
       if (managedConfigFingerprint(current) !== state.fingerprint) {
         throw new Error(
-          'Connector-managed settings were edited externally. Undo will not overwrite them; restore those settings first.',
+          'Connector-managed settings were edited externally. Undo will not overwrite them. Use Repair connection to back them up and reconnect, or restore those settings first.',
         )
       }
       const restored = restoreCodex(current, state.originalConfig ?? '')

@@ -9,6 +9,10 @@ It does not run a Gateway or require another Copilot sign-in.
 or choose [macOS/Linux downloads](https://github.com/rajathnaik/Copilot-API/releases/tag/connector-v2.7.2).
 Run a newer installer in-place to upgrade under the same OS account.
 
+Saved-key reveal and confirmed **Repair connection** require Connector 2.7.3
+or newer. These fixes are in the source and local 2.7.3 installer; the public
+download above remains 2.7.2 until the next approved release.
+
 From the repository root, run `bun install --frozen-lockfile` once, then:
 
 ```sh

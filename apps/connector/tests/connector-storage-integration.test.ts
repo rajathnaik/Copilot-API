@@ -47,6 +47,15 @@ test.skipIf(
         'if (!fs.existsSync(file)) fs.writeFileSync(file, safeStorage.encryptString(credential).toString("base64"))',
         'const result = { sameProfile: app.getPath("sessionData") === directory, guiDecrypted: false, helperDecrypted: false, profilesDecrypted: false, shellHelpersDecrypted: false }',
         'try {',
+        'const stateFile = path.join(directory, "connection.json")',
+        'const connection = { harness:"codex", baseUrl:"https://synthetic.example", model:"fixture-model", modelCount:1, catalogMode:"remote", verifiedAt:new Date().toISOString(), configPath:path.join(process.env.CODEX_HOME, "config.toml") }',
+        'fs.writeFileSync(stateFile, JSON.stringify({version:1, originalConfig:null, fingerprint:"a".repeat(64), connection}))',
+        'const renderer = require("electron").BrowserWindow.getAllWindows()[0].webContents',
+        'const revealed = await renderer.executeJavaScript("window.connectorAPI.revealKey(\'codex\')")',
+        'result.guiRevealed = revealed.ok && revealed.value === credential',
+        'const invalid = await renderer.executeJavaScript("window.connectorAPI.revealKey(\'invalid-harness\')")',
+        'result.invalidRevealRejected = !invalid.ok && invalid.error === "Invalid connector harness."',
+        'result.repairBridgeReady = await renderer.executeJavaScript("typeof window.connectorAPI.repair === \'function\'")',
         'result.guiDecrypted = safeStorage.decryptString(Buffer.from(fs.readFileSync(file, "utf8"), "base64")) === credential',
         'const args = [...(packaged === "true" ? [] : [main]), "--connector-token", `--user-data-dir=${directory}`]',
         'result.helperDecrypted = execFileSync(helper, args, { encoding: "utf8", timeout: 30000 }).trim() === credential',
@@ -104,6 +113,9 @@ test.skipIf(
             profilesDecrypted: true,
             shellHelpersDecrypted: true,
             secretResolved: true,
+            guiRevealed: true,
+            invalidRevealRejected: true,
+            repairBridgeReady: true,
           })
           const args = [
             ...(process.env.CONNECTOR_TEST_HELPER ? [] : [main]),
@@ -124,5 +136,5 @@ test.skipIf(
       fs.rmSync(directory, { recursive: true, force: true })
     }
   },
-  180_000,
+  400_000,
 )

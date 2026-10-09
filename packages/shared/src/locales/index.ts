@@ -20,8 +20,10 @@ export interface Locale {
     gatewayUrl: string
     apiKey: string
     keyPlaceholder: string
+    savedKeyPlaceholder: string
     showKey: string
     hideKey: string
+    revealingKey: string
     connect: string
     connecting: string
     discover: string
@@ -57,6 +59,11 @@ export interface Locale {
     confirmUndo: string
     cancel: string
     undone: string
+    repair: string
+    confirmRepair: string
+    repairConfirm: string
+    repairing: string
+    repaired: string
     restartNotice: string
     excludedModels: string
     otherHarnesses: string

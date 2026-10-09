@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { randomUUID } from 'node:crypto'
 import { writeFileAtomically } from '@copilot-api/shared/atomic-file'
 import type {
   ConnectorConnection,
@@ -186,6 +187,27 @@ export class ConnectorStore {
     }
   }
 
+  async revealKey(): Promise<string> {
+    return this.exclusive(() => {
+      if (!this.state())
+        throw new Error('There is no saved connection to reveal a key for.')
+      return Promise.resolve(this.key())
+    })
+  }
+
+  backupConfig(content: string): void {
+    const directory = path.join(this.directory, 'config-backups')
+    fs.mkdirSync(directory, { recursive: true, mode: 0o700 })
+    const timestamp = new Date().toISOString().replace(/[:.]/gu, '-')
+    writeFileAtomically(
+      path.join(
+        directory,
+        `${timestamp}-${randomUUID()}-${path.basename(this.files.config)}`,
+      ),
+      content,
+    )
+  }
+
   encryptKey(key: string): string {
     if (!this.codec.available()) {
       throw new Error(
@@ -319,15 +341,26 @@ export class ConnectorStore {
   async transaction(
     changes: Changes,
     verify: () => Promise<string | void>,
+    expectedConfig?: string | null,
   ): Promise<void> {
     const snapshots: Snapshot[] = []
     for (const id of ['config', 'catalog', 'credential', 'state'] as const) {
-      if (id in changes)
+      if (id in changes) {
+        const before = this.read(id)
+        if (
+          id === 'config'
+          && expectedConfig !== undefined
+          && before !== expectedConfig
+        )
+          throw new Error(
+            'Harness configuration changed before setup. Close its editor and retry; no external edits were overwritten.',
+          )
         snapshots.push({
           id,
-          before: this.read(id),
+          before,
           after: changes[id] ?? null,
         })
+      }
     }
     const saveJournal = () =>
       writeFileAtomically(

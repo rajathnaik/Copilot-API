@@ -269,6 +269,9 @@ function registerHandlers(window: BrowserWindow): void {
     )
   }
   handle('connector:status', (input) => status(selectedHarness(input)))
+  handle('connector:reveal-key', (input) =>
+    harnessStore(selectedHarness(input)).revealKey(),
+  )
   handle('connector:discover', async (value) => {
     const input = await resolveInput(value)
     return service(input.harness ?? 'codex').discover(input)
@@ -276,6 +279,10 @@ function registerHandlers(window: BrowserWindow): void {
   handle('connector:connect', async (value) => {
     const input = await resolveInput(value)
     return service(input.harness ?? 'codex').connect(input)
+  })
+  handle('connector:repair', async (value) => {
+    const input = await resolveInput(value)
+    return service(input.harness ?? 'codex').connect(input, true)
   })
   handle('connector:refresh', (input) =>
     service(selectedHarness(input)).refresh(),
