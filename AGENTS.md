@@ -38,3 +38,12 @@ Never commit tokens, local credentials, or generated secrets; carefully check au
 ## Commits and Pull Requests
 
 Use short, imperative Conventional Commit subjects such as `feat: support custom provider auth flow`; PRs should describe the resulting behavior, link relevant issues, list checks and results, and include screenshots for desktop/UI changes.
+
+## Product Releases
+
+- Gateway and Connector are independent products: keep their versions, release tags, builds, and installer assets separate.
+- After a successful commit or push handled by the agent, ask whether the user wants a release. For a combined commit-and-push operation, ask once after the push. Propose the affected product and an appropriate patch/minor/major version.
+- Commit/push approval is not release approval. Do not create release tags, publish releases, or upload installers without explicit approval for that product/version.
+- Connector releases use `connector-v<version>`; existing Gateway releases use `v<version>`. Never use a Gateway tag to publish Connector installers, or mark a Connector release as the repository's global latest release.
+- Release only tested source already pushed to the remote. Check that package metadata, tag, and actual installer versions match; verify the public download after publishing.
+- Normal branch pushes may run checks but must not publish. The Connector publishing workflow accepts only an explicitly approved product tag or manual workflow dispatch.

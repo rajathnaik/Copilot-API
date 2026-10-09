@@ -102,6 +102,30 @@ ownership conflict rather than clearing or overwriting it.
 
 Updates remain manual; there is no automatic connector updater.
 
+## Publishing an approved Connector release
+
+Normal commits and branch pushes run checks, not publishing. After a commit/push
+handled by the coding assistant, it asks whether to release and proposes the
+affected product/version. A push does not itself grant release approval.
+The assistant cannot display a prompt for pushes made outside its session;
+publishing still requires a deliberate release tag or manual Actions run.
+
+For an approved stable Connector release:
+
+1. Set its independent `extraMetadata.version` in the connector build config.
+2. Check, commit and push the source. Never reuse a published version.
+3. After approval, push `connector-v<version>` at that tested commit, or run
+   **Release Connector** manually with that exact version and source ref.
+4. The workflow validates the version and product identity, runs checks, builds
+   Windows/macOS/Linux installers, checks the Windows credential helper, and
+   publishes a Connector-specific release with SHA256 checksums.
+5. Verify the Windows installer download and share that direct asset link.
+
+The Connector workflow does not publish on Gateway `v*` tags. Gateway release
+jobs no longer build Connector installers, and Connector releases do not replace
+the repository's global latest Gateway release. GitHub Actions publishes with
+its repository-scoped workflow token; no personal token belongs in source.
+
 ## Protocols and native configurations
 
 | Harness | Protocol and request endpoint | Configured API base | Credential integration |

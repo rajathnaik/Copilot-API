@@ -1,0 +1,143 @@
+name: Release Connector
+
+on:
+  push:
+    tags:
+      - "connector-v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Approved version already committed in connector-builder.json"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: connector-release-${{ github.event.inputs.version || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      tag: ${{ steps.metadata.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.18.0"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.2"
+      - name: Validate approved product and release version
+        id: metadata
+        run: node desktop/scripts/connector-release.ts
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+      - run: bun install --frozen-lockfile
+      - run: bun install --frozen-lockfile
+        working-directory: desktop
+      - run: bun run lint
+        working-directory: desktop
+      - run: bun run typecheck
+        working-directory: desktop
+      - name: Test Connector
+        working-directory: desktop
+        run: bun test tests/connector.test.ts tests/connector-harnesses.test.ts tests/connector-protocols.test.ts tests/connector-ui.test.ts tests/connector-release.test.ts
+
+  build:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+            arch: x64
+            artifact: "Copilot.API.Connector.Setup."
+            suffix: ".exe"
+          - os: macos-latest
+            platform: mac
+            arch: arm64
+            artifact: "Copilot.API.Connector-"
+            suffix: "-arm64.dmg"
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+            artifact: "Copilot-API-Connector-"
+            suffix: "-linux-x64.AppImage"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.18.0"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.2"
+      - run: bun install --frozen-lockfile
+      - run: bun install --frozen-lockfile
+        working-directory: desktop
+      - name: Build Connector
+        working-directory: desktop
+        run: bun run build:connector
+      - name: Package Connector installer
+        working-directory: desktop
+        run: bunx electron-builder --config connector-builder.json --${{ matrix.platform }} --${{ matrix.arch }} --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+      - name: Verify packaged Windows credential helper
+        if: matrix.platform == 'win'
+        working-directory: desktop
+        shell: pwsh
+        run: |
+          $env:CONNECTOR_TEST_ELECTRON = Join-Path $PWD 'node_modules\electron\dist\electron.exe'
+          $env:CONNECTOR_TEST_HELPER = Join-Path $PWD 'release-connector\win-unpacked\Copilot API Connector.exe'
+          bun test tests/connector-storage-integration.test.ts
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: connector-${{ matrix.platform }}
+          path: desktop/release-connector/${{ matrix.artifact }}${{ needs.validate.outputs.version }}${{ matrix.suffix }}
+          if-no-files-found: error
+
+  publish:
+    needs: [validate, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: connector-*
+          path: installers
+          merge-multiple: true
+      - name: Publish approved Connector release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.validate.outputs.version }}
+          TAG: ${{ needs.validate.outputs.tag }}
+          SOURCE_COMMIT: ${{ github.sha }}
+        run: |
+          cd installers
+          sha256sum *.exe *.dmg *.AppImage > SHA256SUMS.txt
+          cat > release-notes.txt <<EOF
+          Copilot API Connector ${VERSION}
+
+          Client-only installers for Codex, Claude Code, OpenCode, Hermes Agent and OpenClaw.
+          Install on the machine running your coding harness; no gateway installation or Copilot sign-in is required there.
+          Windows: download Copilot.API.Connector.Setup.${VERSION}.exe.
+          For an upgrade, close the Connector and run the installer under the same OS account; uninstalling first is unnecessary.
+          OpenCode requires explicit permission to store a readable key in its native configuration.
+
+          Source commit: ${SOURCE_COMMIT}
+          SHA256 checksums are attached. This is an independent Connector release, not a Gateway release.
+          EOF
+          gh release create "$TAG" *.exe *.dmg *.AppImage SHA256SUMS.txt \
+            --target "$SOURCE_COMMIT" --title "Copilot API Connector ${VERSION}" \
+            --notes-file release-notes.txt --latest=false

@@ -5,6 +5,7 @@
     "electron.connector.config.*",
     "electron/**/*",
     "tests/**/*",
+    "scripts/connector-release.ts",
     "src/lib/auto-start-server.ts",
     "src/lib/playground.ts",
     "src/lib/remote-access.ts",
