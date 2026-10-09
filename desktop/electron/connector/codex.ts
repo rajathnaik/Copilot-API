@@ -10,6 +10,7 @@ export interface CommandOptions {
   cwd?: string
   env?: NodeJS.ProcessEnv
   timeout: number
+  stdin?: string
 }
 
 export type CommandRunner = (
@@ -41,7 +42,7 @@ export const runCommand: CommandRunner = (executable, args, options) =>
       },
     )
     // Codex reads piped stdin even when a prompt argument is supplied.
-    child.stdin?.end()
+    child.stdin?.end(options.stdin)
   })
 
 export async function verifyCredentialHelper(
@@ -100,6 +101,8 @@ export function codexCandidates(
     const roots = [
       ...entries,
       ...(env.APPDATA ? [paths.join(env.APPDATA, 'npm')] : []),
+      ...(env.NPM_CONFIG_PREFIX ? [env.NPM_CONFIG_PREFIX] : []),
+      ...(env.npm_config_prefix ? [env.npm_config_prefix] : []),
     ]
     for (const root of roots) {
       const modules =
@@ -124,16 +127,13 @@ export function codexCandidates(
         }
       }
     }
-    if (env.LOCALAPPDATA) {
-      candidates.push(
-        paths.join(
-          env.LOCALAPPDATA,
-          'Programs',
-          'Codex',
-          'resources',
-          'codex.exe',
-        ),
-      )
+    for (const root of [
+      ...(env.LOCALAPPDATA ? [paths.join(env.LOCALAPPDATA, 'Programs')] : []),
+      ...(env.ProgramFiles ? [env.ProgramFiles] : []),
+      ...(env['ProgramFiles(x86)'] ? [env['ProgramFiles(x86)']] : []),
+    ]) {
+      for (const name of ['Codex', 'ChatGPT'])
+        candidates.push(...windowsDesktopExecutables(paths.join(root, name)))
     }
   } else {
     candidates.push(
@@ -142,38 +142,124 @@ export function codexCandidates(
       paths.join(home, '.local', 'bin', 'codex'),
     )
     if (platform === 'darwin') {
-      candidates.push(
-        '/Applications/Codex.app/Contents/Resources/codex',
-        paths.join(
-          home,
-          'Applications',
-          'Codex.app',
-          'Contents',
-          'Resources',
-          'codex',
-        ),
-      )
+      for (const name of ['Codex', 'ChatGPT'])
+        candidates.push(
+          `/Applications/${name}.app/Contents/Resources/codex`,
+          paths.join(
+            home,
+            'Applications',
+            `${name}.app`,
+            'Contents',
+            'Resources',
+            'codex',
+          ),
+        )
     }
   }
   return [...new Set(candidates)]
+}
+
+function windowsDesktopExecutables(directory: string): string[] {
+  return [
+    path.win32.join(directory, 'resources', 'codex.exe'),
+    path.win32.join(directory, 'app', 'resources', 'codex.exe'),
+  ]
+}
+
+export async function windowsDesktopCandidates(
+  runner: CommandRunner = runCommand,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<string[]> {
+  const script = [
+    "$ErrorActionPreference = 'Stop'",
+    '$roots = @()',
+    'if (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue) {',
+    "$roots += @(Get-AppxPackage | Where-Object { $_.Name -match '^OpenAI\\.(Codex|ChatGPT)' } | Select-Object -ExpandProperty InstallLocation)",
+    '}',
+    "foreach ($key in @('HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall', 'HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall', 'HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall')) {",
+    'if (Test-Path -LiteralPath $key) {',
+    "$roots += @(Get-ChildItem -LiteralPath $key | Get-ItemProperty | Where-Object { $_.InstallLocation -and ($_.DisplayName -match '^(OpenAI )?Codex( |$)' -or ($_.DisplayName -match '^ChatGPT( |$)' -and $_.Publisher -match 'OpenAI')) } | Select-Object -ExpandProperty InstallLocation)",
+    '}',
+    '}',
+    'ConvertTo-Json -InputObject @($roots | Where-Object { $_ } | Sort-Object -Unique) -Compress',
+  ].join('\n')
+  const { stdout } = await runner(
+    path.win32.join(
+      env.SystemRoot ?? env.WINDIR ?? 'C:\\Windows',
+      'System32',
+      'WindowsPowerShell',
+      'v1.0',
+      'powershell.exe',
+    ),
+    ['-NoProfile', '-NonInteractive', '-Command', script],
+    { timeout: 15_000 },
+  )
+  const directories: unknown = JSON.parse(stdout)
+  if (
+    !Array.isArray(directories)
+    || !directories.every(
+      (directory: unknown) =>
+        typeof directory === 'string' && path.win32.isAbsolute(directory),
+    )
+  )
+    throw new Error(
+      'Windows Codex installation discovery returned invalid locations.',
+    )
+  return directories.flatMap((directory: string) =>
+    windowsDesktopExecutables(directory),
+  )
 }
 
 export async function detectCodex(
   selected: string | null,
   runner: CommandRunner = runCommand,
   configPath = codexConfigPath(),
+  candidates?: string[],
 ): Promise<CodexInstallation | null> {
-  const candidates = selected ? [selected] : codexCandidates()
-  for (const executable of candidates) {
-    if (!fs.existsSync(executable)) continue
-    const version = parseCodexVersion(
-      (await runner(executable, ['--version'], { timeout: 15_000 })).stdout,
-    )
-    return { executable, version, configPath }
+  const failures: string[] = []
+  async function inspect(
+    locations: string[],
+  ): Promise<CodexInstallation | null> {
+    for (const executable of [...new Set(locations)]) {
+      if (!fs.existsSync(executable)) continue
+      try {
+        const version = parseCodexVersion(
+          (await runner(executable, ['--version'], { timeout: 15_000 })).stdout,
+        )
+        return { executable, version, configPath }
+      } catch (error) {
+        if (selected) throw error
+        const message = `${executable}: ${error instanceof Error ? error.message : 'Executable verification failed.'}`
+        failures.push(message)
+        console.warn(`[connector] Codex detection: ${message}`)
+      }
+    }
+    return null
   }
+  const installation = await inspect(
+    selected ? [selected] : (candidates ?? codexCandidates()),
+  )
+  if (installation) return installation
   if (selected)
     throw new Error(
       'The selected Codex executable no longer exists. Select it again.',
+    )
+  if (candidates === undefined && process.platform === 'win32') {
+    try {
+      const desktop = await inspect(await windowsDesktopCandidates(runner))
+      if (desktop) return desktop
+    } catch (error) {
+      const message =
+        error instanceof Error ?
+          error.message
+        : 'Windows installation discovery failed.'
+      failures.push(message)
+      console.warn(`[connector] Codex detection: ${message}`)
+    }
+  }
+  if (failures.length)
+    throw new Error(
+      `A compatible Codex executable could not be verified. Install or update Codex CLI ${MIN_CODEX_VERSION}+, then retry detection. ${failures.join('\n')}`,
     )
   return null
 }
@@ -220,6 +306,11 @@ export async function verifyNativeCodex(
     }
   } finally {
     // Only this freshly created verification directory is removed.
-    fs.rmSync(directory, { recursive: true, force: true })
+    fs.rmSync(directory, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 200,
+    })
   }
 }

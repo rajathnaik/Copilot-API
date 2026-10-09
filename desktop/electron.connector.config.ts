@@ -5,7 +5,11 @@ import { resolve } from 'node:path'
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin({ exclude: ['toml-eslint-parser'] })],
+    plugins: [
+      externalizeDepsPlugin({
+        exclude: ['toml-eslint-parser', 'jsonc-eslint-parser', 'yaml'],
+      }),
+    ],
     build: {
       outDir: 'out-connector/main',
       rollupOptions: {

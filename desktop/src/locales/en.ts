@@ -5,60 +5,88 @@ const en: Locale = {
     title: 'Copilot API Connector',
     subtitle:
       'Connect your coding harness to an existing gateway. No local gateway or Copilot sign-in required.',
+    harness: 'Coding harness',
+    harnessNotDetected:
+      'No {{harness}} installation was found. Install its current version and retry. Nothing will be downloaded without your permission.',
+    reuseGateway: 'Gateway connection',
+    newGateway: 'Enter a gateway URL and key',
+    independentProfiles:
+      'Reuse copies the saved URL and key into an independent connection. Sync, key rotation and Undo affect only the selected harness.',
+    plaintextConsent:
+      'OpenCode has no dynamic credential helper. I allow its configuration and transaction journal to contain a readable gateway key. Do not share or commit those files.',
+    plaintextRestartNotice:
+      'Restart OpenCode to load these settings. Its gateway key is readable in its configuration; protect that file. The connector window can close.',
+    protocolInferenceNotice:
+      'Connect and Sync run one streaming tool-call check on the selected model using this harness’s protocol. It can consume subscription allowance. This verifies the gateway transport, not a complete native agent session.',
+    harnessConfigurationNotice:
+      'Setup switches the default model/provider and related background model routing. Unrelated providers, permissions and settings are preserved. Project or agent-specific overrides can still take precedence. Undo restores previous model settings.',
+    configuredCatalog: 'Models installed in harness configuration',
+    protocol: 'API protocol',
     gatewayUrl: 'Gateway URL',
     apiKey: 'Gateway API key',
     keyPlaceholder: 'Enter your gateway key',
     showKey: 'Show key',
     hideKey: 'Hide key',
-    connect: 'Connect Codex',
-    connecting: 'Discovering, configuring, and verifying Codex...',
+    connect: 'Connect {{harness}}',
+    connecting: 'Discovering, configuring, and verifying {{harness}}...',
     discover: 'Discover models',
     discovering: 'Discovering models...',
     defaultModel: 'Default model',
     automatic: 'Choose automatically from discovered models',
     notDetected:
-      'Codex was not detected. Install Codex CLI 0.160.0+ or select its executable.',
-    selectExecutable: 'Select Codex executable',
+      'No compatible Codex installation was found. Install or update Codex (CLI 0.160.0+), then check again. Nothing will be downloaded without your permission.',
+    detected: 'Detected',
+    advanced: 'Advanced troubleshooting',
+    automaticDetection:
+      '{{harness}} is normally found automatically. Manual selection is only for custom or portable installations. Returning to automatic detection does not change your connection.',
+    useAutomaticDetection: 'Use automatic detection',
+    installGuide: 'Install or update {{harness}}',
+    connectionDetails: 'Technical connection details',
+    themeLoadFailed:
+      'Your theme preference could not be read. System theme is being used.',
+    themeSaveFailed:
+      'Your theme preference could not be saved. Your previous theme is unchanged.',
+    selectExecutable: 'Select {{harness}} executable',
     secureReady: 'OS-protected credential storage is available.',
     secureUnavailable:
-      'Enable your OS keychain before connecting. Plaintext key storage is not supported.',
+      'Enable your OS keychain before connecting. The connector stores its own copy of each key using OS encryption.',
     inferenceNotice:
       'Connect and Sync run two small inference checks on the selected model, including a streaming tool call. These can consume subscription allowance. Other models are discovered, not inference-verified.',
     configurationNotice:
       'Setup changes model/provider settings and clears global context and reasoning-effort overrides so model metadata can apply. Unrelated settings and providers are preserved; Undo restores your previous model settings.',
     hostNotice:
-      'Your host gateway and tunnel must stay running. After setup, close this connector and use Codex normally.',
-    connected: 'Codex connected',
+      'Your host gateway and tunnel must stay running. After setup, close this connector and use your configured harnesses normally.',
+    connected: '{{harness}} connected',
     modelCount: '{{count}} compatible models',
     catalogMode: 'Model catalog',
     remoteCatalog: 'Remote discovery',
     localCatalog: 'Complete local catalog (refresh with Sync models)',
     verifiedAt: 'Selected model verified',
-    configPath: 'Codex configuration',
+    configPath: 'Harness configuration',
     refresh: 'Sync models',
     refreshing: 'Refreshing and verifying...',
     undo: 'Undo connection',
     undoing: 'Restoring previous settings...',
     confirmUndo:
-      'Undo this connection? Close Codex sessions first. Your previous model settings will be restored and the saved gateway key removed.',
+      'Undo this connection? Close {{harness}} sessions first. Your previous model settings will be restored and this connection’s saved gateway key removed.',
     cancel: 'Cancel',
     undone: 'Connection removed. Your previous model settings were restored.',
     restartNotice:
-      'Restart Codex to load these settings. Keep the connector installed: Codex uses its credential helper, but its window does not need to stay open.',
+      'Restart {{harness}} to load these settings. Keep the connector installed: it supplies credentials, but its window does not need to stay open. Reload or restart the OpenClaw Gateway after key rotation.',
     excludedModels:
-      '{{count}} discovered models were excluded because they lack compatible Codex metadata or tool support.',
-    otherHarnesses: 'More harnesses',
+      '{{count}} discovered models were excluded because they lack compatible metadata or tool support.',
+    otherHarnesses: 'Supported harnesses',
     otherHarnessesNote:
-      'Codex is supported in this release. Claude Code and other adapters can be added without changing your gateway.',
-    statusLoading: 'Checking Codex and secure storage...',
+      'Codex, Claude Code, OpenCode, Hermes Agent and OpenClaw. Each uses its own native configuration and API protocol.',
+    statusLoading: 'Checking the harness and secure storage...',
     noBridge:
-      'The connector must run in its desktop application. A browser preview cannot configure Codex.',
+      'The connector must run in its desktop application. A browser preview cannot configure your harness.',
     retry: 'Retry detection',
     savedKeyNote:
       'A credential is already saved. Sync uses it; enter a key here only to reconnect or rotate it.',
     language: 'Language',
     wslNotice:
-      'This app configures Codex in its native OS environment, not a separate WSL installation.',
+      'This app configures native OS installations, not separate WSL environments. Configure WSL clients from their own environment.',
     download: 'Download Copilot API Connector',
     consumerSetup:
       'On the consumer machine, use the separate Copilot API Connector installer. Enter this tunnel URL and a gateway API key; no local gateway or Copilot sign-in is needed.',

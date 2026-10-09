@@ -1,7 +1,11 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { writeFileAtomically } from '../../../src/lib/atomic-file'
-import type { ConnectorConnection } from '../../src/types/connector'
+import type {
+  ConnectorConnection,
+  ConnectorHarness,
+} from '../../src/types/connector'
+import { HARNESS_PROTOCOLS } from '../../src/types/connector'
 
 export interface CredentialCodec {
   available(): boolean
@@ -51,6 +55,17 @@ function readText(file: string): string | null {
   }
 }
 
+function parseStoredJson(text: string, label: string): unknown {
+  try {
+    return JSON.parse(text)
+  } catch (error) {
+    throw new Error(
+      `The connector ${label} is not valid JSON. Preserve it and restore it from a backup.`,
+      { cause: error },
+    )
+  }
+}
+
 export class ConnectorStore {
   readonly files: Record<FileId, string>
   private readonly journalPath: string
@@ -60,10 +75,14 @@ export class ConnectorStore {
     readonly directory: string,
     configPath: string,
     readonly codec: CredentialCodec,
+    readonly harness: ConnectorHarness = 'codex',
   ) {
     this.files = {
       config: configPath,
-      catalog: path.join(directory, 'codex-models.json'),
+      catalog: path.join(
+        directory,
+        harness === 'codex' ? 'codex-models.json' : 'models.json',
+      ),
       credential: path.join(directory, 'gateway-key.encrypted'),
       state: path.join(directory, 'connection.json'),
     }
@@ -78,7 +97,7 @@ export class ConnectorStore {
   state(): ConnectionState | null {
     const text = this.read('state')
     if (text === null) return null
-    const value: unknown = JSON.parse(text)
+    const value = parseStoredJson(text, 'state')
     if (
       !isRecord(value)
       || value.version !== 1
@@ -92,30 +111,56 @@ export class ConnectorStore {
       )
     const connection = value.connection
     if (
-      connection.harness !== 'codex'
+      connection.harness !== this.harness
       || typeof connection.baseUrl !== 'string'
       || typeof connection.model !== 'string'
       || typeof connection.modelCount !== 'number'
       || (connection.catalogMode !== 'remote'
-        && connection.catalogMode !== 'local')
+        && connection.catalogMode !== 'local'
+        && connection.catalogMode !== 'configured')
+      || (this.harness === 'codex' ?
+        connection.catalogMode === 'configured'
+      : connection.catalogMode !== 'configured')
       || typeof connection.verifiedAt !== 'string'
       || connection.configPath !== this.files.config
+      || (connection.protocol !== undefined
+        && connection.protocol !== 'responses'
+        && connection.protocol !== 'anthropic-messages'
+        && connection.protocol !== 'chat-completions')
+      || (connection.protocol !== undefined
+        && connection.protocol !== HARNESS_PROTOCOLS[this.harness])
+      || (connection.credentialMode !== undefined
+        && connection.credentialMode !== 'helper'
+        && connection.credentialMode !== 'config')
+      || (connection.credentialMode !== undefined
+        && connection.credentialMode
+          !== (this.harness === 'opencode' ? 'config' : 'helper'))
     )
       throw new Error(
-        'The saved connection belongs to a different or invalid Codex configuration. Restore CODEX_HOME or undo it in its original environment.',
+        `The saved connection belongs to a different or invalid ${this.harness} configuration. Restore its configuration home or undo it in its original environment.`,
       )
     return {
       version: 1,
       originalConfig: value.originalConfig,
       fingerprint: value.fingerprint,
       connection: {
-        harness: 'codex',
+        harness: this.harness,
         baseUrl: connection.baseUrl,
         model: connection.model,
         modelCount: connection.modelCount,
         catalogMode: connection.catalogMode,
         verifiedAt: connection.verifiedAt,
         configPath: this.files.config,
+        ...(connection.protocol === undefined ?
+          {}
+        : {
+            protocol: connection.protocol,
+          }),
+        ...(connection.credentialMode === undefined ?
+          {}
+        : {
+            credentialMode: connection.credentialMode,
+          }),
       },
     }
   }
@@ -131,7 +176,14 @@ export class ConnectorStore {
       throw new Error(
         'No saved gateway credential. Connect again with your API key.',
       )
-    return this.codec.decrypt(encrypted)
+    try {
+      return this.codec.decrypt(encrypted)
+    } catch (error) {
+      throw new Error(
+        'The saved gateway key cannot be decrypted in this OS user/profile. Open Copilot API Connector and reconnect with your gateway URL and API key. Keep the connector installed under the same OS account; do not delete your harness configuration.',
+        { cause: error },
+      )
+    }
   }
 
   encryptKey(key: string): string {
@@ -212,7 +264,7 @@ export class ConnectorStore {
   recover(): void {
     const text = readText(this.journalPath)
     if (text === null) return
-    const value: unknown = JSON.parse(text)
+    const value = parseStoredJson(text, 'recovery journal')
     if (
       !isRecord(value)
       || value.version !== 1

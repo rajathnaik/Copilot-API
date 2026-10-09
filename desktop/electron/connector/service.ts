@@ -114,6 +114,8 @@ export class ConnectorService {
         catalogMode: discovery.catalogMode,
         verifiedAt: new Date().toISOString(),
         configPath: this.store.files.config,
+        protocol: 'responses',
+        credentialMode: 'helper',
       }
       const nextState: ConnectionState = {
         version: 1,

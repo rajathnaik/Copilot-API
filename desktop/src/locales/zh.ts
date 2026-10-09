@@ -4,57 +4,85 @@ const zh: Locale = {
   connector: {
     title: 'Copilot API Connector',
     subtitle: '将编程工具连接到现有网关，无需在本机运行网关或登录 Copilot。',
+    harness: '编程工具',
+    harnessNotDetected:
+      '未找到 {{harness}}。请安装当前版本并重新检测。不会未经许可下载软件。',
+    reuseGateway: '网关连接',
+    newGateway: '输入网关 URL 和密钥',
+    independentProfiles:
+      '复用会将已保存的 URL 和密钥复制到独立连接。同步、密钥轮换和撤销只影响所选工具。',
+    plaintextConsent:
+      'OpenCode 不支持动态凭据助手。我允许其配置和事务日志包含可读的网关密钥。请勿分享或提交这些文件。',
+    plaintextRestartNotice:
+      '请重启 OpenCode 以加载设置。网关密钥可在其配置中读取，请保护该文件。可关闭 Connector 窗口。',
+    protocolInferenceNotice:
+      '连接和同步会使用此工具的协议进行一次流式工具调用验证，可能消耗订阅额度。此验证证明网关传输正常，不代表完整的原生 Agent 会话已验证。',
+    harnessConfigurationNotice:
+      '配置会切换默认模型、Provider 和相关后台模型路由。其他 Provider、权限和设置保持不变。项目或 Agent 专用覆盖设置仍可能优先；撤销会恢复原来的模型设置。',
+    configuredCatalog: '模型已写入工具配置',
+    protocol: 'API 协议',
     gatewayUrl: '网关 URL',
     apiKey: '网关 API 密钥',
     keyPlaceholder: '输入网关密钥',
     showKey: '显示密钥',
     hideKey: '隐藏密钥',
-    connect: '连接 Codex',
-    connecting: '正在发现模型、配置并验证 Codex...',
+    connect: '连接 {{harness}}',
+    connecting: '正在发现模型、配置并验证 {{harness}}...',
     discover: '发现模型',
     discovering: '正在发现模型...',
     defaultModel: '默认模型',
     automatic: '从发现的模型中自动选择',
     notDetected:
-      '未检测到 Codex。请安装 Codex CLI 0.160.0+ 或选择其可执行文件。',
-    selectExecutable: '选择 Codex 可执行文件',
+      '未找到兼容的 Codex。请安装或更新 Codex（CLI 0.160.0+），然后重新检测。不会未经许可下载软件。',
+    detected: '已检测到',
+    advanced: '高级故障排查',
+    automaticDetection:
+      '通常会自动找到 {{harness}}。仅自定义或便携安装需要手动选择。恢复自动检测不会更改连接设置。',
+    useAutomaticDetection: '使用自动检测',
+    installGuide: '安装或更新 {{harness}}',
+    connectionDetails: '连接技术详情',
+    themeLoadFailed: '无法读取主题偏好，正在使用系统主题。',
+    themeSaveFailed: '无法保存主题偏好，原主题未更改。',
+    selectExecutable: '选择 {{harness}} 可执行文件',
     secureReady: '操作系统保护的凭据存储可用。',
-    secureUnavailable: '请先启用系统密钥链。不支持明文存储密钥。',
+    secureUnavailable:
+      '请先启用系统密钥链。Connector 保存的每个密钥副本都使用系统加密。',
     inferenceNotice:
       '连接和同步会对所选模型进行两次小规模推理验证，包括流式工具调用，可能消耗订阅额度。其他模型仅被发现，未进行推理验证。',
     configurationNotice:
       '配置将修改模型和 Provider 设置，清除全局上下文和推理强度覆盖值，以使用模型元数据。其他设置和 Provider 保持不变；撤销会恢复原来的模型设置。',
     hostNotice:
-      '主机网关和隧道必须保持运行。配置完成后可关闭此窗口，正常使用 Codex。',
-    connected: 'Codex 已连接',
+      '主机网关和隧道必须保持运行。配置完成后可关闭此窗口，正常使用已配置的工具。',
+    connected: '{{harness}} 已连接',
     modelCount: '{{count}} 个兼容模型',
     catalogMode: '模型目录',
     remoteCatalog: '远程发现',
     localCatalog: '完整本地目录（使用同步模型刷新）',
     verifiedAt: '所选模型验证时间',
-    configPath: 'Codex 配置',
+    configPath: '工具配置',
     refresh: '同步模型',
     refreshing: '正在刷新并验证...',
     undo: '撤销连接',
     undoing: '正在恢复原来的设置...',
     confirmUndo:
-      '撤销此连接？请先关闭 Codex 会话。将恢复原来的模型设置并删除保存的网关密钥。',
+      '撤销此连接？请先关闭 {{harness}} 会话。将恢复原来的模型设置并删除此连接保存的网关密钥。',
     cancel: '取消',
     undone: '连接已移除，原来的模型设置已恢复。',
     restartNotice:
-      '请重启 Codex 以加载设置。请保留 Connector 安装：Codex 会调用其凭据助手，但无需保持此窗口打开。',
+      '请重启 {{harness}} 以加载设置。请保留 Connector 安装：它会提供凭据，但无需保持此窗口打开。轮换密钥后请重新加载或重启 OpenClaw Gateway。',
     excludedModels:
-      '{{count}} 个发现的模型因缺少兼容的 Codex 元数据或工具支持而被排除。',
-    otherHarnesses: '更多编程工具',
+      '{{count}} 个发现的模型因缺少兼容元数据或工具支持而被排除。',
+    otherHarnesses: '支持的编程工具',
     otherHarnessesNote:
-      '此版本支持 Codex。后续可添加 Claude Code 等适配器，无需更改网关。',
-    statusLoading: '正在检查 Codex 和安全存储...',
-    noBridge: '请在桌面应用中运行 Connector。浏览器预览无法配置 Codex。',
+      'Codex、Claude Code、OpenCode、Hermes Agent 和 OpenClaw。各自使用原生配置及 API 协议。',
+    statusLoading: '正在检查工具和安全存储...',
+    noBridge: '请在桌面应用中运行 Connector。浏览器预览无法配置编程工具。',
     retry: '重新检测',
     savedKeyNote:
       '凭据已保存，同步时会使用它。仅重新连接或轮换密钥时需要在此输入密钥。',
     language: '语言',
-    wslNotice: '此应用配置本机操作系统中的 Codex，不会配置独立的 WSL 安装。',
+    wslNotice:
+      '此应用配置本机系统安装，不会配置独立的 WSL 环境。请在 WSL 环境中配置对应客户端。',
     download: '下载 Copilot API Connector',
     consumerSetup:
       '请在客户端机器安装独立的 Copilot API Connector，输入此隧道 URL 和网关 API 密钥，无需运行本地网关或登录 Copilot。',

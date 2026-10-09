@@ -5,6 +5,17 @@ export interface Locale {
   connector: {
     title: string
     subtitle: string
+    harness: string
+    harnessNotDetected: string
+    reuseGateway: string
+    newGateway: string
+    independentProfiles: string
+    plaintextConsent: string
+    plaintextRestartNotice: string
+    protocolInferenceNotice: string
+    harnessConfigurationNotice: string
+    configuredCatalog: string
+    protocol: string
     gatewayUrl: string
     apiKey: string
     keyPlaceholder: string
@@ -17,6 +28,14 @@ export interface Locale {
     defaultModel: string
     automatic: string
     notDetected: string
+    detected: string
+    advanced: string
+    automaticDetection: string
+    useAutomaticDetection: string
+    installGuide: string
+    connectionDetails: string
+    themeLoadFailed: string
+    themeSaveFailed: string
     selectExecutable: string
     secureReady: string
     secureUnavailable: string

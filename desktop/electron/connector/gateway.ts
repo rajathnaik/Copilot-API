@@ -2,6 +2,7 @@ import type {
   ConnectorDiscovery,
   ConnectorInput,
   ConnectorModel,
+  ConnectorProtocol,
 } from '../../src/types/connector'
 
 const MAX_CATALOG_BYTES = 32 * 1024 * 1024
@@ -98,18 +99,19 @@ async function gatewayRequest(
   apiKey: string,
   init: RequestInit = {},
 ): Promise<Response> {
+  const headers = new Headers(init.headers)
+  if (!headers.has('x-api-key'))
+    headers.set('Authorization', `Bearer ${apiKey}`)
+  if (!headers.has('Accept')) headers.set('Accept', 'application/json')
+  if (!headers.has('User-Agent'))
+    headers.set('User-Agent', 'Copilot-API-Connector')
   let response: Response
   try {
     response = await fetcher(url, {
       ...init,
       redirect: 'error',
       signal: AbortSignal.timeout(TIMEOUT_MS),
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        Accept: 'application/json',
-        'User-Agent': 'Copilot-API-Connector',
-        ...init.headers,
-      },
+      headers,
     })
   } catch {
     throw new Error(
@@ -169,6 +171,34 @@ function getCatalogModels(value: unknown): CatalogModel[] {
   return value.models
 }
 
+async function readDiscoveredModels(
+  baseUrl: string,
+  apiKey: string,
+  fetcher: ConnectorFetch,
+): Promise<Record<string, unknown>[]> {
+  const response = await gatewayRequest(fetcher, `${baseUrl}/v1/models`, apiKey)
+  const value = parseJson(await readBoundedBody(response, MAX_CATALOG_BYTES))
+  if (!isRecord(value) || !Array.isArray(value.data))
+    throw new Error('The gateway returned an invalid model discovery response.')
+  const models: Record<string, unknown>[] = []
+  for (const model of value.data) {
+    if (!isRecord(model) || typeof model.id !== 'string' || !model.id.trim())
+      throw new Error('Model discovery contains invalid model identifiers.')
+    models.push(model)
+  }
+  return models
+}
+
+function supportsTools(model: Record<string, unknown>): boolean {
+  const capabilities = model.capabilities
+  return !(
+    isRecord(capabilities)
+    && (capabilities.type === 'embeddings'
+      || (isRecord(capabilities.supports)
+        && capabilities.supports.tool_calls === false))
+  )
+}
+
 function supportsClientVersion(model: CatalogModel, version: string): boolean {
   if (model.minimal_client_version === undefined) return true
   if (typeof model.minimal_client_version !== 'string')
@@ -193,27 +223,11 @@ export async function discoverGateway(
 ): Promise<GatewayDiscovery> {
   const baseUrl = normalizeGatewayUrl(input.url)
   const apiKey = validateApiKey(input.apiKey)
-  const response = await gatewayRequest(fetcher, `${baseUrl}/v1/models`, apiKey)
-  const modelsValue = parseJson(
-    await readBoundedBody(response, MAX_CATALOG_BYTES),
-  )
-  if (!isRecord(modelsValue) || !Array.isArray(modelsValue.data)) {
-    throw new Error('The gateway returned an invalid model discovery response.')
-  }
+  const discovered = await readDiscoveredModels(baseUrl, apiKey, fetcher)
   const discoveredIds = new Set<string>()
-  for (const model of modelsValue.data) {
-    if (!isRecord(model) || typeof model.id !== 'string') {
-      throw new Error('Model discovery contains invalid model identifiers.')
-    }
-    const capabilities = model.capabilities
-    if (
-      isRecord(capabilities)
-      && (capabilities.type === 'embeddings'
-        || (isRecord(capabilities.supports)
-          && capabilities.supports.tool_calls === false))
-    )
-      continue
-    discoveredIds.add(model.id)
+  for (const model of discovered) {
+    if (supportsTools(model) && typeof model.id === 'string')
+      discoveredIds.add(model.id)
   }
   const headers = {
     'User-Agent': `codex-cli/${version}`,
@@ -270,12 +284,351 @@ export async function discoverGateway(
     defaultModel,
     catalogMode: remoteComplete ? 'remote' : 'local',
     catalog: JSON.stringify({ models: catalogModels }),
-    excludedModels: modelsValue.data.flatMap((model: unknown) =>
+    excludedModels: discovered.flatMap((model: unknown) =>
       isRecord(model) && typeof model.id === 'string' && !seen.has(model.id) ?
         [model.id]
       : [],
     ),
   }
+}
+
+function positiveNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ?
+      value
+    : undefined
+}
+
+export async function discoverStandardGateway(
+  input: ConnectorInput,
+  protocol: Exclude<ConnectorProtocol, 'responses'>,
+  fetcher: ConnectorFetch = fetch,
+): Promise<GatewayDiscovery> {
+  const baseUrl = normalizeGatewayUrl(input.url)
+  const discovered = await readDiscoveredModels(
+    baseUrl,
+    validateApiKey(input.apiKey),
+    fetcher,
+  )
+  const models: ConnectorModel[] = []
+  const seen = new Set<string>()
+  const excludedModels: string[] = []
+  for (const model of discovered) {
+    if (typeof model.id !== 'string') continue
+    if (!supportsTools(model)) {
+      excludedModels.push(model.id)
+      continue
+    }
+    if (seen.has(model.id)) continue
+    seen.add(model.id)
+    const capabilities = isRecord(model.capabilities) ? model.capabilities : {}
+    const limits = isRecord(capabilities.limits) ? capabilities.limits : {}
+    const supports =
+      isRecord(capabilities.supports) ? capabilities.supports : {}
+    const output =
+      positiveNumber(limits.max_output_tokens)
+      ?? positiveNumber(model.max_output_tokens)
+    models.push({
+      id: model.id,
+      name:
+        typeof model.display_name === 'string' ? model.display_name
+        : typeof model.name === 'string' ? model.name
+        : model.id,
+      description:
+        typeof model.description === 'string' ? model.description : '',
+      contextWindow:
+        positiveNumber(limits.max_context_window_tokens)
+        ?? positiveNumber(model.context_window)
+        ?? 0,
+      ...(output === undefined ? {} : { maxOutputTokens: output }),
+      ...(typeof supports.vision === 'boolean' ?
+        { vision: supports.vision }
+      : {}),
+      ...(typeof supports.reasoning === 'boolean' ?
+        {
+          reasoning: supports.reasoning,
+        }
+      : {}),
+    })
+  }
+  if (!models.length)
+    throw new Error(
+      'No discovered chat models advertise compatible tool support.',
+    )
+  const preferred =
+    protocol === 'anthropic-messages' ?
+      (models.find((model) => /claude.*sonnet/iu.test(model.id))
+      ?? models.find((model) => /claude/iu.test(model.id)))
+    : models.find((model) => /(?:^|\/)gpt-/u.test(model.id))
+  return {
+    baseUrl,
+    models,
+    defaultModel: preferred?.id ?? models[0].id,
+    catalogMode: 'configured',
+    catalog: JSON.stringify({ models }),
+    excludedModels,
+  }
+}
+
+function streamFrames(stream: string): string[] {
+  return stream
+    .replace(/\r\n/g, '\n')
+    .split('\n\n')
+    .flatMap((frame) => {
+      const data = frame
+        .split('\n')
+        .filter((line) => line.startsWith('data:'))
+        .map((line) => line.slice(5).trimStart())
+        .join('\n')
+      return data ? [data] : []
+    })
+}
+
+const PROBE_PROMPT =
+  'Call connector_probe with ok set to true. This is a connection test.'
+const PROBE_SCHEMA = {
+  type: 'object',
+  properties: { ok: { type: 'boolean' } },
+  required: ['ok'],
+  additionalProperties: false,
+}
+
+function validProbeArguments(text: string): boolean {
+  const value = parseJson(text)
+  return isRecord(value) && value.ok === true && Object.keys(value).length === 1
+}
+
+function validTokenCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+}
+
+function verifyMessagesStream(frames: string[]): boolean {
+  const tools = new Map<
+    number,
+    {
+      name: string
+      input: Record<string, unknown>
+      arguments: string
+      closed: boolean
+    }
+  >()
+  let stopped = false
+  let toolStop = false
+  let started = false
+  for (const data of frames) {
+    if (data === '[DONE]') continue
+    const event = parseJson(data)
+    if (!isRecord(event)) continue
+    if (event.type === 'error')
+      throw new Error('The Anthropic Messages stream reported an error.')
+    if (event.type === 'message_start') {
+      if (
+        started
+        || !isRecord(event.message)
+        || event.message.type !== 'message'
+        || event.message.role !== 'assistant'
+        || typeof event.message.id !== 'string'
+        || !event.message.id
+        || !Array.isArray(event.message.content)
+        || typeof event.message.model !== 'string'
+        || !event.message.model
+        || !isRecord(event.message.usage)
+        || !validTokenCount(event.message.usage.input_tokens)
+        || !validTokenCount(event.message.usage.output_tokens)
+      )
+        throw new Error('The Messages stream has an invalid message start.')
+      started = true
+    }
+    if (
+      event.type === 'content_block_start'
+      && typeof event.index === 'number'
+      && isRecord(event.content_block)
+      && event.content_block.type === 'tool_use'
+      && typeof event.content_block.id === 'string'
+      && event.content_block.id.length > 0
+      && typeof event.content_block.name === 'string'
+      && isRecord(event.content_block.input)
+    ) {
+      if (!started)
+        throw new Error(
+          'The Messages stream started a tool before its message.',
+        )
+      if (tools.has(event.index))
+        throw new Error('The Messages stream repeated a tool block.')
+      tools.set(event.index, {
+        name: event.content_block.name,
+        input: event.content_block.input,
+        arguments: '',
+        closed: false,
+      })
+    }
+    if (
+      event.type === 'content_block_delta'
+      && typeof event.index === 'number'
+      && isRecord(event.delta)
+      && event.delta.type === 'input_json_delta'
+      && typeof event.delta.partial_json === 'string'
+    ) {
+      const tool = tools.get(event.index)
+      if (!tool || tool.closed)
+        throw new Error('The Messages stream has an out-of-order tool delta.')
+      tool.arguments += event.delta.partial_json
+    }
+    if (
+      event.type === 'content_block_stop'
+      && typeof event.index === 'number'
+    ) {
+      const tool = tools.get(event.index)
+      if (tool) tool.closed = true
+    }
+    if (event.type === 'message_delta' && isRecord(event.delta)) {
+      if (!isRecord(event.usage) || !validTokenCount(event.usage.output_tokens))
+        throw new Error('The Messages stream has invalid output-token usage.')
+      toolStop = event.delta.stop_reason === 'tool_use'
+    }
+    if (event.type === 'message_stop') stopped = true
+  }
+  return (
+    started
+    && stopped
+    && toolStop
+    && [...tools.values()].some(
+      (tool) =>
+        tool.closed
+        && tool.name === 'connector_probe'
+        && validProbeArguments(tool.arguments || JSON.stringify(tool.input)),
+    )
+  )
+}
+
+function verifyChatStream(frames: string[]): boolean {
+  const tools = new Map<
+    number,
+    { id: string; type: string; name: string; arguments: string }
+  >()
+  let done = false
+  let toolStop = false
+  for (const data of frames) {
+    if (data === '[DONE]') {
+      done = true
+      continue
+    }
+    const chunk = parseJson(data)
+    if (!isRecord(chunk)) continue
+    if (chunk.error !== undefined)
+      throw new Error('The Chat Completions stream reported an error.')
+    if (!Array.isArray(chunk.choices)) continue
+    for (const choice of chunk.choices) {
+      if (!isRecord(choice) || choice.index !== 0) continue
+      if (choice.finish_reason === 'tool_calls') toolStop = true
+      if (!isRecord(choice.delta) || !Array.isArray(choice.delta.tool_calls))
+        continue
+      for (const call of choice.delta.tool_calls) {
+        if (
+          !isRecord(call)
+          || typeof call.index !== 'number'
+          || !isRecord(call.function)
+        )
+          continue
+        const tool = tools.get(call.index) ?? {
+          id: '',
+          type: '',
+          name: '',
+          arguments: '',
+        }
+        if (typeof call.id === 'string') tool.id += call.id
+        if (typeof call.type === 'string') tool.type = call.type
+        if (typeof call.function.name === 'string')
+          tool.name += call.function.name
+        if (typeof call.function.arguments === 'string')
+          tool.arguments += call.function.arguments
+        tools.set(call.index, tool)
+      }
+    }
+  }
+  return (
+    done
+    && toolStop
+    && [...tools.values()].some(
+      (tool) =>
+        tool.id.length > 0
+        && tool.type === 'function'
+        && tool.name === 'connector_probe'
+        && validProbeArguments(tool.arguments),
+    )
+  )
+}
+
+export async function verifyStandardStreamingTools(
+  discovery: GatewayDiscovery,
+  protocol: Exclude<ConnectorProtocol, 'responses'>,
+  model: string,
+  apiKey: string,
+  fetcher: ConnectorFetch = fetch,
+): Promise<void> {
+  const messages = protocol === 'anthropic-messages'
+  const response = await gatewayRequest(
+    fetcher,
+    `${discovery.baseUrl}/v1/${messages ? 'messages' : 'chat/completions'}`,
+    apiKey,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(messages ?
+          {
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+          }
+        : {}),
+      },
+      body: JSON.stringify({
+        model,
+        stream: true,
+        messages: [{ role: 'user', content: PROBE_PROMPT }],
+        ...(messages ?
+          {
+            max_tokens: 4096,
+            tools: [
+              {
+                name: 'connector_probe',
+                description: 'Connection test only. No code is executed.',
+                input_schema: PROBE_SCHEMA,
+              },
+            ],
+            tool_choice: { type: 'tool', name: 'connector_probe' },
+          }
+        : {
+            max_completion_tokens: 4096,
+            tools: [
+              {
+                type: 'function',
+                function: {
+                  name: 'connector_probe',
+                  description: 'Connection test only. No code is executed.',
+                  parameters: PROBE_SCHEMA,
+                  strict: true,
+                },
+              },
+            ],
+            tool_choice: {
+              type: 'function',
+              function: { name: 'connector_probe' },
+            },
+          }),
+      }),
+    },
+  )
+  if (!response.headers.get('content-type')?.includes('text/event-stream')) {
+    await response.body?.cancel()
+    throw new Error(`The gateway did not return a ${protocol} event stream.`)
+  }
+  const frames = streamFrames(
+    await readBoundedBody(response, REMOTE_CATALOG_BYTES),
+  )
+  if (!(messages ? verifyMessagesStream(frames) : verifyChatStream(frames)))
+    throw new Error(
+      `The gateway did not complete the expected ${protocol} streaming tool call. This model was not installed.`,
+    )
 }
 
 export async function verifyStreamingTools(

@@ -2,12 +2,17 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type { ConnectorAPI } from '../src/types/connector'
 
 const api: ConnectorAPI = {
-  status: () => ipcRenderer.invoke('connector:status'),
+  status: (harness) => ipcRenderer.invoke('connector:status', harness),
   discover: (input) => ipcRenderer.invoke('connector:discover', input),
   connect: (input) => ipcRenderer.invoke('connector:connect', input),
-  refresh: () => ipcRenderer.invoke('connector:refresh'),
-  undo: () => ipcRenderer.invoke('connector:undo'),
-  selectCodex: () => ipcRenderer.invoke('connector:select-codex'),
+  refresh: (harness) => ipcRenderer.invoke('connector:refresh', harness),
+  undo: (harness) => ipcRenderer.invoke('connector:undo', harness),
+  selectExecutable: (harness) =>
+    ipcRenderer.invoke('connector:select-executable', harness),
+  resetExecutable: (harness) =>
+    ipcRenderer.invoke('connector:reset-executable', harness),
+  openInstallGuide: (harness) =>
+    ipcRenderer.invoke('connector:open-install-guide', harness),
 }
 
 contextBridge.exposeInMainWorld('connectorAPI', api)

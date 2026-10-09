@@ -2,8 +2,9 @@
 
 [Home](../../../README.md) · [Documentation](README.md)
 
-Copilot API Connector is a separate, client-only desktop application. Codex is
-its first supported harness. It does not start a gateway, host a tunnel, or ask
+Copilot API Connector is a separate, client-only desktop application with
+configurations for **Codex, Claude Code, OpenCode, Hermes Agent and OpenClaw**.
+It does not start a gateway, host a tunnel, or ask
 the consumer to sign in to GitHub Copilot.
 
 ## Host and consumer setup
@@ -15,17 +16,48 @@ each consumer, and share it securely.
 
 On the consumer:
 
-1. Install Codex CLI **0.160.0 or newer**, or use a Codex desktop installation
-   with an accessible compatible native Codex executable.
+1. Install your harness's current native CLI. Codex requires **0.160.0+**,
+   including the compatible CLI bundled with its desktop app. Claude Code
+   requires **2.1.242+** for its native gateway-model picker.
 2. Install **Copilot API Connector**, not the host gateway application.
-3. Enter the tunnel's HTTPS URL and **gateway API key**.
-4. Click **Connect Codex**, then restart Codex.
+3. Select the coding harness and enter the tunnel's HTTPS URL and **gateway
+   API key**.
+4. Click **Connect**, then restart that harness. For OpenCode, explicitly
+   accept the readable-key warning before connecting.
+
+The **Gateway connection** selector can copy the URL and encrypted saved key
+from an existing configuration. The key is copied in the main process, never
+returned to the renderer. Each harness still owns an independent credential,
+default model, transaction journal, Sync and Undo history. Rotating or undoing
+one connection does not change the others. A copied key cannot be silently
+sent to a different URL: switch to entering a new gateway/key instead.
 
 Only the URL and key are required connection inputs. **Discover models** is an
 optional preview that lets you choose the default model. Codex executables are
-detected from PATH, common npm locations, and common desktop locations. If
-detection fails, use **Select Codex executable**; on Windows choose the native
-`codex.exe`, not a PowerShell or `.cmd` wrapper.
+detected from PATH, npm global locations/custom prefixes, and desktop installs.
+On Windows, Microsoft Store package metadata and registered install locations
+are checked, including the native CLI bundled in the desktop app. Versioned
+Store paths are discovered rather than hardcoded, so app updates can move them.
+Outdated or broken automatically discovered candidates do not prevent checking
+other installations.
+
+If Codex is missing, use **Install or update Codex** for official instructions,
+then **Retry detection**. The connector does not install software without
+permission. **Advanced troubleshooting** keeps manual executable selection
+available for custom/portable installs; on Windows select native `codex.exe`,
+not a PowerShell or `.cmd` wrapper. **Use automatic detection** clears only
+that override, not your connection or Codex settings.
+
+Other harnesses are found from PATH, their native user installation locations,
+Hermes virtual environments and supported npm layouts. Windows npm JavaScript
+entry points are run through an installed Node executable rather than
+PowerShell or `.cmd` shims. Install guides and Advanced executable overrides
+apply to the selected harness. No harness or gateway is installed automatically.
+
+The header offers **Light**, **Dark**, and **System** themes. This preference
+is saved independently of the gateway application; System follows OS changes.
+The connector uses its own interlocking-link icon in the UI and installers.
+Technical catalog/configuration details are collapsed by default.
 
 The URL can end in `/v1`; the connector normalizes it to the gateway root.
 Other path prefixes, credentials in URLs, query strings, and fragments are
@@ -36,7 +68,60 @@ The two-input workflow requires a tunnel accessible without a separate tunnel
 login. Gateway API-key authentication must still be enabled. A gateway key
 does not replace Microsoft Dev Tunnels transport authentication.
 
-## What Connect changes
+## Protocols and native configurations
+
+| Harness | Protocol and request endpoint | Configured API base | Credential integration |
+| --- | --- | --- | --- |
+| Codex | OpenAI Responses, `/responses` | Gateway root | Command-backed provider auth |
+| Claude Code | Anthropic Messages, `/v1/messages` | Gateway root | `apiKeyHelper`, token-only stdout |
+| OpenCode | Anthropic Messages, `/v1/messages`, `@ai-sdk/anthropic` | Root + `/v1` | Readable `options.apiKey`, explicit opt-in |
+| Hermes Agent | OpenAI Chat Completions, `/v1/chat/completions` | Root + `/v1` | Named custom provider `key_cmd`, token-only stdout |
+| OpenClaw | OpenAI Chat Completions, `/v1/chat/completions`, `openai-completions` | Root + `/v1` | Executable `SecretRef`, single-ID JSON-string stdout |
+
+These are native harness configurations, not separate connectors, gateways or
+protocol-conversion servers. The host gateway already provides the required
+API routes. Non-Codex discovery uses `/v1/models`, not the special Codex catalog;
+embeddings and explicit non-tool models are excluded. Available model limits
+and vision metadata are copied when advertised, not fabricated from names.
+
+- **Claude Code:** user `settings.json` under `CLAUDE_CONFIG_DIR` or `~/.claude`.
+  Setup selects the discovered wire model, sets the root URL and helper, and
+  routes default/background tiers to that selected model. Conflicting user-level
+  model overrides, old credential variables and Bedrock/Vertex/Foundry routing
+  are neutralized and saved for Undo. Permissions and saved Claude login
+  credentials are not changed. Claude may request its normal API-key approval.
+  All discovered IDs are added through `modelPicker.options`, including
+  non-Claude/opaque gateway IDs that optional startup discovery filters out.
+  Existing custom picker rows and later unrelated additions are retained;
+  Sync replaces only connector-marked rows. `availableModels` restrictions and
+  a managed model-picker lineup are not bypassed.
+- **OpenCode:** `OPENCODE_CONFIG`, or the highest existing global file under
+  `$XDG_CONFIG_HOME/opencode` / `~/.config/opencode` (`opencode.jsonc`,
+  `opencode.json`, legacy `config.json`); a new setup creates `opencode.jsonc`.
+  Setup adds the Anthropic provider and discovered models, switches `model`
+  and `small_model`, and updates only the connector's provider-list membership.
+  Existing providers and later unrelated list changes are retained.
+- **Hermes:** `HERMES_HOME/config.yaml`; defaults to `~/.hermes` on POSIX and
+  `%LOCALAPPDATA%/hermes` on Windows. Setup adds a named custom provider using
+  `chat_completions`, authors its discovered model list, and selects
+  `custom:copilot_api_connector`. Native `config check` runs without a chat.
+- **OpenClaw:** `OPENCLAW_CONFIG_PATH`, otherwise
+  `OPENCLAW_STATE_DIR/openclaw.json` or `~/.openclaw/openclaw.json`;
+  `OPENCLAW_HOME` is respected. Setup merges a custom runtime provider,
+  registers its discovered models and aliases, changes the default model, and
+  adds an executable secret provider. Native `config validate --json` runs
+  without activating the Gateway. Configurations using `$include` for managed
+  settings must be consolidated first; the connector does not claim included
+  files or bypass helper-path/ACL trust checks.
+
+Directory overrides must be absolute (supported home/environment expansion is
+applied where appropriate). JSON/JSONC/JSON5 source-range edits preserve
+unrelated text and comments. Hermes uses YAML document edits that retain
+comments and unrelated settings. Duplicate keys and incompatible parent
+containers are rejected rather than guessed. Project, managed, inline or
+agent-specific settings can still override these user-level settings.
+
+## What Connect changes for Codex
 
 The connector edits the user-level Codex configuration, respecting `CODEX_HOME`
 when set, otherwise using the native user's `.codex` directory. It installs a
@@ -63,11 +148,38 @@ losing models through remote catalog size limits or gateway fallback entries.
 
 ## Credentials and verification
 
-The gateway key is encrypted using Electron's OS-protected `safeStorage` and
-stored only in the connector's user-data directory. It is not written into
-Codex TOML, a repository, model catalogs, or logs. Plaintext Linux backends and
+The connector's copy of every gateway key is encrypted using Electron's
+OS-protected `safeStorage` in its user-data directory. Codex, Claude Code,
+Hermes and OpenClaw configurations contain credential-helper references, not
+the key. Keys are never written to model catalogs or logs. Plaintext Linux backends and
 unrecognized keychain backends are rejected; enable a supported system
 keychain before connecting.
+
+**OpenCode exception:** its normal provider configuration does not support
+dynamic command-backed authentication. With your explicit consent, the
+connector writes a readable key into its native provider configuration so
+OpenCode can start normally, including outside the connector. This file and
+transaction/recovery snapshots can contain the key: protect them, never
+commit/share them, and use a revocable gateway key. Environment/file
+placeholders are not encrypted credential stores. No equivalent plaintext
+fallback is used for the other four harnesses.
+
+Hermes uses the native per-provider `key_cmd`, not its unrelated POSIX-only
+startup dotenv helper. OpenClaw uses its documented **single-ID executable
+provider** with `jsonOnly: false`: the connector emits a JSON-quoted string
+containing that profile's key. This also handles numeric-looking keys without
+mistaking them for a JSON number. The native resolver associates it with the
+single `gateway-api-key` reference; multi-ID requests are not supported.
+No stdin parsing is needed, avoiding Electron GUI executable stdin limitations
+on Windows. Its child environment receives the
+needed OS profile/keychain variables, not the API key. OpenClaw resolves
+secrets into a runtime snapshot: **reload/restart its Gateway after key rotation**.
+
+Existing Codex installations retain their original root data filenames,
+encrypted key, helper arguments and Undo baseline. Additional harnesses live
+in separate `connections/<harness>` directories but share the same Chromium
+encryption profile. Do not relocate those directories or use a per-harness
+Chromium profile.
 
 Codex invokes the installed connector executable as a short-lived credential
 helper. Its stdout carries the token directly to Codex. Closing the connector
@@ -76,7 +188,22 @@ executable or Linux AppImage after configuration; reconnect if its path changes.
 Setup preflights that helper before launching Codex, so keychain or helper
 failures are reported without waiting for Codex authentication retries.
 
-Connect and Sync perform two small inference checks on the selected model:
+On Windows, startup initializes and persists the shared Chromium encryption
+profile before the GUI loads it. The GUI and helper use the same session-data
+directory, and helpers shut down gracefully to persist encryption metadata.
+This prevents a fresh-profile race where the GUI can encrypt a key but a
+separate helper cannot decrypt it.
+
+If Codex reports a credential-helper decryption failure, it failed before
+authenticating to the gateway; visible models do not prove that authentication
+works. Install the corrected connector build, reopen it under the same Windows
+account, enter the URL and gateway key again, and click **Connect Codex**. Then
+restart Codex. Do not delete your Codex configuration or copy encrypted
+credentials between Windows users or machines. If the old encryption metadata
+was lost, the original ciphertext cannot be recovered; reconnecting replaces
+the saved key while preserving the connector's existing Undo history.
+
+For Codex, Connect and Sync perform two small inference checks:
 
 - A Responses SSE request must complete the expected synthetic function call.
   The function does not execute code.
@@ -91,6 +218,14 @@ directory is removed afterward.
 These checks may consume subscription allowance. Only the selected model is
 inference-verified; other models remain discovery-compatible, not verified.
 
+For the other four harnesses, Connect/Sync perform **one protocol-specific
+streaming synthetic tool-call check**: Messages must close the tool block and
+message with `tool_use`; Chat Completions must finish `tool_calls` and emit
+`[DONE]`. Fragmented function arguments are validated in their native shape.
+Credential helpers are preflighted where supported. This verifies gateway
+transport and the generated configuration, **not a full native agent chat**;
+user tools, plugins and personal agent sessions are not invoked for validation.
+
 ## Sync, key rotation, and Undo
 
 - **Sync models** reuses the encrypted saved key, updates the catalog, and
@@ -98,7 +233,7 @@ inference-verified; other models remain discovery-compatible, not verified.
   explicit replacement; the connector does not silently reroute requests.
 - To change the tunnel URL or rotate the key, enter the new values and
   reconnect. The first pre-connector model settings remain available for Undo.
-- **Undo connection** requires confirmation. Close Codex sessions first.
+- **Undo connection** requires confirmation. Close the selected harness first.
   Connector-owned settings are removed and the original model settings are
   restored, while later unrelated edits are retained. The saved gateway key,
   catalog, and connection state are removed.
@@ -116,8 +251,8 @@ exact lock file that can be removed after closing the connector. Recovery data
 can contain prior configuration secrets: keep the user-data directory private
 and do not upload its contents when reporting a problem.
 
-Undo before uninstalling. Uninstalling while connected leaves Codex pointing
-at a missing credential helper.
+Undo before uninstalling. Uninstalling while connected leaves helper-backed
+harnesses pointing at a missing executable.
 
 ## Supported environments
 
@@ -127,15 +262,22 @@ connector applications can coexist. Release builds currently use the
 repository's existing signing policy; automatic connector updates are not
 implemented.
 
-It configures Codex in its **native OS environment**. A Windows connector does
+It configures harnesses in their **native OS environment**. A Windows connector does
 not configure a separate WSL installation. Native desktop apps must be restarted
 to load changes, and managed or project configuration can still override user
 settings. The isolated smoke test proves the provider connection, not every
 configuration layer of an existing session.
 
-Custom-provider configuration is intended for local Codex clients, not hosted
-Codex orchestration that disallows custom providers. Claude Code and other
-harness adapters are not implemented in this release.
+Custom-provider configuration is intended for installed local clients, not
+hosted orchestration that disallows custom providers. The researched contracts
+are from current official harness documentation/source; older versions may
+lack the helper or named-provider fields and must be upgraded.
+
+References: [Claude gateway configuration](https://code.claude.com/docs/en/llm-gateway),
+[OpenCode providers](https://opencode.ai/docs/providers/),
+[Hermes provider configuration](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/integrations/providers.md),
+[OpenClaw custom providers](https://docs.openclaw.ai/concepts/model-providers),
+and [OpenClaw secrets](https://docs.openclaw.ai/gateway/secrets).
 
 ## Build and validation
 
@@ -143,6 +285,7 @@ From `desktop` after installing its declared dependencies:
 
 ```sh
 bun run dev:connector
+node scripts/generate-icons.mjs --connector
 bun run build:connector
 bun run package:connector:win
 bun run package:connector:mac
@@ -156,7 +299,7 @@ workflow builds and uploads both products on release tags.
 Focused tests:
 
 ```sh
-bun test --coverage tests/connector.test.ts tests/connector-ui.test.ts tests/remote-access.test.ts
+bun test --coverage tests/connector.test.ts tests/connector-protocols.test.ts tests/connector-harnesses.test.ts tests/connector-ui.test.ts tests/remote-access.test.ts
 bun run typecheck
 ```
 
@@ -173,6 +316,14 @@ well, build the connector and set `CONNECTOR_TEST_ELECTRON` to the development
 Electron executable. Optionally set `CONNECTOR_TEST_HELPER` to the packaged
 connector executable to test the shipped helper. These checks use isolated
 temporary data and synthetic keys, not your real gateway or Codex settings.
+
+With `CONNECTOR_TEST_ELECTRON` set, the Windows storage lifecycle regression
+also exercises first use while the real GUI remains open, app restarts, cached
+session-data paths, and concurrent credential helpers:
+
+```sh
+bun test tests/connector-storage-integration.test.ts
+```
 
 Electron's standard `--user-data-dir=<absolute-path>` switch can isolate
 connector data for development and testing. The generated helper configuration

@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import catalog from '../../src/routes/models/models.json'
-import { detectCodex } from '../electron/connector/codex'
+import { detectCodex, runCommand } from '../electron/connector/codex'
 import { ConnectorService } from '../electron/connector/service'
 import { ConnectorStore } from '../electron/connector/store'
 
@@ -165,6 +165,19 @@ test.skipIf(!process.env.CONNECTOR_TEST_CODEX)(
       const packagedHelper = process.env.CONNECTOR_TEST_HELPER
       const main = path.resolve('out-connector', 'main', 'index.js')
       const helper = path.join(directory, 'test-helper.cjs')
+      const nativeRunner = path.join(directory, 'node-runner.cjs')
+      fs.writeFileSync(
+        nativeRunner,
+        [
+          "const { execFile } = require('node:child_process')",
+          'const input = JSON.parse(process.argv[2])',
+          'const child = execFile(input.command, input.args, { cwd: input.cwd, timeout: input.timeout, maxBuffer: 2 * 1024 * 1024, encoding: "utf8", windowsHide: true }, (error, stdout, stderr) => {',
+          'if (error) { process.stderr.write(error.message); process.exitCode = 1 }',
+          'else process.stdout.write(JSON.stringify({ stdout, stderr }))',
+          '})',
+          'child.stdin.end()',
+        ].join('\n'),
+      )
       fs.writeFileSync(
         helper,
         "process.stdout.write(Buffer.from(require('node:fs').readFileSync(process.argv[2], 'utf8'), 'base64').toString())",
@@ -212,6 +225,42 @@ test.skipIf(!process.env.CONNECTOR_TEST_CODEX)(
           ).trim()
       }
       const service = new ConnectorService(storage, {
+        runner: async (command, args, options) => {
+          try {
+            // Native subprocesses must use the application's Node runtime semantics.
+            const output = await runCommand(
+              'node',
+              [
+                nativeRunner,
+                JSON.stringify({
+                  command,
+                  args,
+                  cwd: options.cwd,
+                  timeout: Math.min(options.timeout, 60_000),
+                }),
+              ],
+              { env: options.env, timeout: 65_000 },
+            )
+            const result: unknown = JSON.parse(output.stdout)
+            if (
+              !isRecord(result)
+              || typeof result.stdout !== 'string'
+              || typeof result.stderr !== 'string'
+            )
+              throw new Error('The native Node runner returned invalid output.')
+            return { stdout: result.stdout, stderr: result.stderr }
+          } catch (error) {
+            const message =
+              error instanceof Error ?
+                error.message
+              : 'Native verification failed.'
+            console.error(
+              `Synthetic gateway native diagnostic: ${message.split(credential).join('[redacted]').slice(0, 4000)}`,
+            )
+            console.error(JSON.stringify(requests))
+            throw error
+          }
+        },
         installation: () =>
           detectCodex(executable, undefined, storage.files.config),
         helperCommand: packagedHelper ?? electron ?? process.execPath,

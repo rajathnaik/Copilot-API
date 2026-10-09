@@ -17,6 +17,7 @@ import {
   runCommand,
   verifyCredentialHelper,
   verifyNativeCodex,
+  windowsDesktopCandidates,
   type CommandRunner,
 } from '../electron/connector/codex'
 import {
@@ -584,6 +585,77 @@ describe('Codex detection and native smoke test', () => {
     )
   })
 
+  test('uses Windows installed-package metadata without hardcoding versioned WindowsApps paths', async () => {
+    const runner = mock<CommandRunner>(() =>
+      Promise.resolve({
+        stdout: JSON.stringify([
+          'C:\\WindowsApps\\OpenAI.Codex_fixture',
+          'C:\\Apps\\Codex',
+        ]),
+        stderr: '',
+      }),
+    )
+    const candidates = await windowsDesktopCandidates(runner, {
+      SystemRoot: 'D:\\Windows',
+    })
+    expect(candidates).toContain(
+      'C:\\WindowsApps\\OpenAI.Codex_fixture\\app\\resources\\codex.exe',
+    )
+    expect(candidates).toContain('C:\\Apps\\Codex\\resources\\codex.exe')
+    expect(runner.mock.calls[0][0]).toBe(
+      'D:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+    )
+    expect(runner.mock.calls[0][1]).toContain('-NoProfile')
+    expect(runner.mock.calls[0][1]).not.toContain('-ExecutionPolicy')
+    await expect(
+      windowsDesktopCandidates(() =>
+        Promise.resolve({
+          stdout: JSON.stringify(['relative-folder']),
+          stderr: '',
+        }),
+      ),
+    ).rejects.toThrow('invalid locations')
+  })
+
+  test('continues automatic detection past an outdated or broken executable', async () => {
+    const directory = temporaryDirectory()
+    const outdated = path.join(directory, 'outdated')
+    const broken = path.join(directory, 'broken')
+    const supported = path.join(directory, 'supported')
+    for (const executable of [outdated, broken, supported])
+      fs.writeFileSync(executable, 'fixture')
+    const runner: CommandRunner = (executable) => {
+      if (executable === broken)
+        return Promise.reject(new Error('Fixture executable failed'))
+      return Promise.resolve({
+        stdout:
+          executable === outdated ? 'codex-cli 0.159.0' : (
+            'codex-cli 0.162.0-alpha.2'
+          ),
+        stderr: '',
+      })
+    }
+    expect(
+      await detectCodex(null, runner, 'config.toml', [
+        outdated,
+        broken,
+        supported,
+      ]),
+    ).toEqual({
+      executable: supported,
+      version: '0.162.0',
+      configPath: 'config.toml',
+    })
+    await expect(
+      detectCodex(null, runner, 'config.toml', [outdated, broken]),
+    ).rejects.toThrow('Install or update')
+    expect(
+      await detectCodex(null, runner, 'config.toml', [
+        path.join(directory, 'missing'),
+      ]),
+    ).toBeNull()
+    await expect(detectCodex(outdated, runner)).rejects.toThrow('Update Codex')
+  })
   test('runs in an isolated home with read-only sandbox and cleans up after success and failure', async () => {
     const runner = mock(successfulRunner())
     const installation = {
@@ -702,6 +774,21 @@ describe('persistent configuration transactions', () => {
     expect(() => storage.encryptKey('key')).toThrow('plaintext')
     expect(() => storage.key()).toThrow('plaintext')
     expect(() => store().key()).toThrow('No saved')
+  })
+
+  test('reports unreadable encrypted credentials with recovery guidance without modifying them', () => {
+    const storage = store({
+      ...testCodec,
+      decrypt: () => {
+        throw new Error('Synthetic OS decryption failure')
+      },
+    })
+    fs.mkdirSync(storage.directory, { recursive: true })
+    fs.writeFileSync(storage.files.credential, 'unreadable-fixture-ciphertext')
+    expect(() => storage.key()).toThrow(
+      'Open Copilot API Connector and reconnect',
+    )
+    expect(storage.read('credential')).toBe('unreadable-fixture-ciphertext')
   })
 })
 

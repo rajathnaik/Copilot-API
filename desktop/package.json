@@ -31,7 +31,9 @@
   },
   "dependencies": {
     "electron-updater": "^6.3.4",
-    "toml-eslint-parser": "^0.10.0"
+    "toml-eslint-parser": "^0.10.0",
+    "jsonc-eslint-parser": "^2.4.0",
+    "yaml": "^2.8.0"
   },
   "build": {
     "appId": "com.copilot-api.desktop",

@@ -9,6 +9,7 @@ import type {
   ConnectorConnection,
   ConnectorDiscovery,
   ConnectorStatus,
+  ConnectorHarness,
 } from '../src/types/connector'
 
 const connection: ConnectorConnection = {
@@ -57,7 +58,9 @@ let connect: ReturnType<typeof mock<ConnectorAPI['connect']>>
 let discover: ReturnType<typeof mock<ConnectorAPI['discover']>>
 let refresh: ReturnType<typeof mock<ConnectorAPI['refresh']>>
 let undo: ReturnType<typeof mock<ConnectorAPI['undo']>>
-let select: ReturnType<typeof mock<ConnectorAPI['selectCodex']>>
+let select: ReturnType<typeof mock<ConnectorAPI['selectExecutable']>>
+let reset: ReturnType<typeof mock<ConnectorAPI['resetExecutable']>>
+let installGuide: ReturnType<typeof mock<ConnectorAPI['openInstallGuide']>>
 const previousGlobals = new Map<string, PropertyDescriptor | undefined>()
 
 beforeEach(async () => {
@@ -85,13 +88,17 @@ beforeEach(async () => {
   refresh = mock(() => Promise.resolve({ ok: true, value: { ...connection } }))
   undo = mock(() => Promise.resolve({ ok: true, value: null }))
   select = mock(() => Promise.resolve({ ok: true, value: { ...initial } }))
+  reset = mock(() => Promise.resolve({ ok: true, value: { ...initial } }))
+  installGuide = mock(() => Promise.resolve({ ok: true, value: null }))
   const api: ConnectorAPI = {
     status,
     connect,
     discover,
     refresh,
     undo,
-    selectCodex: select,
+    selectExecutable: select,
+    resetExecutable: reset,
+    openInstallGuide: installGuide,
   }
   Object.defineProperty(win, 'connectorAPI', { value: api, configurable: true })
   container = document.createElement('div')
@@ -110,11 +117,11 @@ afterEach(async () => {
   previousGlobals.clear()
 })
 
-async function render() {
+async function render(key?: string) {
   await act(async () =>
     root.render(
       createElement(LanguageProvider, {
-        children: createElement(ConnectorApp),
+        children: createElement(ConnectorApp, { key }),
       }),
     ),
   )
@@ -146,7 +153,179 @@ async function fill(id: string, value: string) {
   })
 }
 
+async function choose(id: string, value: string) {
+  const element = container.querySelector<HTMLSelectElement>(`#${id}`)
+  if (!element) throw new Error(`Missing select: ${id}`)
+  await act(async () => {
+    element.value = value
+    element.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+}
+
+function profileStatuses(
+  connections: Partial<Record<ConnectorHarness, ConnectorConnection>> = {},
+) {
+  status.mockImplementation((harness = 'codex') =>
+    Promise.resolve({
+      ok: true,
+      value: {
+        ...initial,
+        connection: connections[harness] ?? null,
+        profiles: Object.values(connections).map((value) => ({
+          harness: value.harness,
+          connection: value,
+        })),
+      },
+    }),
+  )
+  connect.mockImplementation((input) =>
+    Promise.resolve({
+      ok: true,
+      value: {
+        ...connection,
+        harness: input.harness ?? 'codex',
+        baseUrl: input.url,
+        credentialMode: input.harness === 'opencode' ? 'config' : 'helper',
+        protocol:
+          input.harness === 'hermes' || input.harness === 'openclaw' ?
+            'chat-completions'
+          : 'anthropic-messages',
+        catalogMode: input.harness === 'codex' ? 'remote' : 'configured',
+      },
+    }),
+  )
+}
+
 describe('standalone connector UI', () => {
+  test('shows damaged saved-profile errors without invalid nested paragraphs', async () => {
+    status.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        ...initial,
+        profiles: [
+          {
+            harness: 'openclaw',
+            connection: null,
+            error: 'Saved OpenClaw profile needs repair.',
+          },
+        ],
+      },
+    })
+    await render()
+    const alert = container.querySelector('[role="alert"]')
+    expect(alert?.textContent).toBe('Saved OpenClaw profile needs repair.')
+    expect(alert?.parentElement?.tagName).toBe('DIV')
+  })
+
+  test('offers all harnesses and clears credentials, discovery and Undo confirmation when switching', async () => {
+    profileStatuses({ codex: connection })
+    await render()
+    expect(
+      container.querySelectorAll('#connector-harness option'),
+    ).toHaveLength(5)
+    await fill('gateway-key', 'codex-only-draft-key')
+    await click('Show key')
+    await click('Undo connection')
+    await choose('connector-harness', 'claude-code')
+    expect(status).toHaveBeenLastCalledWith('claude-code')
+    expect(
+      container.querySelector<HTMLInputElement>('#gateway-key')?.value,
+    ).toBe('')
+    expect(
+      container.querySelector<HTMLInputElement>('#gateway-key')?.type,
+    ).toBe('password')
+    expect(button('Connect Claude Code').disabled).toBe(true)
+    expect(container.textContent).not.toContain('codex-only-draft-key')
+    expect(container.textContent).not.toContain('Undo this connection?')
+    await choose('connector-harness', 'codex')
+    expect(
+      container.querySelector<HTMLInputElement>('#gateway-url')?.value,
+    ).toBe(connection.baseUrl)
+    expect(container.textContent).toContain('Codex connected')
+  })
+
+  test('reuses a saved gateway without ever returning its key to the renderer', async () => {
+    profileStatuses({ codex: connection })
+    await render()
+    await choose('connector-harness', 'hermes')
+    await choose('saved-gateway', 'codex')
+    expect(
+      container.querySelector<HTMLInputElement>('#gateway-url')?.readOnly,
+    ).toBe(true)
+    expect(
+      container.querySelector<HTMLInputElement>('#gateway-key')?.disabled,
+    ).toBe(true)
+    expect(button('Connect Hermes Agent').disabled).toBe(false)
+    await click('Connect Hermes Agent')
+    expect(connect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        harness: 'hermes',
+        url: connection.baseUrl,
+        apiKey: '',
+        copyFrom: 'codex',
+      }),
+    )
+    expect(container.textContent).toContain('Hermes Agent connected')
+    expect(container.textContent).toContain('chat-completions')
+    expect(
+      container.querySelector<HTMLInputElement>('#gateway-key')?.value,
+    ).toBe('')
+  })
+
+  test('requires explicit readable-key consent for OpenCode and still allows discovery before consent', async () => {
+    profileStatuses()
+    await render()
+    await choose('connector-harness', 'opencode')
+    await fill('gateway-url', connection.baseUrl)
+    await fill('gateway-key', 'fixture-opencode-key')
+    expect(button('Connect OpenCode').disabled).toBe(true)
+    expect(button('Discover models').disabled).toBe(false)
+    const checkbox = container.querySelector<HTMLInputElement>(
+      'input[type=checkbox]',
+    )
+    if (!checkbox) throw new Error('Missing readable-key consent')
+    await act(async () => checkbox.click())
+    expect(button('Connect OpenCode').disabled).toBe(false)
+    await click('Connect OpenCode')
+    expect(connect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        harness: 'opencode',
+        apiKey: 'fixture-opencode-key',
+        allowPlaintext: true,
+      }),
+    )
+    expect(container.textContent).toContain('readable in its configuration')
+    await choose('connector-harness', 'openclaw')
+    expect(container.querySelector('input[type=checkbox]')).toBeNull()
+  })
+
+  test('targets Sync and Undo only at the selected saved profile', async () => {
+    const saved: ConnectorConnection = {
+      ...connection,
+      harness: 'openclaw',
+      baseUrl: 'https://different.example',
+      catalogMode: 'configured',
+      protocol: 'chat-completions',
+      credentialMode: 'helper',
+    }
+    profileStatuses({ codex: connection, openclaw: saved })
+    refresh.mockImplementation(() =>
+      Promise.resolve({ ok: true, value: saved }),
+    )
+    await render()
+    await choose('connector-harness', 'openclaw')
+    expect(
+      container.querySelector<HTMLInputElement>('#gateway-url')?.value,
+    ).toBe(saved.baseUrl)
+    await click('Sync models')
+    expect(refresh).toHaveBeenLastCalledWith('openclaw')
+    await click('Undo connection')
+    await click('Undo connection')
+    expect(undo).toHaveBeenLastCalledWith('openclaw')
+    await choose('connector-harness', 'codex')
+    expect(container.textContent).toContain('Codex connected')
+  })
+
   test('uses only two required inputs and has no gateway hosting controls', async () => {
     await render()
     expect(container.querySelectorAll('input[required]')).toHaveLength(2)
@@ -159,6 +338,16 @@ describe('standalone connector UI', () => {
     expect(container.querySelector('#gateway-key')?.getAttribute('type')).toBe(
       'password',
     )
+    expect(
+      container.querySelector<HTMLDetailsElement>('#connector-advanced')?.open,
+    ).toBe(false)
+    expect(button('Select Codex executable').closest('details')?.id).toBe(
+      'connector-advanced',
+    )
+    expect(container.textContent).toContain('Detected')
+    expect(
+      container.querySelector('label[for="connector-theme"]')?.textContent,
+    ).toBe('Theme')
   })
 
   test('connects with URL and key, clears the key and explains persistent helper use', async () => {
@@ -168,6 +357,9 @@ describe('standalone connector UI', () => {
     expect(button('Connect Codex').disabled).toBe(false)
     await click('Connect Codex')
     expect(connect).toHaveBeenCalledWith({
+      harness: 'codex',
+      copyFrom: undefined,
+      allowPlaintext: false,
       url: connection.baseUrl,
       apiKey: 'fixture-key',
       model: undefined,
@@ -196,6 +388,9 @@ describe('standalone connector UI', () => {
     })
     await click('Connect Codex')
     expect(connect).toHaveBeenCalledWith({
+      harness: 'codex',
+      copyFrom: undefined,
+      allowPlaintext: false,
       url: connection.baseUrl,
       apiKey: 'fixture-key',
       model: 'claude-test',
@@ -213,12 +408,96 @@ describe('standalone connector UI', () => {
     await fill('gateway-url', connection.baseUrl)
     await fill('gateway-key', 'fixture-key')
     expect(button('Connect Codex').disabled).toBe(true)
-    expect(container.textContent).toContain(
-      'Plaintext key storage is not supported',
+    expect(container.textContent).toContain('each key using OS encryption')
+    await click('Install or update Codex')
+    expect(installGuide).toHaveBeenCalledTimes(1)
+    expect(connect).not.toHaveBeenCalled()
+    const advanced = container.querySelector<HTMLDetailsElement>(
+      '#connector-advanced',
     )
+    if (!advanced) throw new Error('Missing advanced disclosure')
+    advanced.open = true
     await click('Select Codex executable')
     expect(select).toHaveBeenCalledTimes(1)
     expect(button('Connect Codex').disabled).toBe(false)
+  })
+
+  test('returns to automatic detection without changing the saved connection', async () => {
+    status.mockImplementation(() =>
+      Promise.resolve({ ok: true, value: { ...initial, connection } }),
+    )
+    reset.mockImplementation(() =>
+      Promise.resolve({ ok: true, value: { ...initial, connection } }),
+    )
+    await render()
+    await click('Use automatic detection')
+    expect(reset).toHaveBeenCalledTimes(1)
+    expect(connect).not.toHaveBeenCalled()
+    expect(undo).not.toHaveBeenCalled()
+    expect(container.textContent).toContain('Codex connected')
+  })
+
+  test('persists light and dark preferences and restores them after remount', async () => {
+    await render()
+    const theme = container.querySelector<HTMLSelectElement>('#connector-theme')
+    if (!theme) throw new Error('Missing theme selector')
+    for (const preference of ['dark', 'light']) {
+      await act(async () => {
+        theme.value = preference
+        theme.dispatchEvent(new Event('change', { bubbles: true }))
+      })
+      expect(document.documentElement.classList.contains('dark')).toBe(
+        preference === 'dark',
+      )
+      expect(win.localStorage.getItem('copilot-api-connector-theme')).toBe(
+        preference,
+      )
+    }
+    await render('remount')
+    expect(
+      container.querySelector<HTMLSelectElement>('#connector-theme')?.value,
+    ).toBe('light')
+    expect(document.documentElement.classList.contains('dark')).toBe(false)
+  })
+
+  test('follows system changes only when the System theme is selected', async () => {
+    await render()
+    await act(async () => {
+      win.happyDOM.settings.device.prefersColorScheme = 'dark'
+      win.dispatchEvent(new win.Event('resize'))
+    })
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
+    const theme = container.querySelector<HTMLSelectElement>('#connector-theme')
+    if (!theme) throw new Error('Missing theme selector')
+    await act(async () => {
+      theme.value = 'light'
+      theme.dispatchEvent(new Event('change', { bubbles: true }))
+      win.dispatchEvent(new win.Event('resize'))
+    })
+    expect(document.documentElement.classList.contains('dark')).toBe(false)
+  })
+
+  test('reports invalid stored themes and preference write failures explicitly', async () => {
+    win.localStorage.setItem('copilot-api-connector-theme', 'invalid-fixture')
+    await render()
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      'could not be read',
+    )
+    Object.defineProperty(win.localStorage, 'setItem', {
+      value: () => {
+        throw new Error('Fixture storage unavailable')
+      },
+    })
+    const theme = container.querySelector<HTMLSelectElement>('#connector-theme')
+    if (!theme) throw new Error('Missing theme selector')
+    await act(async () => {
+      theme.value = 'dark'
+      theme.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      'could not be saved',
+    )
+    expect(theme.value).toBe('auto')
   })
 
   test('surfaces failures instead of claiming a successful connection', async () => {
@@ -266,7 +545,9 @@ describe('standalone connector UI', () => {
     expect(container.querySelector('#gateway-key')?.getAttribute('type')).toBe(
       'password',
     )
-    const language = container.querySelector<HTMLSelectElement>('header select')
+    const language = container.querySelector<HTMLSelectElement>(
+      '#connector-language',
+    )
     if (!language) throw new Error('Missing language selector')
     await act(async () => {
       language.value = 'zh'
