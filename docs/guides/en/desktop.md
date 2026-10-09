@@ -35,6 +35,17 @@ The desktop release workflow uploads `latest.yml`, Windows `.blockmap` files, an
 
 The desktop app's Advanced Config page reads and writes the shared model mappings through `GET/POST /admin/config/model-mappings`. The same mappings apply across `POST /v1/messages`, `POST /v1/messages/count_tokens`, `POST /v1/responses`, and `POST /v1/chat/completions` instead of being split per interface. It uses `auth.adminApiKey` instead of the regular `auth.apiKeys`, and the app reads that key directly from `config.json` after the server has generated it on startup.
 
+### Windows workspace shortcut
+
+A **Copilot API** shortcut created for a local source checkout runs
+[launch-desktop.ps1](../../../launch-desktop.ps1), not an installed Gateway
+release. It requires the checkout and Bun, rebuilds stale bundles, and launches
+the workspace Electron runtime. Fixes to that launcher take effect through the
+existing shortcut without reinstalling or resetting saved sign-in data.
+
+The standalone Gateway installer is separate and does not require the source
+checkout or Bun.
+
 ### Application icon
 
 The original robot artwork in `apps/gateway/desktop/assets/app-icon.svg` is shared by the

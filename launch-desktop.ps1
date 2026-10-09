@@ -54,7 +54,7 @@ New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
 [IO.File]::WriteAllText($settingsFile, ($settings | ConvertTo-Json -Depth 5), (New-Object System.Text.UTF8Encoding $false))
 
 Invoke-Bun $workspace @('scripts/ensure-electron.mjs')
-$electron = & $bun -e 'console.log(require("electron"))'
+$electron = & $bun -e "console.log(require('electron'))"
 if ($LASTEXITCODE -ne 0) { throw 'Could not resolve the workspace Electron runtime.' }
 
 $listener = Get-NetTCPConnection -LocalPort 4141 -State Listen -ErrorAction SilentlyContinue
