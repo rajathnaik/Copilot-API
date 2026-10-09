@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: connector-release-${{ github.event.inputs.version || github.ref_name }}
+  group: connector-release-${{ github.event.inputs.version && format('connector-v{0}', github.event.inputs.version) || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -26,6 +26,8 @@ jobs:
       tag: ${{ steps.metadata.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: "22.18.0"
@@ -37,6 +39,17 @@ jobs:
         run: node desktop/scripts/connector-release.ts
         env:
           INPUT_VERSION: ${{ github.event.inputs.version }}
+      - name: Verify existing release tag points to this source
+        shell: bash
+        env:
+          TAG: ${{ steps.metadata.outputs.tag }}
+        run: |
+          if git rev-parse --verify --quiet "refs/tags/$TAG" >/dev/null; then
+            if [ "$(git rev-parse "refs/tags/$TAG^{commit}")" != "$GITHUB_SHA" ]; then
+              echo "::error::Connector tag points to another source commit; use a new version."
+              exit 1
+            fi
+          fi
       - run: bun install --frozen-lockfile
       - run: bun install --frozen-lockfile
         working-directory: desktop
@@ -68,7 +81,7 @@ jobs:
             platform: linux
             arch: x64
             artifact: "Copilot-API-Connector-"
-            suffix: "-linux-x64.AppImage"
+            suffix: "-linux-x86_64.AppImage"
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -84,6 +97,10 @@ jobs:
       - name: Build Connector
         working-directory: desktop
         run: bun run build:connector
+      - name: Ensure native Electron test runtime
+        if: matrix.platform == 'win'
+        working-directory: desktop
+        run: node scripts/ensure-electron.mjs
       - name: Package Connector installer
         working-directory: desktop
         run: bunx electron-builder --config connector-builder.json --${{ matrix.platform }} --${{ matrix.arch }} --publish never
@@ -94,8 +111,15 @@ jobs:
         working-directory: desktop
         shell: pwsh
         run: |
-          $env:CONNECTOR_TEST_ELECTRON = Join-Path $PWD 'node_modules\electron\dist\electron.exe'
+          $env:CONNECTOR_TEST_ELECTRON = node -p "require('electron')"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $env:CONNECTOR_TEST_HELPER = Join-Path $PWD 'release-connector\win-unpacked\Copilot API Connector.exe'
+          $version = '${{ needs.validate.outputs.version }}'
+          $installer = Get-Item (Join-Path $PWD "release-connector\Copilot.API.Connector.Setup.$version.exe")
+          $helper = Get-Item $env:CONNECTOR_TEST_HELPER
+          if ($installer.VersionInfo.FileVersion -ne $version -or $helper.VersionInfo.FileVersion -ne $version) {
+            throw 'Packaged Windows versions do not match the approved release'
+          }
           bun test tests/connector-storage-integration.test.ts
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4

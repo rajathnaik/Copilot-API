@@ -81,13 +81,17 @@ saved profiles and OS-encrypted credentials; uninstalling first is unnecessary.
 
 The connector has its own release version in
 `desktop/connector-builder.json` (`extraMetadata.version`), independent of the
-gateway's package version. The multi-harness follow-up release is **2.7.1**,
-with installer **Copilot.API.Connector.Setup.2.7.1.exe**. Earlier Codex-only and
+gateway's package version. The multi-harness follow-up release is **2.7.2**,
+with installer **Copilot.API.Connector.Setup.2.7.2.exe**. Earlier Codex-only and
 multi-harness builds both used 2.7.0 and the same installer filename, so an older
 downloaded copy is not distinguishable by its name/version alone.
 
+[Download the Windows Connector installer](https://github.com/rajathnaik/Copilot-API/releases/download/connector-v2.7.2/Copilot.API.Connector.Setup.2.7.2.exe).
+This single setup file installs the packaged app; consumers do not need to
+download, clone or build the source project.
+
 After installation, open Copilot API Connector from the Start menu and verify
-**Connector version 2.7.1** in its header and all five harness options. If an old
+**Connector version 2.7.2** in its header and all five harness options. If an old
 window was still running, fully exit it and reopen the app. If the old UI still
 appears, check the launched executable's location and Windows file properties
 before removing anything; the shortcut may point to another installation.
@@ -116,6 +120,8 @@ For an approved stable Connector release:
 2. Check, commit and push the source. Never reuse a published version.
 3. After approval, push `connector-v<version>` at that tested commit, or run
    **Release Connector** manually with that exact version and source ref.
+   An existing tag must point to that source commit. Failed tags are not moved
+   silently; use a new version for a corrected release.
 4. The workflow validates the version and product identity, runs checks, builds
    Windows/macOS/Linux installers, checks the Windows credential helper, and
    publishes a Connector-specific release with SHA256 checksums.
