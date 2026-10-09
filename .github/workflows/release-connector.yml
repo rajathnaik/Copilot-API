@@ -57,7 +57,7 @@ jobs:
         working-directory: apps/connector
       - name: Test Connector
         working-directory: apps/connector
-        run: bun test tests/connector.test.ts tests/connector-harnesses.test.ts tests/connector-protocols.test.ts tests/connector-ui.test.ts tests/connector-release.test.ts
+        run: bun test ./tests/connector.test.ts ./tests/connector-harnesses.test.ts ./tests/connector-protocols.test.ts ./tests/connector-ui.test.ts ./tests/connector-release.test.ts
 
   build:
     needs: validate
@@ -116,7 +116,7 @@ jobs:
           if ($installer.VersionInfo.FileVersion -ne $version -or $helper.VersionInfo.FileVersion -ne $version) {
             throw 'Packaged Windows versions do not match the approved release'
           }
-          bun test tests/connector-storage-integration.test.ts
+          bun test ./tests/connector-storage-integration.test.ts
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4
         with:
@@ -154,6 +154,11 @@ jobs:
           Windows: download Copilot.API.Connector.Setup.${VERSION}.exe.
           For an upgrade, close the Connector and run the installer under the same OS account; uninstalling first is unnecessary.
           OpenCode requires explicit permission to store a readable key in its native configuration.
+
+          Show key retrieves a saved key only on request; hiding it or leaving the window clears the revealed copy.
+          Repair connection backs up the current configuration before replacing Connector-managed settings.
+          Repair preserves unrelated edits and the original Undo baseline, and runs the normal connection verification.
+          Ordinary Connect, Sync and Undo continue to protect external changes.
 
           Source commit: ${SOURCE_COMMIT}
           SHA256 checksums are attached. This is an independent Connector release, not a Gateway release.

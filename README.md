@@ -98,7 +98,7 @@ Windows x64 (`.exe`), macOS Apple Silicon (`.dmg`), and Linux x64 (`.AppImage`) 
 
 Connector only needs the Gateway/tunnel URL and API key. It discovers models and manages native harness configuration; consumers do not need another Gateway or Copilot sign-in. Products have separate versions, release tags, and installers.
 
-**Share the current Connector installer:** [Windows 2.7.2](https://github.com/rajathnaik/Copilot-API/releases/download/connector-v2.7.2/Copilot.API.Connector.Setup.2.7.2.exe), or [macOS/Linux release downloads](https://github.com/rajathnaik/Copilot-API/releases/tag/connector-v2.7.2). See the [Connector guide](docs/guides/en/connector.md). Normal upgrades are in-place; source restructuring does not require reinstalling or resetting existing settings.
+**Share the current Connector installer:** [Windows 2.7.3](https://github.com/rajathnaik/Copilot-API/releases/download/connector-v2.7.3/Copilot.API.Connector.Setup.2.7.3.exe), or [macOS/Linux release downloads](https://github.com/rajathnaik/Copilot-API/releases/tag/connector-v2.7.3). See the [Connector guide](docs/guides/en/connector.md). Normal upgrades are in-place; source restructuring does not require reinstalling or resetting existing settings.
 
 For development, run one `bun install --frozen-lockfile` at the repository root. `bun run build:gateway` and `bun run build:connector` build the separate apps; `bun run test`, `bun run typecheck:all`, and `bun run lint:all` check all workspaces. [packages/shared](packages/shared/) contains private shared utilities, bundled into each product. Committing/pushing source does not publish installers; releases require separate approval.
 

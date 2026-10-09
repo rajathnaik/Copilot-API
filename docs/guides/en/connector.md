@@ -82,21 +82,21 @@ saved profiles and OS-encrypted credentials; uninstalling first is unnecessary.
 
 The connector has its own release version in
 `apps/connector/package.json` (`version`), independent of the
-gateway's package version. The published multi-harness follow-up release is **2.7.2**,
-with installer **Copilot.API.Connector.Setup.2.7.2.exe**. Earlier Codex-only and
+gateway's package version. The current Connector release is **2.7.3**,
+with installer **Copilot.API.Connector.Setup.2.7.3.exe**. Earlier Codex-only and
 multi-harness builds both used 2.7.0 and the same installer filename, so an older
 downloaded copy is not distinguishable by its name/version alone.
 
-[Download the Windows Connector installer](https://github.com/rajathnaik/Copilot-API/releases/download/connector-v2.7.2/Copilot.API.Connector.Setup.2.7.2.exe).
+[Download the Windows Connector installer](https://github.com/rajathnaik/Copilot-API/releases/download/connector-v2.7.3/Copilot.API.Connector.Setup.2.7.3.exe).
 This single setup file installs the packaged app; consumers do not need to
 download, clone or build the source project.
 
-Saved-key reveal and confirmed **Repair connection** are available in the
-2.7.3 source/local installer. The public download remains 2.7.2 until a separate
-release is approved; updating the source does not update an installed app.
+Connector 2.7.3 adds on-demand saved-key reveal and confirmed **Repair
+connection** with a backup of the current configuration. Install the newer
+version to get these controls; updating source does not update an installed app.
 
 After installation, open Copilot API Connector from the Start menu and verify
-**Connector version 2.7.2** in its header and all five harness options. If an old
+**Connector version 2.7.3** in its header and all five harness options. If an old
 window was still running, fully exit it and reopen the app. If the old UI still
 appears, check the launched executable's location and Windows file properties
 before removing anything; the shortcut may point to another installation.

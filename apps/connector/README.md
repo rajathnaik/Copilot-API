@@ -5,13 +5,13 @@ key, and choose Codex, Claude Code, OpenCode, Hermes Agent, or OpenClaw.
 Connector discovers models and writes each harness's native configuration.
 It does not run a Gateway or require another Copilot sign-in.
 
-[Download Windows 2.7.2](https://github.com/rajathnaik/Copilot-API/releases/download/connector-v2.7.2/Copilot.API.Connector.Setup.2.7.2.exe)
-or choose [macOS/Linux downloads](https://github.com/rajathnaik/Copilot-API/releases/tag/connector-v2.7.2).
+[Download Windows 2.7.3](https://github.com/rajathnaik/Copilot-API/releases/download/connector-v2.7.3/Copilot.API.Connector.Setup.2.7.3.exe)
+or choose [macOS/Linux downloads](https://github.com/rajathnaik/Copilot-API/releases/tag/connector-v2.7.3).
 Run a newer installer in-place to upgrade under the same OS account.
 
-Saved-key reveal and confirmed **Repair connection** require Connector 2.7.3
-or newer. These fixes are in the source and local 2.7.3 installer; the public
-download above remains 2.7.2 until the next approved release.
+Connector 2.7.3 adds on-demand saved-key reveal and confirmed **Repair
+connection** with private configuration backups. Ordinary Connect, Sync and
+Undo still protect external changes from being overwritten.
 
 From the repository root, run `bun install --frozen-lockfile` once, then:
 
