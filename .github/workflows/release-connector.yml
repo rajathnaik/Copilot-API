@@ -161,6 +161,8 @@ jobs:
           Ordinary Connect, Sync and Undo continue to protect external changes.
 
           Source commit: ${SOURCE_COMMIT}
+          The app is English-only; all five harnesses, themes, protected credentials and connection history are retained.
+          Documentation and distribution metadata now target this independently maintained fork.
           SHA256 checksums are attached. This is an independent Connector release, not a Gateway release.
           EOF
           gh release create "$TAG" *.exe *.dmg *.AppImage SHA256SUMS.txt \

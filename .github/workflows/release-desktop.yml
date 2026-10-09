@@ -1,4 +1,4 @@
-name: Release Desktop
+name: Release Gateway
 
 on:
   push:
@@ -6,176 +6,122 @@ on:
       - "v*"
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: gateway-release-${{ github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
-  # ─── macOS Apple Silicon (arm64) ─────────────────────────────────────────
-  build-mac-arm64:
-    name: Build macOS (Apple Silicon)
-    runs-on: macos-latest
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      tag: ${{ steps.metadata.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
-
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: "22.18.0"
-
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: "1.4.2"
+      - name: Validate approved Gateway tag and matching product versions
+        id: metadata
+        run: node apps/gateway/scripts/gateway-release.ts
+      - run: bun install --frozen-lockfile
+      - run: bun run lint:all
+      - run: bun run typecheck:all
+      - run: bun run test
 
-      - name: Install root dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Build server
-        run: bun run build
-
-
-      - name: Typecheck desktop
-        working-directory: apps/gateway/desktop
-        run: bun run typecheck
-
-      - name: Build macOS arm64 package
-        working-directory: apps/gateway/desktop
-        run: bun run package:mac
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: false
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: mac-arm64
-          path: |
-            apps/gateway/desktop/release/*.dmg
-          if-no-files-found: warn
-
-  # ─── Windows ─────────────────────────────────────────────────────────────
-  build-win:
-    name: Build Windows
-    runs-on: windows-latest
+  build:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+            arch: x64
+          - os: macos-latest
+            platform: mac
+            arch: arm64
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: "22.18.0"
-
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
-
-      - name: Install root dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Build server
-        run: bun run build
-
-
-      - name: Typecheck desktop
+          bun-version: "1.4.2"
+      - run: bun install --frozen-lockfile
+      - name: Build Gateway server and desktop
+        run: bun run build:gateway
+      - name: Package Gateway installer
         working-directory: apps/gateway/desktop
-        run: bun run typecheck
-
-      - name: Build Windows package
-        working-directory: apps/gateway/desktop
-        run: bun run package:win
+        run: bunx electron-builder --${{ matrix.platform }} --${{ matrix.arch }} --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
-
-      - name: Verify Windows update metadata
-        working-directory: apps/gateway/desktop
+      - name: Verify update metadata
+        if: matrix.platform != 'mac'
+        shell: bash
         run: |
-          if (!(Test-Path -LiteralPath 'release/latest.yml')) {
-            throw 'Windows update metadata was not generated'
-          }
-
+          if [ "${{ matrix.platform }}" = "win" ]; then
+            test -f apps/gateway/desktop/release/latest.yml
+          else
+            test -f apps/gateway/desktop/release/latest-linux.yml
+          fi
       - uses: actions/upload-artifact@v4
         with:
-          name: win
+          name: gateway-${{ matrix.platform }}
           path: |
             apps/gateway/desktop/release/*.exe
-            apps/gateway/desktop/release/*.msi
-            apps/gateway/desktop/release/*.blockmap
-            apps/gateway/desktop/release/latest.yml
-          if-no-files-found: error
-
-  # ─── Linux (x64) ────────────────────────────────────────────────────────
-  build-linux-x64:
-    name: Build Linux (x64)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22.18.0"
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install root dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Build server
-        run: bun run build
-
-
-      - name: Typecheck desktop
-        working-directory: apps/gateway/desktop
-        run: bun run typecheck
-
-      - name: Build Linux x64 package
-        working-directory: apps/gateway/desktop
-        run: bun run package:linux -- --x64
-
-      - name: Verify Linux update metadata
-        working-directory: apps/gateway/desktop
-        run: test -f release/latest-linux.yml
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: linux-x64
-          path: |
+            apps/gateway/desktop/release/*.dmg
             apps/gateway/desktop/release/*.AppImage
-            apps/gateway/desktop/release/latest-linux.yml
+            apps/gateway/desktop/release/*.blockmap
+            apps/gateway/desktop/release/latest*.yml
           if-no-files-found: error
 
-  # ─── Upload all artifacts to the GitHub Release ──────────────────────────
-  release-upload:
-    name: Upload to Release
-    needs: [ build-mac-arm64, build-win, build-linux-x64 ]
+  publish:
+    needs: [validate, build]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ needs.validate.outputs.tag }}
+      VERSION: ${{ needs.validate.outputs.version }}
     steps:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
           merge-multiple: true
-
-      - name: List artifacts
-        run: find artifacts -type f | sort
-
-      - name: Wait for GitHub Release to be created
+      - name: Verify installers and generate checksums
+        working-directory: artifacts
         run: |
-          for i in {1..12}; do
-            if gh release view "${{ github.ref_name }}" \
-                 --repo "${{ github.repository }}" > /dev/null 2>&1; then
-              echo "Release exists, proceeding."
-              break
-            fi
-            echo "Release not found yet, waiting 30s... ($i/12)"
-            sleep 30
-          done
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload artifacts to GitHub Release
+          test -f "Copilot.API.Setup.$VERSION.exe"
+          test -f "Copilot.API-$VERSION-arm64.dmg"
+          test -f "Copilot-API-$VERSION-linux-x86_64.AppImage"
+          sha256sum *.exe *.dmg *.AppImage > SHA256SUMS.txt
+      - name: Create Gateway release if absent
         run: |
-          # Publish manifests last, once every referenced installer is available.
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --verify-tag --latest \
+              --title "Copilot API Gateway $VERSION" \
+              --notes "Host-side Gateway installers from this fork. English-only interface and fork-owned updates; existing sign-in, API keys and settings locations are preserved. Consumers install Copilot API Connector separately. SHA256SUMS.txt verifies installer downloads. macOS builds are unsigned."
+          fi
+      - name: Upload installers before update manifests
+        run: |
           while IFS= read -r -d '' artifact; do
-            gh release upload "${{ github.ref_name }}" "$artifact" --clobber
+            gh release upload "$TAG" "$artifact" --clobber
           done < <(find artifacts -type f ! -name 'latest*.yml' -print0)
           while IFS= read -r -d '' manifest; do
-            gh release upload "${{ github.ref_name }}" "$manifest" --clobber
+            gh release upload "$TAG" "$manifest" --clobber
           done < <(find artifacts -type f -name 'latest*.yml' -print0)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}

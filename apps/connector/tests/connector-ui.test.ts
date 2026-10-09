@@ -752,7 +752,8 @@ describe('standalone connector UI', () => {
     expect(container.textContent).toContain('Connection removed')
   })
 
-  test('supports revealing the key and Chinese localization', async () => {
+  test('keeps English on a Chinese system and preserves key visibility controls', async () => {
+    Object.defineProperty(win.navigator, 'language', { value: 'zh-CN' })
     await render()
     await click('Show key')
     expect(container.querySelector('#gateway-key')?.getAttribute('type')).toBe(
@@ -762,15 +763,8 @@ describe('standalone connector UI', () => {
     expect(container.querySelector('#gateway-key')?.getAttribute('type')).toBe(
       'password',
     )
-    const language = container.querySelector<HTMLSelectElement>(
-      '#connector-language',
-    )
-    if (!language) throw new Error('Missing language selector')
-    await act(async () => {
-      language.value = 'zh'
-      language.dispatchEvent(new Event('change', { bubbles: true }))
-    })
-    expect(container.textContent).toContain('连接 Codex')
+    expect(container.querySelector('#connector-language')).toBeNull()
+    expect(container.textContent).toContain('Connect Codex')
   })
 
   test('does not use a browser-only success fallback', async () => {

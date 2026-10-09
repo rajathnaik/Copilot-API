@@ -1,4 +1,3 @@
-import type { LangPreference } from '@copilot-api/shared/locales'
 import type { ThemePreference } from '@copilot-api/shared/types'
 export type { ThemePreference } from '@copilot-api/shared/types'
 import type {
@@ -279,7 +278,6 @@ export interface DesktopSettings {
   accountType: 'individual' | 'business' | 'enterprise'
   verbose: boolean
   showToken: boolean
-  language: LangPreference
   theme: ThemePreference
   proxy: DesktopProxySettings
 }

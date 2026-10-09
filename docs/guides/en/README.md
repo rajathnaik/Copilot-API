@@ -1,18 +1,21 @@
 # Documentation
 
-[Home](../../../README.md) · [简体中文](../zh-CN/README.md)
+[Home](../../../README.md)
 
-Start with the [quick start](../../../README.md#quick-start), then choose the guide for your client.
+These English-only guides describe the Rajath Naik fork, not the upstream npm
+package. Start with the [host/consumer quick start](../../../README.md#quick-start)
+and [Connector](connector.md) for one-click setup. Client-specific guides cover
+manual configuration and advanced Gateway behavior.
 
 | Guide | Contents |
 | --- | --- |
-| [Installation and Startup](getting-started.md) | Runtime requirements, npx, provider setup, and running from source |
+| [Installation and Startup](getting-started.md) | Host/consumer roles, source runtime requirements and provider setup |
 | [Claude Code](claude-code.md) | Interactive setup, settings.json, and model mappings |
 | [OpenCode](opencode.md) | Anthropic SDK setup and model configuration |
 | [Codex](codex.md) | config.toml, `GITHUB_COPILOT_API_KEY` setup, model catalog, and auto-review mapping |
 | [Docker](docker.md) | Docker Compose, persistent storage, and networking |
 | [Desktop App](desktop.md) | Installation, accounts, and advanced settings |
-| [Copilot API Connector](connector.md) | Connect a consumer's Codex to a remote gateway without installing the gateway |
+| [Copilot API Connector](connector.md) | Configure Codex, Claude Code, OpenCode, Hermes Agent or OpenClaw using a remote URL and key |
 | [Plugins and Tool Search](integrations.md) | Claude Code / OpenCode plugins and the MCP tool search bridge |
 | [Usage Monitoring](usage.md) | Usage dashboard, token history, and quota monitoring |
 | [CLI Reference](cli.md) | Commands, options, and request examples |

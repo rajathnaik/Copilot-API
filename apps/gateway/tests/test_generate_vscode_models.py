@@ -9,7 +9,7 @@ from unittest.mock import patch, MagicMock
 from urllib.error import HTTPError, URLError
 
 
-SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "generate-vscode-models.py"
+SCRIPT = Path(__file__).resolve().parents[3] / "scripts" / "generate-vscode-models.py"
 SPEC = importlib.util.spec_from_file_location("generator", SCRIPT)
 generator = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(generator)

@@ -99,7 +99,7 @@ export default function TitleBarMenu({
           label: t('menu.helpDocs'),
           onClick: () =>
             window.electronAPI.openUrl(
-              'https://github.com/caozhiyuan/copilot-api#readme',
+              'https://github.com/rajathnaik/Copilot-API#readme',
             ),
         },
       ],

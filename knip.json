@@ -1,0 +1,25 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": ["scripts/*.mjs", "tests/*.test.ts"],
+      "project": ["scripts/*.mjs", "tests/*.test.ts", "*.config.*"]
+    },
+    "apps/gateway": {
+      "entry": ["src/main.ts", "tests/**/*.test.ts", "tests/setup.ts", "scripts/*.ts", "tsdown*.config.ts"],
+      "project": ["src/**/*.ts", "tests/**/*.ts", "scripts/*.ts", "*.config.*"]
+    },
+    "apps/gateway/desktop": {
+      "entry": ["electron/main.ts", "electron/preload.ts", "src/main.tsx", "src/vite-env.d.ts", "tests/**/*.test.ts", "electron.vite.config.ts"],
+      "project": ["electron/**/*.ts", "src/**/*.{ts,tsx}", "tests/**/*.ts", "*.config.*"]
+    },
+    "apps/connector": {
+      "entry": ["electron/connector-main.ts", "electron/connector-preload.ts", "src/connector/main.tsx", "src/vite-env.d.ts", "scripts/*.ts", "tests/**/*.test.ts", "electron.vite.config.ts"],
+      "project": ["electron/**/*.ts", "src/**/*.{ts,tsx}", "scripts/*.ts", "tests/**/*.ts", "*.config.*"]
+    },
+    "packages/shared": {
+      "entry": ["src/atomic-file.ts", "src/contexts/LanguageContext.tsx", "src/locales/index.ts", "src/theme.ts", "src/types.ts", "tests/**/*.test.ts"],
+      "project": ["src/**/*.{ts,tsx}", "tests/**/*.ts", "*.config.*"]
+    }
+  }
+}

@@ -33,7 +33,7 @@ export default function App() {
   const [port, setPort] = useState<number>(4141)
   const [host, setHost] = useState<string>('')
   const [initialServerStatus, setInitialServerStatus] = useState<ServerStatus>()
-  const { setLangPref, t } = useLanguage()
+  const { t } = useLanguage()
 
   useEffect(() => {
     let active = true
@@ -49,7 +49,6 @@ export default function App() {
 
         setPort(settings.lastPort)
         setHost(settings.host ?? '')
-        setLangPref(settings.language ?? 'auto')
 
         if (authResult.success && authResult.mode !== 'none') {
           const serverStatus = await autoStartServer(

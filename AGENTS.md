@@ -2,9 +2,9 @@
 
 ## Project Layout
 
-- `apps/gateway/`: public Bun/TypeScript API package, with `src/`, `tests/`, and `pages/`; `src/lib/types/` defines the protocol contracts. Its Electron app is under `desktop/`, with its own manifest and checks.
+- `apps/gateway/`: private Bun/TypeScript Gateway package, with `src/`, `tests/`, and `pages/`; `src/lib/types/` defines the protocol contracts. Its Electron app is under `desktop/`, with its own manifest and checks.
 - `apps/connector/`: standalone consumer Electron app, with its own manifest, version, harness configurations, tests, and installer settings. It must not import Gateway source.
-- `packages/shared/`: private, genuinely shared atomic file writing, localization, theme preference, and styling. Bundle this package into distributed artifacts; npm consumers must not need an unpublished workspace dependency.
+- `packages/shared/`: private, genuinely shared atomic file writing, typed English strings, theme preference, and styling. Bundle this package into distributed artifacts. Both desktop products are English-only; do not restore language selectors or system-language detection.
 - `tests/`: workspace architecture tests; `scripts/`: shared build/development tools; `docs/`: documentation and screenshots; `plugin/`: Gateway plugin scripts.
 - Root is a private Bun workspace with one hoisted lockfile/install. Keep `docker-compose.yaml` at root so existing relative data mounts remain unchanged.
 
@@ -14,10 +14,11 @@ Run from the repository root unless noted:
 
 - `bun run dev` / `bun run start`: watch / production API entrypoint, with system CA enabled.
 - `bun install --frozen-lockfile`: install all workspaces; do not perform separate desktop installs.
-- `bun run build`: public API package; `bun run build:desktop`: Gateway server bundle; `bun run build:gateway`: Gateway server and Electron app; `bun run build:connector`: Connector Electron app.
+- `bun run build`: Gateway API bundle; `bun run build:desktop`: Gateway server bundle; `bun run build:gateway`: Gateway server and Electron app; `bun run build:connector`: Connector Electron app.
 - `bun run typecheck` / `bun run lint`: root tooling (and Gateway API for typecheck).
 - `bun run typecheck:all` / `bun run lint:all`: all workspaces.
 - `bun run test`: all suites with their correct working directories and test setup.
+- `bun run knip`: workspace-aware inventory; verify ownership, internal use and runtime entrypoints before removing flagged exports or dependencies.
 - From `apps/gateway/`, `bun test ./tests/provider-resolver.test.ts`: one Gateway test; `bun run test`: its suite.
 - `bun run --cwd apps/gateway/desktop test` / `bun run --cwd apps/connector test`: individual Electron suites.
 - Use explicit `./tests` directories, not the bare `tests` filter, which discovers nested workspaces and bypasses their working-directory assumptions.
@@ -53,6 +54,7 @@ Use short, imperative Conventional Commit subjects such as `feat: support custom
 - Connector releases use `connector-v<version>`; existing Gateway releases use `v<version>`. Never use a Gateway tag to publish Connector installers, or mark a Connector release as the repository's global latest release.
 - Release only tested source already pushed to the remote. Check that package metadata, tag, and actual installer versions match; verify the public download after publishing.
 - Normal branch pushes may run checks but must not publish. The Connector publishing workflow accepts only an explicitly approved product tag or manual workflow dispatch.
+- Gateway installer publishing is self-contained and targets this fork. Do not restore upstream npm, container-registry or GitHub Pages publication. Docker Compose builds the local fork image; keep the runtime usage page and functional plugins.
 
 ## Learnings
 

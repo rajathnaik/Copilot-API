@@ -2,8 +2,8 @@
   "mcpServers": {
     "tool_search": {
       "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@jeffreycao/copilot-api@latest", "mcp"],
+      "command": "bun",
+      "args": ["${COPILOT_API_GATEWAY_ENTRY}", "mcp"],
       "alwaysLoad": true
     }
   }

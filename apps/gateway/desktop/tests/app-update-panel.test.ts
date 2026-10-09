@@ -11,7 +11,7 @@ const initial: AppUpdateStatus = {
   phase: 'idle',
   currentVersion: '2.6.29',
   manualInstall: false,
-  releaseUrl: 'https://github.com/caozhiyuan/copilot-api/releases',
+  releaseUrl: 'https://github.com/rajathnaik/Copilot-API/releases',
 }
 let win: Window
 let root: Root

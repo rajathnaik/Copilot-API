@@ -132,7 +132,7 @@ describe('desktop updates', () => {
     checkRelease.mockResolvedValue({
       version: '2.6.30',
       releaseUrl:
-        'https://github.com/caozhiyuan/copilot-api/releases/tag/v2.6.30',
+        'https://github.com/rajathnaik/Copilot-API/releases/tag/v2.6.30',
     })
     expect(await manager.check()).toMatchObject({
       phase: 'available',
@@ -150,7 +150,7 @@ describe('desktop updates', () => {
     checkRelease.mockResolvedValue({
       version: '2.6.30',
       releaseUrl:
-        'https://github.com/caozhiyuan/copilot-api/releases/tag/v2.6.30',
+        'https://github.com/rajathnaik/Copilot-API/releases/tag/v2.6.30',
     })
     expect((await manager.check()).manualInstall).toBe(true)
     expect(updater.checkForUpdates).not.toHaveBeenCalled()

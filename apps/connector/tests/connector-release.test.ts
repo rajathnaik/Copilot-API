@@ -144,7 +144,17 @@ describe('approved independent Connector releases', () => {
     )
     expect(gateway).not.toContain('package:connector')
     expect(gateway).not.toContain('release-connector')
-    expect(parseDocument(gateway).errors).toHaveLength(0)
+    const gatewayDocument = parseDocument(gateway)
+    expect(gatewayDocument.errors).toHaveLength(0)
+    expect(gatewayDocument.getIn(['on', 'push', 'tags', 0])).toBe('v*')
+    expect(gatewayDocument.getIn(['on', 'push', 'branches'])).toBeUndefined()
+    expect(gatewayDocument.getIn(['jobs', 'build', 'needs'])).toBe('validate')
+    const publishNeeds = gatewayDocument.getIn(['jobs', 'publish', 'needs'])
+    if (!isSeq(publishNeeds))
+      throw new Error('Gateway publish prerequisites are missing.')
+    expect(publishNeeds.toJSON()).toEqual(['validate', 'build'])
+    expect(gateway).toContain('gh release create "$TAG" --verify-tag')
+    expect(gateway).toContain('sha256sum *.exe *.dmg *.AppImage')
   })
 
   test('accepts an absent or matching tag but refuses a tag from another source commit', () => {

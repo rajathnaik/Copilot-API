@@ -15,6 +15,10 @@ node_modules/
 # eslint cache
 .eslintcache
 
+# Python generator test output
+__pycache__/
+*.py[cod]
+
 # build output
 dist/
 

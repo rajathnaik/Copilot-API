@@ -4,11 +4,13 @@ Install Connector on a consumer machine, enter the Gateway/tunnel URL and API
 key, and choose Codex, Claude Code, OpenCode, Hermes Agent, or OpenClaw.
 Connector discovers models and writes each harness's native configuration.
 It does not run a Gateway or require another Copilot sign-in.
+The application is English-only; theme selection remains available.
 
-[Download Windows 2.7.3](https://github.com/rajathnaik/Copilot-API/releases/download/connector-v2.7.3/Copilot.API.Connector.Setup.2.7.3.exe)
-or choose [macOS/Linux downloads](https://github.com/rajathnaik/Copilot-API/releases/tag/connector-v2.7.3).
+[Download Windows 2.7.4](https://github.com/rajathnaik/Copilot-API/releases/download/connector-v2.7.4/Copilot.API.Connector.Setup.2.7.4.exe)
+or choose [macOS/Linux downloads](https://github.com/rajathnaik/Copilot-API/releases/tag/connector-v2.7.4).
 Run a newer installer in-place to upgrade under the same OS account.
 
+Connector 2.7.4 makes the app English-only and includes the fork cleanup.
 Connector 2.7.3 adds on-demand saved-key reveal and confirmed **Repair
 connection** with private configuration backups. Ordinary Connect, Sync and
 Undo still protect external changes from being overwritten.

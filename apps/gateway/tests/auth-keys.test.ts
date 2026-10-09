@@ -158,6 +158,8 @@ describe("auth keys CLI", () => {
 
     expect(result.exitCode).toBe(0)
     expect(result.stdout).toContain("No API keys configured")
+    expect(result.stdout).toContain("bun run start auth keys --add <key>")
+    expect(result.stdout).not.toContain("npx")
   })
 
   test("clears all keys", () => {

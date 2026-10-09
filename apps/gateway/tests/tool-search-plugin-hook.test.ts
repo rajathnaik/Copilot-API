@@ -52,7 +52,7 @@ describe("tool-search Claude plugin", () => {
         ],
       },
     })
-    expect(manifest.version).toBe("1.0.2")
+    expect(manifest.version).toBe("1.1.0")
   })
 
   test("auto-approves only the plugin tool-search bridge", () => {

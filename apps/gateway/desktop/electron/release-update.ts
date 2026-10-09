@@ -1,6 +1,6 @@
-export const RELEASES_URL = 'https://github.com/caozhiyuan/copilot-api/releases'
-export const LATEST_RELEASE_API =
-  'https://api.github.com/repos/caozhiyuan/copilot-api/releases/latest'
+export const RELEASES_URL = 'https://github.com/rajathnaik/Copilot-API/releases'
+export const RELEASES_API =
+  'https://api.github.com/repos/rajathnaik/Copilot-API/releases'
 
 export interface ReleaseUpdate {
   version: string
@@ -51,6 +51,7 @@ export function getReleaseUpdate(
     || release.draft !== false
     || release.prerelease !== false
     || typeof release.tag_name !== 'string'
+    || !release.tag_name.startsWith('v')
     || !isNewerStableVersion(release.tag_name, currentVersion)
     || !Array.isArray(release.assets)
   )
@@ -84,13 +85,40 @@ export async function checkReleaseUpdate(
   platform: NodeJS.Platform,
   arch: string,
 ): Promise<ReleaseUpdate | null> {
-  const response = await fetchRelease(LATEST_RELEASE_API, {
-    headers: { Accept: 'application/vnd.github+json' },
-    signal: AbortSignal.timeout(30_000),
-  })
-  if (!response.ok) {
-    throw new Error(`GitHub release check failed (HTTP ${response.status})`)
+  const signal = AbortSignal.timeout(30_000)
+  let newest: ReleaseUpdate | null = null
+  for (let page = 1; page <= 10; page += 1) {
+    const response = await fetchRelease(
+      `${RELEASES_API}?per_page=100&page=${page}`,
+      {
+        headers: { Accept: 'application/vnd.github+json' },
+        signal,
+      },
+    )
+    if (!response.ok)
+      throw new Error(`GitHub release check failed (HTTP ${response.status})`)
+    const releases: unknown = await response.json()
+    if (!Array.isArray(releases))
+      throw new Error('GitHub release check returned an invalid release list.')
+    for (const release of releases) {
+      const candidate = getReleaseUpdate(
+        release,
+        currentVersion,
+        platform,
+        arch,
+      )
+      if (
+        candidate
+        && (!newest || isNewerStableVersion(candidate.version, newest.version))
+      )
+        newest = candidate
+    }
+    const hasNextPage = /;\s*rel="next"/u.test(
+      response.headers.get('link') ?? '',
+    )
+    if (!hasNextPage && releases.length < 100) return newest
   }
-  const release: unknown = await response.json()
-  return getReleaseUpdate(release, currentVersion, platform, arch)
+  throw new Error(
+    `GitHub release history exceeds the update-check limit. Check ${RELEASES_URL} manually.`,
+  )
 }

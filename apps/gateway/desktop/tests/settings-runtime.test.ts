@@ -30,7 +30,6 @@ describe('automatic server restart for startup settings', () => {
     const previous = normalizeSettings({})
     const next = normalizeSettings({
       ...previous,
-      language: 'zh',
       theme: 'dark',
       minimizeToTray: true,
       apiHome: 'new-home',

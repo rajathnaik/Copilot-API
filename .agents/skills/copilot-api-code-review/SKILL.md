@@ -119,7 +119,7 @@ Severity must follow verified impact, not reviewer confidence or preference. Do 
 - **Performance**: avoid obvious repeated I/O, unnecessary re-parsing/tokenization, or unbounded buffering of streams; consider caching or batching.
 - **Consistency**: matches existing patterns in neighboring modules.
 - **Dependencies**: avoid adding heavy or unvetted dependencies to `package.json`; check version, security, and license implications.
-- **Documentation**: update `README.md`, `README.zh-CN.md`, `docs/`, or comments when behavior or usage changes.
+- **Documentation**: update `README.md`, product READMEs and the English guides when behavior or usage changes. Both products are English-only; preserve upstream attribution but do not direct users to upstream builds.
 
 ## Verification Commands
 

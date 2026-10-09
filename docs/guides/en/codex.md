@@ -1,6 +1,9 @@
 # Codex
 
-[Home](../../../README.md) · [Documentation](README.md) · [简体中文](../zh-CN/codex.md)
+[Home](../../../README.md) · [Documentation](README.md)
+
+For automatic remote setup, use [Connector](connector.md). This guide is the
+advanced/manual configuration reference.
 
 ## Using with Codex
 

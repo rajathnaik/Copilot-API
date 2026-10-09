@@ -112,7 +112,7 @@ export default function RemoteAccessPage() {
     setConnectorDownloadError('')
     try {
       await window.electronAPI.openUrl(
-        'https://github.com/caozhiyuan/copilot-api/releases',
+        'https://github.com/rajathnaik/Copilot-API/releases/tag/connector-v2.7.4',
       )
     } catch (error) {
       console.error('Could not open connector releases page', error)

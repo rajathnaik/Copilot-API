@@ -1,22 +1,24 @@
 # Claude Code
 
-[Home](../../../README.md) · [Documentation](README.md) · [简体中文](../zh-CN/claude-code.md)
+[Home](../../../README.md) · [Documentation](README.md)
 
 ## Using with Claude Code
 
 This AI gateway can be used to power [Claude Code](https://docs.anthropic.com/en/claude-code), an experimental conversational AI assistant for developers from Anthropic.
 
-There are two ways to configure Claude Code to use this AI gateway:
+For a remote Gateway, use [Connector](connector.md) to discover models and
+configure Claude Code with the URL and API key. The alternatives below are
+manual or host-side workflows.
 
 ### Interactive Setup with `--claude-code` flag
 
 To get started, run the `start` command with the `--claude-code` flag:
 
 ```sh
-npx @jeffreycao/copilot-api@latest start --claude-code
+bun run start start --claude-code
 ```
 
-You will no longer be prompted to pick models manually. The gateway automatically detects the latest available model for each Claude Code size tier — opus maps to the newest Opus model, sonnet to the newest Sonnet model, and haiku to the newest Haiku model — and generates a command that sets `ANTHROPIC_DEFAULT_OPUS_MODEL`, `ANTHROPIC_DEFAULT_SONNET_MODEL`, and `ANTHROPIC_DEFAULT_HAIKU_MODEL` accordingly. Any tier without a matching model available is omitted. The command is copied to your clipboard and sets the environment variables needed for Claude Code to use the gateway.
+The gateway automatically detects the latest available model for each Claude Code size tier — opus maps to the newest Opus model, sonnet to the newest Sonnet model, and haiku to the newest Haiku model — and generates a command that sets `ANTHROPIC_DEFAULT_OPUS_MODEL`, `ANTHROPIC_DEFAULT_SONNET_MODEL`, and `ANTHROPIC_DEFAULT_HAIKU_MODEL` accordingly. Any tier without a matching model available is omitted. The command is copied to your clipboard and sets the environment variables needed for Claude Code to use the gateway.
 
 Paste and run this command in a new terminal to launch Claude Code.
 

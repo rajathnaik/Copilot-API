@@ -1,106 +1,129 @@
-# Copilot API
+# Copilot API: Gateway and Connector
 
-<p align="center">
-  <img src="docs/hero/copilot-api-hero.svg" alt="Copilot API - Universal AI Gateway" width="1600" />
-</p>
+An independently maintained fork by [Rajath Naik](https://github.com/rajathnaik),
+built around a simple host-and-consumer setup. Run Gateway on the machine with
+your Copilot subscription; install Connector wherever you use a coding harness.
+Both applications and this repository's documentation are English-only.
 
-<p align="center">
-  <strong>Universal AI Gateway</strong><br />
-  One Gateway. Any Client. Multiple AI Providers.<br />
-  Chat Completions &middot; OpenAI Responses &middot; Anthropic Messages
-</p>
-
-<p align="center">
-  <a href="https://www.npmjs.com/package/@jeffreycao/copilot-api"><img src="https://img.shields.io/npm/v/@jeffreycao/copilot-api.svg" alt="npm version"></a>
-  <a href="https://github.com/caozhiyuan/copilot-api/blob/dev/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
-  <a href="https://github.com/caozhiyuan/copilot-api/stargazers"><img src="https://img.shields.io/github/stars/caozhiyuan/copilot-api.svg" alt="GitHub stars"></a>
-  <a href="https://bun.sh"><img src="https://img.shields.io/badge/Bun-%3E%3D1.2.x-orange.svg" alt="Bun >= 1.2.x"></a>
-  <a href="https://nodejs.org"><img src="https://img.shields.io/badge/Node-%3E%3D22.13.0-green.svg" alt="Node >= 22.13.0"></a>
-</p>
-
-<p align="center">
-  English | <a href="README.zh-CN.md">简体中文</a>
-</p>
-
-Copilot API is a local AI gateway that connects Claude Code, OpenCode, Codex, and other clients to GitHub Copilot, the built-in Codex provider, and third-party model providers through a unified API.
-
-## Highlights
-
-- **Unified API Gateway**: Serve OpenAI-compatible Chat Completions (`/v1/chat/completions`), the OpenAI Responses API (`/v1/responses`), and Anthropic-compatible Messages (`/v1/messages`) from one local endpoint.
-- **Multi-Provider**: Route GitHub Copilot, the built-in `codex` provider, and third-party providers (Kimi, DeepSeek, DashScope, OpenRouter, OpenCode Go, or a custom provider) behind the same gateway. GitHub Copilot is optional — with at least one enabled provider, the server starts in provider-only mode without a GitHub token.
-- **Coding Agent Ready**: First-class setups for Claude Code, OpenCode, and Codex, including the interactive `--claude-code` launcher and a merged model catalog for Codex.
-- **Streaming & WebSocket**: SSE streaming on all three client-facing protocols. Upstream Copilot Responses traffic selects WebSocket or HTTP from each model's advertised endpoints; streamed Responses traffic for the built-in `codex` provider uses WebSocket by default and uses HTTP when `useResponsesApiWebSocket` is disabled.
-- **Desktop App**: Electron GUI with GitHub Copilot sign-in, Codex OAuth, provider configuration, token usage, logs, and one-click start/stop.
-
-## Quick Start
-
-Requires **Node.js >= 22.13.0** (npx) or **Bun >= 1.2.x**. A Copilot subscription is needed only for the GitHub Copilot provider; other configured providers can run independently.
-
-```sh
-npx @jeffreycao/copilot-api@latest start
-```
-
-The server listens on `http://localhost:4141` by default. Optionally authenticate with GitHub Copilot or configure a third-party provider first:
-
-```sh
-npx @jeffreycao/copilot-api@latest auth login
-```
-
-Verify the gateway is up:
-
-```sh
-curl http://localhost:4141/v1/models
-```
-
-> [!NOTE]
-> Token usage storage requires Node.js >= 22.13.0 or Bun. See [Using with npx](docs/guides/en/getting-started.md#using-with-npx) for details.
-
-From here, jump to the guide for your client: [Claude Code](docs/guides/en/claude-code.md#using-with-claude-code), [OpenCode](docs/guides/en/opencode.md#using-with-opencode), [Codex](docs/guides/en/codex.md#using-with-codex), or run it with [Docker](docs/guides/en/docker.md#using-with-docker).
-
-Connecting Codex on a different machine? Use the separate
-[Copilot API Connector](docs/guides/en/connector.md). Enter the existing gateway's
-Dev Tunnels URL and API key; the consumer does not need a local gateway or
-Copilot sign-in. Codex is the first supported harness.
-
-## Compatibility
-
-Every client talks to the same local endpoint. The gateway routes each request to GitHub Copilot, the built-in `codex` provider, or a configured third-party provider, translating between protocols when the provider speaks a different one.
-
-**Client / Protocol Matrix**
-
-| Client | Chat Completions | Responses | Anthropic Messages | Recommended |
-|---|:---:|:---:|:---:|---|
-| Claude Code | — | — | ✅ Native / Adapter | Anthropic Messages |
-| OpenCode | ✅ Native | ✅ Native / Adapter | ✅ Native / Adapter via `@ai-sdk/anthropic` | Anthropic Messages |
-| Codex | — | ✅ Native / Adapter | — | Responses |
-| OpenAI-compatible clients | ✅ Native | ✅ Native / Adapter | — | Chat Completions |
-| Anthropic-compatible clients | — | — | ✅ Native / Adapter | Anthropic Messages |
-
-**Providers and protocols.** Protocol support is model-specific. Chat Completions requires a native endpoint, while Responses and Messages can use supported adapters. The built-in `codex` provider uses Responses natively; third-party providers can use `anthropic`, `openai-compatible`, or `openai-responses`, with per-model overrides.
-
-## Desktop App
-
-Prefer a GUI? The Electron desktop app in [apps/gateway/desktop](apps/gateway/desktop/) covers GitHub Copilot sign-in, OpenAI Codex OAuth, and API-key configuration for Kimi, DeepSeek, DashScope, OpenRouter, or a custom provider — with one-click start/stop of the local server, and the local endpoint, auth header, available models, usage, and logs in one window.
-
-<p align="center">
-  <img src="docs/screenshots/desktop-dashboard.png" alt="Copilot API desktop app dashboard" width="49%" />
-  <img src="docs/screenshots/desktop-token-usage.png" alt="Copilot API desktop app token usage view" width="49%" />
-</p>
-
-Windows x64 (`.exe`), macOS Apple Silicon (`.dmg`), and Linux x64 (`.AppImage`) packages are published in [GitHub Releases](https://github.com/caozhiyuan/copilot-api/releases). See [Electron Desktop App](docs/guides/en/desktop.md#electron-desktop-app) for full setup and advanced configuration.
+[MIT license](LICENSE) | [Documentation](docs/guides/en/README.md) |
+[Project lineage and responsible use](NOTICE.md)
 
 ## Two independent products
 
-| Product | Install it on | Source |
+| Product | Install it on | What it does |
 | --- | --- | --- |
-| **Gateway** | The machine that signs in to Copilot/providers and serves the API or tunnel | [apps/gateway](apps/gateway/) |
-| **Connector** | Each consumer machine running Codex, Claude Code, OpenCode, Hermes Agent, or OpenClaw | [apps/connector](apps/connector/) |
+| [Gateway](apps/gateway/README.md) | The host with Copilot/provider access | Signs in, serves APIs, discovers available models and manages a Microsoft Dev Tunnel |
+| [Connector](apps/connector/README.md) | Each consumer machine | Uses the host URL and API key to configure Codex, Claude Code, OpenCode, Hermes Agent or OpenClaw |
 
-Connector only needs the Gateway/tunnel URL and API key. It discovers models and manages native harness configuration; consumers do not need another Gateway or Copilot sign-in. Products have separate versions, release tags, and installers.
+Connector does not run another Gateway, require another Copilot sign-in, or
+need to be hosted as a service. It is a local desktop application that manages
+each harness's native configuration and protected credentials.
 
-**Share the current Connector installer:** [Windows 2.7.3](https://github.com/rajathnaik/Copilot-API/releases/download/connector-v2.7.3/Copilot.API.Connector.Setup.2.7.3.exe), or [macOS/Linux release downloads](https://github.com/rajathnaik/Copilot-API/releases/tag/connector-v2.7.3). See the [Connector guide](docs/guides/en/connector.md). Normal upgrades are in-place; source restructuring does not require reinstalling or resetting existing settings.
+## Downloads
 
-For development, run one `bun install --frozen-lockfile` at the repository root. `bun run build:gateway` and `bun run build:connector` build the separate apps; `bun run test`, `bun run typecheck:all`, and `bun run lint:all` check all workspaces. [packages/shared](packages/shared/) contains private shared utilities, bundled into each product. Committing/pushing source does not publish installers; releases require separate approval.
+- **Connector:** [Windows installer 2.7.4](https://github.com/rajathnaik/Copilot-API/releases/download/connector-v2.7.4/Copilot.API.Connector.Setup.2.7.4.exe)
+  or [macOS arm64 / Linux x64](https://github.com/rajathnaik/Copilot-API/releases/tag/connector-v2.7.4).
+  Run newer installers in-place under the same OS account.
+- **Gateway:** [Windows installer 2.7.1](https://github.com/rajathnaik/Copilot-API/releases/download/v2.7.1/Copilot.API.Setup.2.7.1.exe)
+  or [macOS arm64 / Linux x64](https://github.com/rajathnaik/Copilot-API/releases/tag/v2.7.1).
+  Install on the host machine; the packaged app does not require the source tree.
+
+Download only the intended product from
+[this fork's releases](https://github.com/rajathnaik/Copilot-API/releases).
+Upstream npm packages and container images are not builds of this fork.
+Gateway tags use `v<version>`; Connector tags use `connector-v<version>`.
+Do not use a repository-wide "latest" URL to choose between the products.
+
+## Quick start
+
+### Host machine
+
+1. Launch Gateway and sign in with your Copilot subscription, or configure a
+   supported alternative provider.
+2. Configure a Gateway API key in **Settings > Security** and start the API.
+3. In **Remote Access**, sign in to Microsoft Dev Tunnels and start the tunnel.
+4. Share the tunnel URL and Gateway key securely with the consumer.
+
+A local source checkout requires Bun **1.4.2** (the tested version) and a
+supported Node.js build runtime: **22.18+ in the 22.x series, 24.11+ in the
+24.x series, or 26+**.
+
+```sh
+git clone https://github.com/rajathnaik/Copilot-API.git
+cd Copilot-API
+bun install --frozen-lockfile
+bun run --cwd apps/gateway/desktop dev
+```
+
+On Windows, [launch-desktop.ps1](launch-desktop.ps1) also starts the Gateway
+from a checkout and builds stale bundles. An installed desktop release bundles
+its runtime and does not require Bun, Node.js or the source tree.
+
+### Consumer machine
+
+1. Install Connector and your chosen coding harness.
+2. Enter the Microsoft Dev Tunnels/Gateway URL and API key.
+3. Choose the harness, discover models, choose a default and click **Connect**.
+4. Start a fresh harness session.
+
+Connector verifies setup, supports model sync and safe Undo, and offers
+explicit saved-key reveal. If connector-owned settings were changed externally,
+**Repair connection** requires confirmation and creates a private backup first.
+See the [Connector guide](docs/guides/en/connector.md) for credential storage,
+permissions and per-harness limitations.
+
+## Gateway capabilities retained
+
+- OpenAI-compatible Chat Completions, OpenAI Responses and Anthropic Messages.
+- Native endpoint discovery, supported protocol adapters, SSE streaming and
+  model-aware Responses WebSocket/HTTP transport.
+- Copilot authentication, built-in Codex OAuth and third-party/custom providers,
+  including provider-only operation without a Copilot subscription.
+- API/admin keys, provider configuration, model routing, usage history, logs,
+  the usage web page and optional Claude Code/OpenCode plugins.
+- CLI operation and [locally built Docker containers](docs/guides/en/docker.md).
+
+Protocol support is model-specific. Codex uses Responses; Claude Code uses
+Messages; other clients use the native protocol configured for their harness.
+Discovering a model does not guarantee subscription access or successful chat.
+
+<p align="center">
+  <img src="docs/screenshots/desktop-dashboard.png" alt="Gateway dashboard" width="49%" />
+  <img src="docs/screenshots/desktop-token-usage.png" alt="Gateway token usage" width="49%" />
+</p>
+
+## Development and releases
+
+| Location | Responsibility |
+| --- | --- |
+| [apps/gateway](apps/gateway/) | Gateway API, desktop host application, server tests and runtime usage page |
+| [apps/connector](apps/connector/) | Independent consumer application, harness adapters, credentials and installer |
+| [packages/shared](packages/shared/) | Private bundled file-writing, English strings, theme and styling utilities |
+| [plugin](plugin/) | Optional functional Gateway integrations |
+| [scripts](scripts/) / [tests](tests/) | Shared development tools and workspace checks |
+
+Install once at the root; do not install nested workspaces separately.
+
+```sh
+bun run dev start
+bun run build:gateway
+bun run build:connector
+bun run typecheck:all
+bun run lint:all
+bun run test
+bun run knip
+```
+
+Knip is an inventory aid, not a deletion command: test-only exports, shared
+workspace dependencies and runtime-loaded Electron code need contextual review.
+Build outputs, installers, caches, credentials and dependency folders are not
+source files and must not be committed.
+
+CI validates source pushes; it does not publish installers. Product versions,
+tags and installers are independent. Releases require explicit product/version
+approval, tested committed source and public-download verification. This fork
+does not publish npm packages, registry container images or a GitHub Pages site.
+The runtime usage page remains part of Gateway.
 
 ## Documentation
 
@@ -152,18 +175,18 @@ command when using another profile, Insiders, or a different installation.
 Run the generator tests with:
 
 ```sh
-python3 -m unittest discover -s tests -p 'test_generate_vscode_models.py'
+python3 -m unittest discover -s apps/gateway/tests -p 'test_generate_vscode_models.py'
 ```
 
 | Guide | Contents |
 | --- | --- |
-| [Installation and Startup](docs/guides/en/getting-started.md) | Prerequisites, project overview, `npx` and source runs, provider-only mode without Copilot, and gateway API key setup |
+| [Installation and Startup](docs/guides/en/getting-started.md) | Host/consumer setup, source runs, provider-only mode and Gateway API keys |
 | [Claude Code](docs/guides/en/claude-code.md) | The `--claude-code` interactive launcher, `.claude/settings.json` environment variables, opus / sonnet / haiku tier mapping, auto-compact window, and WebSearch behavior |
 | [OpenCode](docs/guides/en/opencode.md) | OpenCode OAuth login, the `@ai-sdk/anthropic` provider in `opencode.json`, `baseURL` conventions, model context limits, and thinking options |
 | [Codex](docs/guides/en/codex.md) | A full `config.toml` provider block, `GITHUB_COPILOT_API_KEY` environment variable setup, auto-review model mapping, generating `model_catalog.json`, and the merged model picker catalog with protocol adapters |
 | [Docker](docs/guides/en/docker.md) | Docker Compose quick start, the `/data` persistent mount and its ownership repair, supported environment variables, and host interface binding |
 | [Desktop App](docs/guides/en/desktop.md) | Copilot sign-in, Codex OAuth account switching, API-key providers, one-click start / stop, shared model mappings, advanced settings, and per-platform installers |
-| [Copilot API Connector](docs/guides/en/connector.md) | Separate consumer installer, Codex discovery, secure credentials, verification, model sync, and safe undo |
+| [Copilot API Connector](docs/guides/en/connector.md) | Five native harnesses, secure credentials, discovery, verification, sync, repair and safe Undo |
 | [Plugins and Tool Search](docs/guides/en/integrations.md) | The Responses `tool_search` MCP bridge (not needed on opencode v2, which already defers tools through Code Mode), Claude Code `agent-inject` and `tool-search` marketplace plugins, and the opencode subagent marker plugin |
 | [Usage Monitoring](docs/guides/en/usage.md) | The usage viewer URL and query parameters, period selectors, Copilot quota progress, token and cost metric cards, trend charts, and paginated request events |
 | [CLI Reference](docs/guides/en/cli.md) | Command structure, global options, and the full option sets for the `start`, `auth`, and `debug` subcommands with example usage |

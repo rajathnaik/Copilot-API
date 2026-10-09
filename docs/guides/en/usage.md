@@ -1,20 +1,22 @@
 # Usage Monitoring
 
-[Home](../../../README.md) · [Documentation](README.md) · [简体中文](../zh-CN/usage.md)
+[Home](../../../README.md) · [Documentation](README.md)
 
 ## Using the Usage Viewer
 
 After starting the server, a URL to the Copilot Usage Dashboard will be displayed in your console. This dashboard is a web interface for monitoring your API usage.
 
-1.  Start the server. For example, using npx:
+1.  Start the server from this fork's source checkout:
     ```sh
-    npx @jeffreycao/copilot-api@latest start
+    bun run start start
     ```
 2.  The server will output a URL to the usage viewer. Copy and paste this URL into your browser. It will look something like this:
     `http://localhost:4141/usage-viewer?endpoint=http://localhost:4141/usage`
     - If you use the `start.bat` script on Windows, this page will open automatically.
 
 The dashboard provides a user-friendly interface to view your Copilot usage data:
+
+The page is served by Gateway itself; no GitHub Pages deployment is needed.
 
 > Token usage history requires Bun or Node.js >= 22.13.0. On older Node.js versions the server runs normally but token usage storage is disabled.
 

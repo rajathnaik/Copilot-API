@@ -1,5 +1,4 @@
 import en from './en'
-import zh from './zh'
 
 export interface Locale {
   connector: {
@@ -72,7 +71,6 @@ export interface Locale {
     noBridge: string
     retry: string
     savedKeyNote: string
-    language: string
     wslNotice: string
     download: string
     consumerSetup: string
@@ -344,10 +342,6 @@ export interface Locale {
     verboseDesc: string
     showToken: string
     showTokenDesc: string
-    sectionLanguage: string
-    langAuto: string
-    langEn: string
-    langZh: string
     sectionTheme: string
     themeLight: string
     themeDark: string
@@ -460,8 +454,6 @@ export interface Locale {
   }
 }
 
-export type Language = 'en' | 'zh'
-export type LangPreference = Language | 'auto'
 export type LocaleVars = Record<string, string | number>
 
 // Dot-path key type with autocomplete and compile-time missing-key checks.
@@ -471,22 +463,6 @@ type DotPaths<T, P extends string = ''> = {
 }[keyof T & string]
 
 export type LocaleKey = DotPaths<Locale>
-
-export const locales: Record<Language, Locale> = { en, zh }
-
-function detectLanguage(systemLocale: string): Language {
-  const normalizedLocale = systemLocale.toLowerCase()
-  if (normalizedLocale.startsWith('zh')) return 'zh'
-  return 'en'
-}
-
-export function resolveLanguage(
-  pref: LangPreference,
-  systemLocale: string,
-): Language {
-  if (pref === 'auto') return detectLanguage(systemLocale)
-  return pref
-}
 
 function getNestedValue(obj: unknown, path: string): string {
   const keys = path.split('.')
@@ -507,12 +483,6 @@ function interpolate(template: string, vars?: LocaleVars): string {
   return result
 }
 
-export function translate(
-  key: LocaleKey,
-  pref: LangPreference,
-  vars?: LocaleVars,
-  systemLocale = 'en',
-): string {
-  const lang = resolveLanguage(pref, systemLocale)
-  return interpolate(getNestedValue(locales[lang], key), vars)
+export function translate(key: LocaleKey, vars?: LocaleVars): string {
+  return interpolate(getNestedValue(en, key), vars)
 }

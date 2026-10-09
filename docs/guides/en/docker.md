@@ -1,10 +1,14 @@
 # Docker
 
-[Home](../../../README.md) · [Documentation](README.md) · [简体中文](../zh-CN/docker.md)
+[Home](../../../README.md) · [Documentation](README.md)
 
 ## Using with Docker
 
-The supplied Compose file uses the current published `ghcr.io/caozhiyuan/copilot-api:latest` image. No local image build is required. It stores gateway state in `/data` and runs the server as the non-root `bun` user.
+The supplied Compose file builds this fork locally as
+`copilot-api-gateway:local` using [the Gateway Dockerfile](../../../apps/gateway/Dockerfile).
+It never pulls an upstream Copilot API image. This fork does not publish
+container-registry releases. State remains in `/data`; the server runs as the
+non-root `bun` user. The `data-init` service uses the same locally built image.
 
 ### Quick start with Docker Compose
 
@@ -12,7 +16,7 @@ Run these commands from the repository root. Replace `YOUR_GATEWAY_API_KEY` with
 
 ```sh
 mkdir -p copilot-data
-docker compose pull
+docker compose build
 docker compose run --rm copilot-api --auth keys --add YOUR_GATEWAY_API_KEY
 docker compose run --rm copilot-api --auth login
 docker compose up -d

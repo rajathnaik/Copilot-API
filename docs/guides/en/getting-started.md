@@ -1,97 +1,114 @@
 # Installation and Startup
 
-[Home](../../../README.md) · [Documentation](README.md) · [简体中文](../zh-CN/getting-started.md)
+[Home](../../../README.md) | [Documentation](README.md)
 
-## Project Overview
+## Choose the right product
 
-A small AI gateway that can use GitHub Copilot, the built-in `codex` provider, or configured third-party providers such as DashScope. GitHub Copilot is optional: if no GitHub token is available, the server can still start in provider-only mode as long as at least one enabled provider is configured.
+- **Gateway:** run on the host with Copilot/provider access. It handles
+  authentication, model discovery, API serving and Microsoft Dev Tunnels.
+- **Connector:** install on each consumer machine. Enter the Gateway URL and
+  API key, choose a harness and connect. It does not need a local Gateway or
+  another Copilot sign-in. Start with the [Connector guide](connector.md).
 
-The gateway exposes OpenAI- and Anthropic-compatible APIs from one local endpoint, so tools like [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview), OpenCode, Codex, and OpenAI-compatible clients can share the same local server.
-
-On the GitHub Copilot path, the gateway prefers Copilot's native Anthropic-style Messages API when available, preserving more Claude-native behavior for tool-heavy workflows.
-
-## Important Notes
-
-> [!IMPORTANT]
-> **Before using, please be aware of the following:**
->
-> 1. **Codex configuration:** When using with Codex, add the gateway provider to `~/.codex/config.toml`. See [Codex `config.toml` Reference](codex.md#codex-configtoml-reference).
->
-> 2. **Claude Code configuration:** When using with Claude Code, please configure the model ID as `claude-opus-4-8[1m]`. Example claude `settings.json` see [Manual Configuration with `settings.json`](claude-code.md#manual-configuration-with-settingsjson).
->
-> 3. **OpenCode configuration:** When using with OpenCode, configure `~/.config/opencode/opencode.json` with `@ai-sdk/anthropic`. See [Using with OpenCode](opencode.md#using-with-opencode).
->
-> 4. **Built-in `copilot`, `codex` and third-party providers:** Run `npx @jeffreycao/copilot-api@latest auth` and choose `copilot`, `codex`, `deepseek`, `custom`, or other providers.
->
-> 5. **Note:** Before using GitHub Copilot, read the [GitHub Copilot Security Notice](../../../NOTICE.md#github-copilot-security-notice).
+The Gateway retains OpenAI Chat Completions, OpenAI Responses and Anthropic
+Messages, provider-only operation, streaming, usage monitoring and manual
+client integration. Both desktop applications are English-only.
 
 ## Prerequisites
 
-- Bun (>= 1.2.x)
-- Node.js >= 22.13.0 if you plan to run the published CLI with `npx`
-- GitHub account with Copilot subscription only if you want to use the GitHub Copilot provider
-- An API key or OAuth login for at least one configured provider if you want to run without GitHub Copilot
+Installed desktop releases bundle their runtime. Source development requires:
+
+- Bun 1.4.2 (tested).
+- Node.js `^22.18.0 || ^24.11.0 || >=26.0.0` for the build toolchain.
+- A Copilot subscription for the GitHub Copilot provider, or an API key/OAuth
+  login for a supported alternative provider.
+- Microsoft Dev Tunnels CLI and sign-in on the host if you want remote access.
+  Gateway's Remote Access screen provides install/sign-in guidance.
 
 ## Installation
 
-To install dependencies, run:
+This fork publishes explicitly approved product installers at
+[rajathnaik/Copilot-API releases](https://github.com/rajathnaik/Copilot-API/releases).
+- [Gateway 2.7.1](https://github.com/rajathnaik/Copilot-API/releases/tag/v2.7.1):
+  install on the host with Copilot/provider access.
+- [Connector 2.7.4](https://github.com/rajathnaik/Copilot-API/releases/tag/connector-v2.7.4):
+  install on each coding-harness consumer.
+
+Both releases provide Windows x64, macOS arm64 and Linux x64 installers and
+SHA256 checksums. Upstream npm packages and registry images are different builds.
+There is no npm installation command for this fork.
+
+For source development:
 
 ```sh
-bun install
+git clone https://github.com/rajathnaik/Copilot-API.git
+cd Copilot-API
+bun install --frozen-lockfile
 ```
+
+Run one install at the workspace root, not separate installs in each app.
 
 ## Running from Source
 
-> [!NOTE]
-> Building from source with `tsdown@0.23` requires Node.js `^22.18.0 || ^24.11.0 || >=26.0.0`. This is a build-time requirement only; the published CLI supports Node.js >= 22.13.0.
-
-The project can be run from source in several ways:
-
-### Development Mode
+### Gateway desktop
 
 ```sh
-bun run dev start
+bun run --cwd apps/gateway/desktop dev
 ```
 
-### Production Mode
+On Windows, [launch-desktop.ps1](../../../launch-desktop.ps1) builds stale
+bundles and launches the checkout. See [Desktop App](desktop.md).
+
+### Gateway CLI
+
+Run from the repository root:
 
 ```sh
+bun run start auth login
 bun run start start
 ```
 
-> The trailing `start` is the CLI subcommand passed to `apps/gateway/src/main.ts`, not a typo: `bun run dev start` runs watch mode, `bun run start start` runs production.
-
-## Using with npx
-
-You can run the project directly using npx:
-
-> [!IMPORTANT]
-> Token usage storage uses Node's built-in `node:sqlite` module when running with `npx`. It is enabled on Node.js >= 22.13.0, the first release where `node:sqlite` works without `--experimental-sqlite`. On older Node.js versions the CLI still starts, but token usage storage is disabled.
->
-> If you want token usage storage without upgrading Node.js, run the published CLI with Bun instead: `bunx --bun @jeffreycao/copilot-api@latest start`.
+For watch mode, use `bun run dev start`. The trailing `start` is the Gateway
+CLI subcommand, not a typo. To build and run the CLI:
 
 ```sh
-npx @jeffreycao/copilot-api@latest start
+bun run build
+bun apps/gateway/dist/main.js start
 ```
 
-With options:
+The default listener is `http://127.0.0.1:4141`. Verify model discovery:
 
 ```sh
-npx @jeffreycao/copilot-api@latest auth keys --add your-gateway-api-key
-npx @jeffreycao/copilot-api@latest start --host 0.0.0.0 --port 8080
+curl http://127.0.0.1:4141/v1/models
 ```
 
-Binding to `0.0.0.0` exposes the gateway to the network, so the server requires at least one gateway API key and restricts CORS to same-origin requests.
+If Gateway API keys are enabled, provide the configured key in an
+`Authorization: Bearer` or `x-api-key` header. Do not share raw credentials
+in screenshots, diagnostics or committed files.
 
-For authentication or provider configuration only:
+### Network access and providers
+
+Prefer **Settings > Security** in Gateway to configure client keys. CLI users
+can manage keys and listener options as follows; note that arguments are
+visible in process listings and shell history:
 
 ```sh
-npx @jeffreycao/copilot-api@latest auth
+bun run start auth keys --add YOUR_GATEWAY_API_KEY
+bun run start start --host 0.0.0.0 --port 8080
 ```
 
-To run without GitHub Copilot, configure at least one provider first, then start the server normally:
+Non-loopback listeners require a Gateway API key and restrict CORS to
+same-origin requests. For consumer access through Microsoft Dev Tunnels, use
+Gateway's Remote Access screen and Connector rather than hand-editing configs.
+
+Copilot is optional. Configure an enabled provider before starting without a
+GitHub token:
 
 ```sh
-npx @jeffreycao/copilot-api@latest auth login --provider dashscope
-npx @jeffreycao/copilot-api@latest start
+bun run start auth login --provider dashscope
+bun run start start
 ```
+
+See the [CLI reference](cli.md), [API authentication](api.md) and
+[locally built Docker setup](docker.md). Before using Copilot, read the
+[responsible-use notice](../../../NOTICE.md#github-copilot-security-notice).

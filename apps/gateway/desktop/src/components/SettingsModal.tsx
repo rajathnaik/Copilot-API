@@ -8,7 +8,6 @@ import type {
 } from '../types/ipc'
 import { useLanguage } from '@copilot-api/shared/language'
 import { useTheme } from '../contexts/ThemeContext'
-import { translate, type LangPreference } from '@copilot-api/shared/locales'
 import { isValidServerHost } from '../lib/server-url'
 import AppUpdatePanel from './AppUpdatePanel'
 
@@ -239,7 +238,7 @@ export default function SettingsModal({
   initialSection = 'general',
   checkForUpdatesOnOpen = false,
 }: SettingsModalProps) {
-  const { t, setLangPref } = useLanguage()
+  const { t } = useLanguage()
   const { setThemePref } = useTheme()
   const [section, setSection] = useState<Section>(initialSection)
   const [settings, setSettings] = useState<DesktopSettings>({
@@ -256,7 +255,6 @@ export default function SettingsModal({
     accountType: 'individual',
     verbose: false,
     showToken: false,
-    language: 'auto',
     theme: 'auto',
     proxy: {
       mode: 'system',
@@ -343,18 +341,10 @@ export default function SettingsModal({
       if (saveErrors.length > 0) {
         throw new Error(saveErrors.join('\n'))
       }
-      setLangPref(settings.language)
       setThemePref(settings.theme)
 
       if (shouldPromptRestart) {
-        window.alert(
-          translate(
-            'settings.restartAppPrompt',
-            settings.language,
-            undefined,
-            navigator.language,
-          ),
-        )
+        window.alert(t('settings.restartAppPrompt'))
       }
 
       onClose()
@@ -365,7 +355,6 @@ export default function SettingsModal({
       ])
       if (savedSettings) {
         setSettings(savedSettings)
-        setLangPref(savedSettings.language)
         setThemePref(savedSettings.theme)
       }
       if (savedServerKeys) {
@@ -378,12 +367,6 @@ export default function SettingsModal({
       setSaving(false)
     }
   }
-
-  const langOptions: { value: LangPreference; label: string }[] = [
-    { value: 'auto', label: t('settings.langAuto') },
-    { value: 'en', label: t('settings.langEn') },
-    { value: 'zh', label: t('settings.langZh') },
-  ]
 
   const themeOptions: {
     value: ThemePreference
@@ -505,28 +488,6 @@ export default function SettingsModal({
             {section === 'general' && (
               <div>
                 <div className="mb-1">
-                  <div className="text-[13px] font-semibold text-ink mb-2">
-                    {t('settings.sectionLanguage')}
-                  </div>
-                  <select
-                    value={settings.language}
-                    onChange={(e) =>
-                      setSettings((s) => ({
-                        ...s,
-                        language: e.target.value as LangPreference,
-                      }))
-                    }
-                    className={selectClass}
-                  >
-                    {langOptions.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="mb-1 mt-4">
                   <div className="text-[13px] font-semibold text-ink mb-2">
                     {t('settings.sectionTheme')}
                   </div>

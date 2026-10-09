@@ -792,7 +792,7 @@ export async function runAuthKeys(options: RunAuthKeysOptions): Promise<void> {
   const currentKeys = getConfiguredApiKeys()
   if (currentKeys.length === 0) {
     consola.info(
-      "No API keys configured. Run `npx @jeffreycao/copilot-api@latest auth keys --add <key>` to add one.",
+      "No API keys configured. From the source checkout, run `bun run start auth keys --add <key>` to add one, or use Gateway Settings > Security.",
     )
     return
   }

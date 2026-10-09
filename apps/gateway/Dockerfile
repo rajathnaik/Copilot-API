@@ -6,7 +6,7 @@ COPY apps/gateway/package.json apps/gateway/package.json
 COPY apps/gateway/desktop/package.json apps/gateway/desktop/package.json
 COPY apps/connector/package.json apps/connector/package.json
 COPY packages/shared/package.json packages/shared/package.json
-RUN bun install --frozen-lockfile --filter '@jeffreycao/copilot-api' --ignore-scripts
+RUN bun install --frozen-lockfile --filter 'copilot-api-gateway' --ignore-scripts
 
 COPY . .
 RUN bun run --cwd apps/gateway build
@@ -23,7 +23,7 @@ COPY apps/gateway/package.json apps/gateway/package.json
 COPY apps/gateway/desktop/package.json apps/gateway/desktop/package.json
 COPY apps/connector/package.json apps/connector/package.json
 COPY packages/shared/package.json packages/shared/package.json
-RUN bun install --frozen-lockfile --filter '@jeffreycao/copilot-api' --production --ignore-scripts --no-cache
+RUN bun install --frozen-lockfile --filter 'copilot-api-gateway' --production --ignore-scripts --no-cache
 
 COPY --from=builder /app/apps/gateway/dist ./apps/gateway/dist
 COPY --from=builder /app/apps/gateway/pages ./apps/gateway/pages

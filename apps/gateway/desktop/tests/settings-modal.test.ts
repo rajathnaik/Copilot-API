@@ -29,7 +29,6 @@ const initialSettings: DesktopSettings = {
   accountType: 'individual',
   verbose: false,
   showToken: false,
-  language: 'en',
   theme: 'light',
   proxy: {
     mode: 'system',
@@ -136,7 +135,7 @@ async function renderHeader(onChangeAuth = () => {}) {
     phase: 'idle',
     currentVersion: '2.6.31',
     manualInstall: false,
-    releaseUrl: 'https://github.com/caozhiyuan/copilot-api/releases',
+    releaseUrl: 'https://github.com/rajathnaik/Copilot-API/releases',
   }
   Object.assign(window.electronAPI, {
     windowIsMaximized: () => Promise.resolve(false),
@@ -162,7 +161,7 @@ describe('desktop menu shortcuts', () => {
         phase: 'not-available' as const,
         currentVersion: '2.6.31',
         manualInstall: false,
-        releaseUrl: 'https://github.com/caozhiyuan/copilot-api/releases',
+        releaseUrl: 'https://github.com/rajathnaik/Copilot-API/releases',
       }),
     )
     Object.assign(window.electronAPI, { checkAppUpdate: check })
@@ -179,7 +178,7 @@ describe('desktop menu shortcuts', () => {
     await click('Cancel')
     await click('File')
     await click('Settings')
-    expect(container.querySelector('select')).not.toBeNull()
+    expect(container.textContent).toContain('Theme')
     expect(check).toHaveBeenCalledTimes(1)
   })
 
@@ -251,12 +250,6 @@ async function changeText(
 
 async function changePreferences() {
   await click('Dark')
-  const select = container.querySelector('select')
-  if (!select) throw new Error('Missing language selector')
-  await act(async () => {
-    select.value = 'zh'
-    select.dispatchEvent(new Event('change', { bubbles: true }))
-  })
 }
 
 async function changeAdminKey() {
@@ -267,6 +260,14 @@ async function changeAdminKey() {
 }
 
 describe('settings modal partial saves', () => {
+  test('uses English on a Chinese system without offering a language selector', async () => {
+    Object.defineProperty(win.navigator, 'language', { value: 'zh-CN' })
+    await render()
+    expect(container.textContent).toContain('Theme')
+    expect(container.textContent).not.toContain('Language')
+    expect(container.querySelector('select')).toBeNull()
+  })
+
   test('saves desktop preferences when persisted keys fail to refresh', async () => {
     saveServerKeys.mockImplementationOnce((update) => {
       persistKeys(update)
@@ -279,10 +280,9 @@ describe('settings modal partial saves', () => {
     await changeAdminKey()
     await click('Save')
     expect(saveSettings).toHaveBeenCalledWith(
-      expect.objectContaining({ theme: 'dark', language: 'zh' }),
+      expect.objectContaining({ theme: 'dark' }),
     )
     expect(settings.theme).toBe('dark')
-    expect(settings.language).toBe('zh')
     expect(keys.adminApiKey).toBe('new-admin')
     expect(document.documentElement.classList.contains('dark')).toBe(true)
     expect(alert).toHaveBeenCalledTimes(1)
@@ -300,7 +300,6 @@ describe('settings modal partial saves', () => {
     await changeAdminKey()
     await click('Save')
     expect(settings.theme).toBe('dark')
-    expect(settings.language).toBe('zh')
     expect(keys.adminApiKey).toBe('old-admin')
     expect(container.querySelector<HTMLInputElement>('input')?.value).toBe(
       'old-admin',
@@ -375,7 +374,6 @@ describe('settings modal partial saves', () => {
     await click('Save')
     expect(saveServerKeys).not.toHaveBeenCalled()
     expect(settings.theme).toBe('dark')
-    expect(settings.language).toBe('zh')
     expect(document.documentElement.classList.contains('dark')).toBe(true)
     expect(alert.mock.calls[0]?.[0]).toContain(
       'Desktop settings saving or service refresh failed',
@@ -391,7 +389,6 @@ describe('settings modal partial saves', () => {
     expect(saveServerKeys).toHaveBeenCalledWith({ adminApiKey: 'new-admin' })
     expect(keys.adminApiKey).toBe('new-admin')
     expect(settings.theme).toBe('dark')
-    expect(settings.language).toBe('zh')
     expect(onClose).toHaveBeenCalledTimes(1)
     expect(alert).not.toHaveBeenCalled()
   })
@@ -414,7 +411,6 @@ describe('settings modal partial saves', () => {
     await click('Save')
     expect(saveServerKeys).not.toHaveBeenCalled()
     expect(settings.theme).toBe('dark')
-    expect(settings.language).toBe('zh')
     expect(onClose).toHaveBeenCalledTimes(1)
     expect(alert).not.toHaveBeenCalled()
   })

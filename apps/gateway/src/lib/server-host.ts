@@ -81,7 +81,7 @@ export function resolveServerBinding(
 
   if (networkExposed && !hasApiKeys) {
     throw new Error(
-      `Refusing to listen on non-loopback host ${JSON.stringify(normalizedHostname)} without gateway API keys. Run \`npx @jeffreycao/copilot-api@latest auth keys --add <key>\` first, or use \`--host ${DEFAULT_SERVER_HOST}\`.`,
+      `Refusing to listen on non-loopback host ${JSON.stringify(normalizedHostname)} without gateway API keys. Configure keys in Gateway Settings > Security or run \`bun run start auth keys --add <key>\` from the source checkout first, or use \`--host ${DEFAULT_SERVER_HOST}\`.`,
     )
   }
 

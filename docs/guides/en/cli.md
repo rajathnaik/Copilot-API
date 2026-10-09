@@ -1,10 +1,15 @@
 # CLI Reference
 
-[Home](../../../README.md) · [Documentation](README.md) · [简体中文](../zh-CN/cli.md)
+[Home](../../../README.md) · [Documentation](README.md)
 
 ## Command Structure
 
-Copilot API now uses a subcommand structure with these main commands:
+Run this fork's CLI from the repository root with `bun run start <command>`.
+For example, `bun run start auth login` signs in and `bun run start start`
+starts the server. The `copilot-api` spelling below names the CLI interface;
+this fork does not publish an npm package.
+
+The main commands are:
 
 - `start`: Start the gateway server. If a GitHub token is available, the server starts with Copilot enabled. If no GitHub token is available, it starts in provider-only mode when at least one enabled provider exists; otherwise it guides you through provider setup.
 - `auth`: Run provider login or configuration without starting the server. Use it for GitHub Copilot login, Codex OAuth, or third-party provider API key setup.
@@ -67,27 +72,24 @@ Gateway API keys live under `auth.apiKeys` in `config.json`. Manage them with `c
 
 ## Example Usage
 
-Common `npx` commands:
+Common commands from this fork's source checkout:
 
 ```sh
 # Start the gateway
-npx @jeffreycao/copilot-api@latest start
+bun run start start
 
 # Start on a custom port with verbose logging
-npx @jeffreycao/copilot-api@latest start --port 8080 --verbose
+bun run start start --port 8080 --verbose
 
 # Run the auth flow
-npx @jeffreycao/copilot-api@latest auth login
+bun run start auth login
 
 # Configure a third-party provider, then run without GitHub Copilot
-npx @jeffreycao/copilot-api@latest auth login --provider dashscope
-npx @jeffreycao/copilot-api@latest start
+bun run start auth login --provider dashscope
+bun run start start
 
 # Print debug information as JSON
-npx @jeffreycao/copilot-api@latest debug --json
-
-# Run the published CLI with Bun instead of Node.js
-bunx --bun @jeffreycao/copilot-api@latest start
+bun run start debug --json
 ```
 
 OpenAI-compatible provider examples after configuring `dashscope`:

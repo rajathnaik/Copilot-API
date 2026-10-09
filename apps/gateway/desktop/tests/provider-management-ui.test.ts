@@ -390,7 +390,7 @@ describe('provider management UI', () => {
       version: '2.6.31',
       manualInstall: false,
       releaseUrl:
-        'https://github.com/caozhiyuan/copilot-api/releases/tag/v2.6.31',
+        'https://github.com/rajathnaik/Copilot-API/releases/tag/v2.6.31',
     }
     Object.assign(window.electronAPI, {
       getServerStatus: () =>

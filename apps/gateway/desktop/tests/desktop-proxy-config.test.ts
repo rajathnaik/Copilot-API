@@ -179,7 +179,6 @@ describe('desktop proxy config', () => {
       accountType: 'individual',
       verbose: false,
       showToken: false,
-      language: 'auto',
       theme: 'auto',
       proxy: {
         mode: 'system',
@@ -204,7 +203,6 @@ describe('desktop proxy config', () => {
         accountType: 'enterprise',
         verbose: true,
         showToken: true,
-        language: 'zh',
         proxy: createProxySettings({ mode: 'direct' }),
       }),
     ).toEqual({
@@ -221,7 +219,6 @@ describe('desktop proxy config', () => {
       accountType: 'enterprise',
       verbose: true,
       showToken: true,
-      language: 'zh',
       theme: 'auto',
       proxy: createProxySettings({ mode: 'direct' }),
     })
@@ -239,6 +236,29 @@ describe('desktop proxy config', () => {
     expect(normalizeSettings({}).theme).toBe('auto')
     expect(normalizeSettings(null).theme).toBe('auto')
   })
+
+  test.each(['zh', 'en', 'auto'])(
+    'drops legacy %s language preferences without resetting other settings',
+    (language) => {
+      const legacy = {
+        ...normalizeSettings(null),
+        language,
+        apiHome: 'existing-home',
+        lastPort: 5151,
+        theme: 'dark' as const,
+        proxy: createProxySettings({ mode: 'direct' }),
+      }
+      const settings = normalizeSettings(legacy)
+      expect(settings).not.toHaveProperty('language')
+      expect(settings).toEqual({
+        ...normalizeSettings(null),
+        apiHome: 'existing-home',
+        lastPort: 5151,
+        theme: 'dark',
+        proxy: createProxySettings({ mode: 'direct' }),
+      })
+    },
+  )
 
   test('preserves the OS login state when migrating old settings', () => {
     setLaunchAtLoginFallback(true)

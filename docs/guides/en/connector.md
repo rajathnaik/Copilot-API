@@ -6,6 +6,7 @@ Copilot API Connector is a separate, client-only desktop application with
 configurations for **Codex, Claude Code, OpenCode, Hermes Agent and OpenClaw**.
 It does not start a gateway, host a tunnel, or ask
 the consumer to sign in to GitHub Copilot.
+The app is English-only; light, dark and system theme preferences remain.
 
 ## Host and consumer setup
 
@@ -82,21 +83,23 @@ saved profiles and OS-encrypted credentials; uninstalling first is unnecessary.
 
 The connector has its own release version in
 `apps/connector/package.json` (`version`), independent of the
-gateway's package version. The current Connector release is **2.7.3**,
-with installer **Copilot.API.Connector.Setup.2.7.3.exe**. Earlier Codex-only and
+gateway's package version. The current Connector release is **2.7.4**,
+with installer **Copilot.API.Connector.Setup.2.7.4.exe**. Earlier Codex-only and
 multi-harness builds both used 2.7.0 and the same installer filename, so an older
 downloaded copy is not distinguishable by its name/version alone.
 
-[Download the Windows Connector installer](https://github.com/rajathnaik/Copilot-API/releases/download/connector-v2.7.3/Copilot.API.Connector.Setup.2.7.3.exe).
+[Download the Windows Connector installer](https://github.com/rajathnaik/Copilot-API/releases/download/connector-v2.7.4/Copilot.API.Connector.Setup.2.7.4.exe).
 This single setup file installs the packaged app; consumers do not need to
 download, clone or build the source project.
 
+Connector 2.7.4 makes the app English-only and includes the fork cleanup while
+preserving all five harnesses, themes, credentials and connection history.
 Connector 2.7.3 adds on-demand saved-key reveal and confirmed **Repair
 connection** with a backup of the current configuration. Install the newer
 version to get these controls; updating source does not update an installed app.
 
 After installation, open Copilot API Connector from the Start menu and verify
-**Connector version 2.7.3** in its header and all five harness options. If an old
+**Connector version 2.7.4** in its header and all five harness options. If an old
 window was still running, fully exit it and reopen the app. If the old UI still
 appears, check the launched executable's location and Windows file properties
 before removing anything; the shortcut may point to another installation.

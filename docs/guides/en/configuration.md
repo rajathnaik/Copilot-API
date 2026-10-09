@@ -1,6 +1,6 @@
 # Configuration Reference
 
-[Home](../../../README.md) · [Documentation](README.md) · [简体中文](../zh-CN/configuration.md)
+[Home](../../../README.md) · [Documentation](README.md)
 
 ## Configuration (config.json)
 

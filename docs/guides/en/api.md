@@ -1,6 +1,6 @@
 # API and Authentication
 
-[Home](../../../README.md) · [Documentation](README.md) · [简体中文](../zh-CN/api.md)
+[Home](../../../README.md) · [Documentation](README.md)
 
 ## API Authentication
 

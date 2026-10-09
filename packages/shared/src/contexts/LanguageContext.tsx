@@ -1,26 +1,15 @@
-import { createContext, useContext, useState, type ReactNode } from 'react'
-import { translate, type LangPreference, type LocaleKey } from '../locales'
+import { createContext, useContext, type ReactNode } from 'react'
+import { translate } from '../locales'
 
 interface LanguageContextValue {
-  langPref: LangPreference
-  setLangPref: (pref: LangPreference) => void
-  t: (key: LocaleKey, vars?: Record<string, string | number>) => string
+  t: typeof translate
 }
 
 const LanguageContext = createContext<LanguageContextValue | null>(null)
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [langPref, setLangPref] = useState<LangPreference>('auto')
-
-  const t = (
-    key: LocaleKey,
-    vars?: Record<string, string | number>,
-  ): string => {
-    return translate(key, langPref, vars, navigator.language)
-  }
-
   return (
-    <LanguageContext.Provider value={{ langPref, setLangPref, t }}>
+    <LanguageContext.Provider value={{ t: translate }}>
       {children}
     </LanguageContext.Provider>
   )

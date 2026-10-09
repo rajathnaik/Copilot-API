@@ -1,6 +1,29 @@
 # Plugins and Tool Search
 
-[Home](../../../README.md) · [Documentation](README.md) · [简体中文](../zh-CN/integrations.md)
+[Home](../../../README.md) · [Documentation](README.md)
+
+These optional integrations are retained because they implement Gateway
+behavior. They are not required for ordinary [Connector](connector.md) setup.
+This fork's MCP bridge runs locally from its built source, not an upstream npm
+package, and does not start an API server or require a second Copilot sign-in.
+
+Build the CLI with `bun run build` at the repository root. Install Bun on the
+machine running the bridge, and set `COPILOT_API_GATEWAY_ENTRY` to the **absolute**
+path of `apps/gateway/dist/main.js` before launching Claude Code:
+
+```powershell
+$env:COPILOT_API_GATEWAY_ENTRY = 'C:\path\to\Copilot-API\apps\gateway\dist\main.js'
+claude
+```
+
+```sh
+export COPILOT_API_GATEWAY_ENTRY="$PWD/apps/gateway/dist/main.js"
+claude
+```
+
+Claude Code expands this variable in `.mcp.json` arguments. The path stays
+outside committed configuration and must remain available while the bridge
+runs. An unset variable is a configuration error; there is no upstream fallback.
 
 ## GPT Tool Search
 
@@ -17,8 +40,8 @@ Add the tool search bridge to the MCP config used by Claude Code:
   "mcpServers": {
     "tool_search": {
       "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@jeffreycao/copilot-api@latest", "mcp"]
+      "command": "bun",
+      "args": ["${COPILOT_API_GATEWAY_ENTRY}", "mcp"]
     }
   }
 }
@@ -31,13 +54,15 @@ opencode v2 does not need this bridge. It already defers MCP tools through Code 
   "mcp": {
     "tool_search": {
       "type": "local",
-      "command": ["npx", "-y", "@jeffreycao/copilot-api@latest", "mcp"]
+      "command": ["bun", "/absolute/path/to/Copilot-API/apps/gateway/dist/main.js", "mcp"]
     }
   }
 }
 ```
 
-For local development, use `bun` as the command and `["run", "./apps/gateway/src/main.ts", "mcp"]` as the args.
+For OpenCode, replace the example with your actual absolute entry path. For
+unbundled source development, use `bun` with the absolute path of
+`apps/gateway/src/main.ts` and `mcp`; do not rely on the harness's working directory.
 
 Internally, the gateway now configures OpenAI Responses `tool_search` in client-executed mode. Deferred tools are still exposed as searchable namespaces, but the model is explicitly asked to return the exact deferred tool names it wants to load next.
 
@@ -60,7 +85,7 @@ The Claude Code integration is packaged as two plugins:
 Add the marketplace remotely:
 
 ```sh
-/plugin marketplace add https://github.com/caozhiyuan/copilot-api.git
+/plugin marketplace add https://github.com/rajathnaik/Copilot-API.git
 ```
 
 Install the plugins from the marketplace:
@@ -77,7 +102,10 @@ The `agent-inject` plugin also registers a `UserPromptSubmit` hook that returns 
 - `CLAUDE_PLUGIN_ENABLE_QUESTION_RULES=1` enables the two reminders about using the `question` tool automatically for Claude Code.
 - `CLAUDE_PLUGIN_ENABLE_NO_BACKGROUND_AGENTS_RULE=1` enables the `run_in_background: true` avoidance reminder for agent hooks.
 
-The `tool-search` plugin bundles the same MCP bridge described in [GPT Tool Search](#gpt-tool-search), so Claude Code users do not need to add the `tool_search` server manually when they install that plugin.
+This fork's `tool-search` plugin 1.1.0 registers the same MCP bridge described in
+[GPT Tool Search](#gpt-tool-search). Configure Bun and
+`COPILOT_API_GATEWAY_ENTRY` before launching Claude Code; users do not need to
+add a duplicate server manually. The plugin does not bundle Gateway's CLI.
 
 The plugin also auto-approves bridge calls through a `PermissionRequest` hook scoped exactly to `mcp__plugin_tool-search_tool_search__search`. The hook does not approve other MCP tools and does not override explicit `ask` or `deny` permission rules.
 

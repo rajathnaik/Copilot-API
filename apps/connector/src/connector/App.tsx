@@ -52,7 +52,7 @@ function unwrap<T>(result: ConnectorResult<T>): T {
 }
 
 export default function ConnectorApp() {
-  const { t, langPref, setLangPref } = useLanguage()
+  const { t } = useLanguage()
   const [savedTheme] = useState(readTheme)
   const { themePref, setThemePref } = useThemePreference(savedTheme.preference)
   const [status, setStatus] = useState<ConnectorStatus | null>(null)
@@ -120,7 +120,6 @@ export default function ConnectorApp() {
       active = false
       keyRequest.current += 1
     }
-    // Initial detection should not replace user input on language changes.
   }, [harness])
 
   function updateConnection(connection: ConnectorStatus['connection']) {
@@ -331,29 +330,6 @@ export default function ConnectorApp() {
               <option value="auto">{t('settings.themeAuto')}</option>
               <option value="light">{t('settings.themeLight')}</option>
               <option value="dark">{t('settings.themeDark')}</option>
-            </select>
-          </div>
-          <div className="text-xs text-ink-soft">
-            <label htmlFor="connector-language">
-              {t('connector.language')}
-            </label>
-            <select
-              id="connector-language"
-              className={`${inputClass} mt-1`}
-              value={langPref}
-              onChange={(event) => {
-                const preference = event.target.value
-                if (
-                  preference === 'auto'
-                  || preference === 'en'
-                  || preference === 'zh'
-                )
-                  setLangPref(preference)
-              }}
-            >
-              <option value="auto">Auto</option>
-              <option value="en">English</option>
-              <option value="zh">中文</option>
             </select>
           </div>
         </div>

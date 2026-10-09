@@ -1,8 +1,8 @@
 {
   "name": "copilot-api-desktop",
-  "version": "2.7.0",
+  "version": "2.7.1",
   "description": "Copilot API Desktop App",
-  "author": "jeffreycao",
+  "author": "Rajath Naik",
   "desktopName": "copilot-api.desktop",
   "main": "out/main/index.js",
   "trustedDependencies": [
@@ -30,8 +30,8 @@
     "appId": "com.copilot-api.desktop",
     "publish": {
       "provider": "github",
-      "owner": "caozhiyuan",
-      "repo": "copilot-api",
+      "owner": "rajathnaik",
+      "repo": "Copilot-API",
       "releaseType": "release"
     },
     "productName": "Copilot API",

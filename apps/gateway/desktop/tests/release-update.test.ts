@@ -4,7 +4,7 @@ import {
   checkReleaseUpdate,
   getReleaseUpdate,
   isNewerStableVersion,
-  LATEST_RELEASE_API,
+  RELEASES_API,
 } from '../electron/release-update'
 
 const release = {
@@ -48,7 +48,7 @@ describe('stable release selection', () => {
       expect(getReleaseUpdate(release, '2.6.28', platform, arch)).toEqual({
         version: '2.6.29',
         releaseUrl:
-          'https://github.com/caozhiyuan/copilot-api/releases/tag/v2.6.29',
+          'https://github.com/rajathnaik/Copilot-API/releases/tag/v2.6.29',
       })
     },
   )
@@ -79,6 +79,8 @@ describe('stable release selection', () => {
     { ...release, prerelease: true },
     { ...release, tag_name: 29 },
     { ...release, tag_name: 'v2.6.29-beta' },
+    { ...release, tag_name: 'connector-v2.6.29' },
+    { ...release, tag_name: '2.6.29' },
     { ...release, assets: null },
   ])('ignores malformed, draft and prerelease responses', (candidate) => {
     expect(getReleaseUpdate(candidate, '2.6.28', 'win32', 'x64')).toBeNull()
@@ -92,17 +94,75 @@ describe('stable release selection', () => {
   test('uses a bounded unauthenticated GitHub request and validates its response', async () => {
     const fetchRelease = mock((_url: string, options?: RequestInit) => {
       expect(options?.signal).toBeInstanceOf(AbortSignal)
-      return Promise.resolve(Response.json(release))
+      return Promise.resolve(Response.json([release]))
     })
     expect(
       await checkReleaseUpdate(fetchRelease, '2.6.28', 'darwin', 'arm64'),
     ).toMatchObject({ version: '2.6.29' })
     expect(fetchRelease).toHaveBeenCalledWith(
-      LATEST_RELEASE_API,
+      `${RELEASES_API}?per_page=100&page=1`,
       expect.objectContaining({
         headers: { Accept: 'application/vnd.github+json' },
       }),
     )
+  })
+
+  test('finds Gateway releases behind newer Connector releases across pages', async () => {
+    const fetchRelease = mock((url: string) => {
+      const releases =
+        url.endsWith('page=1') ?
+          [{ ...release, tag_name: 'connector-v9.0.0' }]
+        : [release, { ...release, tag_name: 'v2.6.28' }]
+      return Promise.resolve(
+        Response.json(releases, {
+          headers:
+            url.endsWith('page=1') ?
+              { link: '<https://example.com/untrusted>; rel="next"' }
+            : {},
+        }),
+      )
+    })
+    expect(
+      await checkReleaseUpdate(fetchRelease, '2.6.27', 'win32', 'x64'),
+    ).toMatchObject({ version: '2.6.29' })
+    expect(fetchRelease.mock.calls.map(([url]) => url)).toEqual([
+      `${RELEASES_API}?per_page=100&page=1`,
+      `${RELEASES_API}?per_page=100&page=2`,
+    ])
+  })
+
+  test('reports no update when the fork has only Connector installers', async () => {
+    expect(
+      await checkReleaseUpdate(
+        () =>
+          Promise.resolve(
+            Response.json([{ ...release, tag_name: 'connector-v9.0.0' }]),
+          ),
+        '2.6.28',
+        'win32',
+        'x64',
+      ),
+    ).toBeNull()
+  })
+
+  test('rejects a non-list response and bounded pagination exhaustion', async () => {
+    await expect(
+      checkReleaseUpdate(
+        () => Promise.resolve(Response.json(release)),
+        '2.6.28',
+        'win32',
+        'x64',
+      ),
+    ).rejects.toThrow('invalid release list')
+    const fetchRelease = mock(() =>
+      Promise.resolve(
+        Response.json([], { headers: { link: '<ignored>; rel="next"' } }),
+      ),
+    )
+    await expect(
+      checkReleaseUpdate(fetchRelease, '2.6.28', 'win32', 'x64'),
+    ).rejects.toThrow('update-check limit')
+    expect(fetchRelease).toHaveBeenCalledTimes(10)
   })
 
   test('reports HTTP and malformed JSON errors', async () => {

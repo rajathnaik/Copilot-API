@@ -1,6 +1,9 @@
 # OpenCode
 
-[Home](../../../README.md) · [Documentation](README.md) · [简体中文](../zh-CN/opencode.md)
+[Home](../../../README.md) · [Documentation](README.md)
+
+For automatic remote setup, use [Connector](connector.md). The steps below
+describe manual Gateway integration.
 
 ## Using with OpenCode
 
@@ -11,8 +14,8 @@ OpenCode already has a direct GitHub Copilot provider. Use this section when you
 Start the AI gateway with the OpenCode OAuth app:
 
 ```sh
-npx @jeffreycao/copilot-api@latest auth --oauth-app=opencode
-npx @jeffreycao/copilot-api@latest start
+bun run start auth --oauth-app=opencode
+bun run start start
 ```
 
 Then point OpenCode at the gateway with `@ai-sdk/anthropic`.

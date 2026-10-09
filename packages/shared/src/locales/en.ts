@@ -94,14 +94,13 @@ const en: Locale = {
     retry: 'Retry detection',
     savedKeyNote:
       'A key is saved securely. Show key reveals it only on request; Hide key or leaving this window clears the revealed copy. Reconnect uses the saved key for the same URL unless you enter a replacement.',
-    language: 'Language',
     wslNotice:
       'This app configures native OS installations, not separate WSL environments. Configure WSL clients from their own environment.',
     download: 'Download Copilot API Connector',
     consumerSetup:
       'On the consumer machine, use the separate Copilot API Connector installer. Enter this tunnel URL and a gateway API key; no local gateway or Copilot sign-in is needed.',
     downloadError:
-      'Could not open the releases page. Visit https://github.com/caozhiyuan/copilot-api/releases to download the connector.',
+      'Could not open the releases page. Visit https://github.com/rajathnaik/Copilot-API/releases to download the connector.',
   },
   updates: {
     title: 'Updates',
@@ -399,10 +398,6 @@ const en: Locale = {
     verboseDesc: 'Output more detailed debug information',
     showToken: 'Show token',
     showTokenDesc: 'Print GitHub/Copilot token values in logs',
-    sectionLanguage: 'Language',
-    langAuto: 'Follow system',
-    langEn: 'English',
-    langZh: '中文',
     sectionTheme: 'Theme',
     themeLight: 'Light',
     themeDark: 'Dark',

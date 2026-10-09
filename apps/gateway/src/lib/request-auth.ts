@@ -47,7 +47,7 @@ export function getMissingApiKeysMessage(): string | null {
 
   return [
     "Requests currently bypass authentication.",
-    "Run `npx @jeffreycao/copilot-api@latest auth keys --add <key>` to enable API key auth.",
+    "Configure keys in Gateway Settings > Security or run `bun run start auth keys --add <key>` from the source checkout to enable API key auth.",
   ].join(" ")
 }
 
