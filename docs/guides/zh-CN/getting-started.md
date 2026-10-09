@@ -69,7 +69,7 @@ bun run dev start
 bun run start start
 ```
 
-> 结尾的 `start` 是传给 `src/main.ts` 的 CLI 子命令，不是笔误：`bun run dev start` 是 watch 模式，`bun run start start` 是生产模式。
+> 结尾的 `start` 是传给 `apps/gateway/src/main.ts` 的 CLI 子命令，不是笔误：`bun run dev start` 是 watch 模式，`bun run start start` 是生产模式。
 
 <a id="using-with-npx"></a>
 

@@ -1,9 +1,12 @@
 # Dependencies and build output
 node_modules/
 dist/
-desktop/dist/
-desktop/out/
-desktop/release/
+**/node_modules/
+**/dist/
+**/out/
+**/out-connector/
+**/release/
+**/release-connector/
 
 # Git and CI metadata
 .git/
@@ -26,13 +29,12 @@ copilot-data/
 
 # Tests and docs not needed in runtime image
 coverage/
-tests/
+**/tests/
 docs/
 *.md
 
 # Desktop/plugin development artifacts
 plugin/
-desktop/
 
 # OS/editor files
 .DS_Store

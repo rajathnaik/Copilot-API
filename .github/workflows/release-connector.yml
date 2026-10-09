@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Approved version already committed in connector-builder.json"
+        description: "Approved version already committed in apps/connector/package.json"
         required: true
         type: string
 
@@ -36,7 +36,7 @@ jobs:
           bun-version: "1.4.2"
       - name: Validate approved product and release version
         id: metadata
-        run: node desktop/scripts/connector-release.ts
+        run: node apps/connector/scripts/connector-release.ts
         env:
           INPUT_VERSION: ${{ github.event.inputs.version }}
       - name: Verify existing release tag points to this source
@@ -51,14 +51,12 @@ jobs:
             fi
           fi
       - run: bun install --frozen-lockfile
-      - run: bun install --frozen-lockfile
-        working-directory: desktop
       - run: bun run lint
-        working-directory: desktop
+        working-directory: apps/connector
       - run: bun run typecheck
-        working-directory: desktop
+        working-directory: apps/connector
       - name: Test Connector
-        working-directory: desktop
+        working-directory: apps/connector
         run: bun test tests/connector.test.ts tests/connector-harnesses.test.ts tests/connector-protocols.test.ts tests/connector-ui.test.ts tests/connector-release.test.ts
 
   build:
@@ -92,23 +90,21 @@ jobs:
         with:
           bun-version: "1.4.2"
       - run: bun install --frozen-lockfile
-      - run: bun install --frozen-lockfile
-        working-directory: desktop
       - name: Build Connector
-        working-directory: desktop
-        run: bun run build:connector
+        working-directory: apps/connector
+        run: bun run build
       - name: Ensure native Electron test runtime
         if: matrix.platform == 'win'
-        working-directory: desktop
-        run: node scripts/ensure-electron.mjs
+        working-directory: apps/connector
+        run: node ../../scripts/ensure-electron.mjs
       - name: Package Connector installer
-        working-directory: desktop
+        working-directory: apps/connector
         run: bunx electron-builder --config connector-builder.json --${{ matrix.platform }} --${{ matrix.arch }} --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
       - name: Verify packaged Windows credential helper
         if: matrix.platform == 'win'
-        working-directory: desktop
+        working-directory: apps/connector
         shell: pwsh
         run: |
           $env:CONNECTOR_TEST_ELECTRON = node -p "require('electron')"
@@ -125,7 +121,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: connector-${{ matrix.platform }}
-          path: desktop/release-connector/${{ matrix.artifact }}${{ needs.validate.outputs.version }}${{ matrix.suffix }}
+          path: apps/connector/release-connector/${{ matrix.artifact }}${{ needs.validate.outputs.version }}${{ matrix.suffix }}
           if-no-files-found: error
 
   publish:

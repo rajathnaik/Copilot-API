@@ -80,7 +80,7 @@ location. The standard installer replaces application files and preserves
 saved profiles and OS-encrypted credentials; uninstalling first is unnecessary.
 
 The connector has its own release version in
-`desktop/connector-builder.json` (`extraMetadata.version`), independent of the
+`apps/connector/package.json` (`version`), independent of the
 gateway's package version. The multi-harness follow-up release is **2.7.2**,
 with installer **Copilot.API.Connector.Setup.2.7.2.exe**. Earlier Codex-only and
 multi-harness builds both used 2.7.0 and the same installer filename, so an older
@@ -116,7 +116,7 @@ publishing still requires a deliberate release tag or manual Actions run.
 
 For an approved stable Connector release:
 
-1. Set its independent `extraMetadata.version` in the connector build config.
+1. Set its independent `version` in `apps/connector/package.json`.
 2. Check, commit and push the source. Never reuse a published version.
 3. After approval, push `connector-v<version>` at that tested commit, or run
    **Release Connector** manually with that exact version and source ref.
@@ -351,25 +351,27 @@ and [OpenClaw secrets](https://docs.openclaw.ai/gateway/secrets).
 
 ## Build and validation
 
-From `desktop` after installing its declared dependencies:
+Run `bun install --frozen-lockfile` once at the repository root, then work from
+`apps/connector`:
 
 ```sh
-bun run dev:connector
-node scripts/generate-icons.mjs --connector
-bun run build:connector
-bun run package:connector:win
-bun run package:connector:mac
-bun run package:connector:linux
+bun run dev
+bun run gen-icons
+bun run build
+bun run package:win
+bun run package:mac
+bun run package:linux
 ```
 
 Connector packaging does **not** run `build:server`. Output goes to
-`desktop/release-connector`, separate from host artifacts. The desktop release
-workflow builds and uploads both products on release tags.
+`apps/connector/release-connector`, separate from Gateway artifacts in
+`apps/gateway/desktop/release`. The product-specific release workflows build
+and upload only the selected product.
 
 Focused tests:
 
 ```sh
-bun test --coverage tests/connector.test.ts tests/connector-protocols.test.ts tests/connector-harnesses.test.ts tests/connector-ui.test.ts tests/remote-access.test.ts
+bun test --coverage ./tests/connector.test.ts ./tests/connector-protocols.test.ts ./tests/connector-harnesses.test.ts ./tests/connector-ui.test.ts ./tests/connector-release.test.ts
 bun run typecheck
 ```
 
@@ -378,7 +380,7 @@ sends prompts to a real subscription. Set `CONNECTOR_TEST_CODEX` to an absolute
 native Codex executable path, then run:
 
 ```sh
-bun test tests/connector-integration.test.ts
+bun test ./tests/connector-integration.test.ts
 ```
 
 To exercise actual OS encryption and the connector's credential helper as
@@ -386,13 +388,15 @@ well, build the connector and set `CONNECTOR_TEST_ELECTRON` to the development
 Electron executable. Optionally set `CONNECTOR_TEST_HELPER` to the packaged
 connector executable to test the shipped helper. These checks use isolated
 temporary data and synthetic keys, not your real gateway or Codex settings.
+Resolve the development runtime with `node -p "require('electron')"`; the
+workspace hoists it rather than installing a separate copy in each app.
 
 With `CONNECTOR_TEST_ELECTRON` set, the Windows storage lifecycle regression
 also exercises first use while the real GUI remains open, app restarts, cached
 session-data paths, and concurrent credential helpers:
 
 ```sh
-bun test tests/connector-storage-integration.test.ts
+bun test ./tests/connector-storage-integration.test.ts
 ```
 
 Electron's standard `--user-data-dir=<absolute-path>` switch can isolate

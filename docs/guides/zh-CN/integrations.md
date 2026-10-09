@@ -39,7 +39,7 @@ opencode v2 不需要这个 bridge。v2 已经通过 Code Mode 延迟加载 MCP 
 }
 ```
 
-本地开发时可以将命令换成 `bun`，参数换成 `["run", "./src/main.ts", "mcp"]`。
+本地开发时可以将命令换成 `bun`，参数换成 `["run", "./apps/gateway/src/main.ts", "mcp"]`。
 
 AI gateway 内部现在会把 OpenAI Responses `tool_search` 配置成 client-executed 模式。deferred tools 仍然会作为可搜索 namespace 暴露给模型，但会明确要求模型直接返回下一步要加载的精确工具名列表。
 

@@ -43,13 +43,13 @@
 <!-- Check what you actually ran; CI enforces all of these. -->
 
 - [ ] `bun run lint:all` passes
-- [ ] `bun run typecheck` passes (root and `desktop/` when touched)
-- [ ] `bun test` passes - targeted files run: <!-- e.g. bun test tests/provider-resolver.test.ts -->
-- [ ] `bun run build` succeeds (`bun run build:desktop` for desktop/shared changes)
+- [ ] `bun run typecheck:all` passes
+- [ ] `bun run test` passes - targeted files run: <!-- e.g. from apps/gateway: bun test ./tests/provider-resolver.test.ts -->
+- [ ] `bun run build` succeeds; affected apps pass `bun run build:gateway` / `bun run build:connector`
 
 ## Screenshots
 
-<!-- Required for desktop or pages/ UI changes; delete this section otherwise. -->
+<!-- Required for apps/gateway/desktop, apps/connector, or apps/gateway/pages UI changes; delete this section otherwise. -->
 
 ## Notes
 

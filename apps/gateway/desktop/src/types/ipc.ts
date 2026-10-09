@@ -1,0 +1,377 @@
+import type { LangPreference } from '@copilot-api/shared/locales'
+import type { ThemePreference } from '@copilot-api/shared/types'
+export type { ThemePreference } from '@copilot-api/shared/types'
+import type {
+  ProviderManagementConfig,
+  ProviderManagementUpdate,
+  ProviderModelOptions,
+} from '../../../src/lib/types/provider-management'
+
+export type {
+  ProviderManagementConfig,
+  ProviderManagementUpdate,
+  ProviderModelOptions,
+}
+
+export interface DeviceCodeInfo {
+  user_code: string
+  verification_uri: string
+  device_code: string
+  interval: number
+  expires_in: number
+}
+
+export type DesktopAuthMode = 'copilot' | 'provider' | 'none'
+
+export interface AuthResult {
+  success: boolean
+  mode?: DesktopAuthMode
+  providers?: string[]
+  error?: string
+}
+
+export interface AuthStatus extends AuthResult {
+  mode: DesktopAuthMode
+}
+
+export interface CodexAccountSummary {
+  accountId: string
+  alias?: string
+  active: boolean
+}
+
+export interface CodexLoginInput {
+  alias?: string
+  callbackUrlOrCode?: string
+}
+
+export type ProviderType =
+  | 'anthropic'
+  | 'openai-compatible'
+  | 'openai-responses'
+export type ProviderAuthType = 'authorization' | 'x-api-key'
+export type ProviderAuthTypeInput = ProviderAuthType | '__default__'
+export interface ModelsDevProviderOption {
+  id: string
+  name: string
+  api: string
+  type: ProviderType
+}
+export type QuickProviderName =
+  | 'opencode-go'
+  | 'kimi'
+  | 'deepseek'
+  | 'dashscope'
+  | 'openrouter'
+
+export type ProviderAuthInput =
+  | {
+      apiKey: string
+      baseUrl?: string
+      provider: QuickProviderName
+      type?: ProviderType
+    }
+  | {
+      apiKey: string
+      authType?: ProviderAuthTypeInput
+      baseUrl: string
+      name: string
+      provider: 'custom'
+      type: ProviderType
+      modelsDevProviderId?: string
+    }
+
+export interface ServerStatus {
+  running: boolean
+  restarting?: boolean
+  intentional?: boolean
+  port?: number
+  host?: string
+  error?: string
+}
+
+export interface ServerAuthInfo {
+  enabled: boolean
+  headerName?: string
+  headerValue?: string
+}
+
+export interface ServerKeysConfig {
+  apiKeys: string[]
+  adminApiKey: string
+}
+
+export interface ServerKeysConfigUpdate {
+  apiKeys?: string[]
+  // undefined = leave the field untouched, '' or null = remove the admin key
+  adminApiKey?: string | null
+}
+
+export interface ModelMappingsConfig {
+  configPath: string
+  modelMappings: Record<string, string>
+}
+
+export interface PlaygroundSendResult {
+  ok: boolean
+  status: number
+  text?: string
+  streamed?: boolean
+  aborted?: boolean
+}
+
+export type TunnelState = 'stopped' | 'starting' | 'running' | 'error'
+
+export type TunnelLoginProvider = 'github' | 'microsoft'
+
+export interface TunnelStatus {
+  cliInstalled: boolean
+  installSupported: boolean
+  installing: boolean
+  user: { name: string; provider: string } | null
+  loggingIn: boolean
+  login: { code: string; url: string } | null
+  state: TunnelState
+  url?: string
+  port?: number
+  error?: string
+  logs: string[]
+}
+
+export type TokenUsagePeriod =
+  | 'today'
+  | 'this_week'
+  | 'last_7_days'
+  | 'this_month'
+  | 'last_30_days'
+  | 'lifetime'
+
+export interface TokenUsageCost {
+  amount: number
+  currency: string
+  total_cost_nanos: number
+}
+
+export interface TokenUsageEventCost extends TokenUsageCost {
+  source: string
+}
+
+export interface TokenUsageTotals {
+  request_count: number
+  input_tokens: number
+  output_tokens: number
+  cache_read_input_tokens: number
+  cache_creation_input_tokens: number
+  costs: TokenUsageCost[]
+  total_tokens: number
+}
+
+export interface TokenUsageModelSummary extends TokenUsageTotals {
+  model: string
+}
+
+export interface TokenUsageSummary {
+  period: TokenUsagePeriod
+  range: {
+    start_ms: number
+    end_ms: number
+    start_utc: string
+    end_utc: string
+  }
+  totals: TokenUsageTotals
+  byModel: TokenUsageModelSummary[]
+}
+
+export interface TokenUsageDailyBucket {
+  date: string
+  start_ms: number
+  end_ms: number
+  totals: TokenUsageTotals
+  byModel: TokenUsageModelSummary[]
+}
+
+export interface TokenUsageDailySummary {
+  period: TokenUsagePeriod
+  range: {
+    start_ms: number
+    end_ms: number
+    start_utc: string
+    end_utc: string
+  }
+  totals: TokenUsageTotals
+  byModel: TokenUsageModelSummary[]
+  days: TokenUsageDailyBucket[]
+}
+
+export interface TokenUsageEventRecord {
+  id: number
+  created_at_ms: number
+  created_at_utc: string
+  trace_id: string
+  session_id: string
+  user_id: string
+  source: 'copilot' | 'provider'
+  endpoint: string
+  provider_name: string | null
+  model: string
+  input_tokens: number
+  output_tokens: number
+  cache_read_input_tokens: number
+  cache_creation_input_tokens: number
+  cost: TokenUsageEventCost | null
+  total_tokens: number
+}
+
+export interface TokenUsageEventsPage {
+  items: TokenUsageEventRecord[]
+  page: number
+  page_size: number
+  period: TokenUsagePeriod
+  range: {
+    start_ms: number
+    end_ms: number
+    start_utc: string
+    end_utc: string
+  }
+  total: number
+  total_pages: number
+}
+
+export interface AppUpdateStatus {
+  phase:
+    | 'idle'
+    | 'checking'
+    | 'not-available'
+    | 'available'
+    | 'downloading'
+    | 'downloaded'
+    | 'installing'
+    | 'error'
+    | 'disabled'
+  currentVersion: string
+  manualInstall: boolean
+  releaseUrl: string
+  version?: string
+  percent?: number
+  error?: string
+}
+
+export type DesktopProxyMode = 'system' | 'custom' | 'direct'
+
+export interface DesktopProxySettings {
+  mode: DesktopProxyMode
+  http_proxy: string
+  https_proxy: string
+  no_proxy: string
+}
+
+export interface DesktopSettings {
+  apiHome: string
+  sqliteDbPath: string
+  oauthApp: 'default' | 'opencode'
+  enterpriseUrl: string
+  host: string
+  lastPort: number
+  launchAtLogin: boolean
+  autoStartServer: boolean
+  autoStartTunnel: boolean
+  minimizeToTray: boolean
+  accountType: 'individual' | 'business' | 'enterprise'
+  verbose: boolean
+  showToken: boolean
+  language: LangPreference
+  theme: ThemePreference
+  proxy: DesktopProxySettings
+}
+
+// Extend the global window type for the renderer process.
+declare global {
+  interface Window {
+    electronAPI: {
+      getAuthStatus: () => Promise<AuthStatus>
+      getDeviceCode: () => Promise<DeviceCodeInfo>
+      saveToken: (token: string) => Promise<AuthResult>
+      checkSavedToken: () => Promise<AuthResult>
+      configureProvider: (input: ProviderAuthInput) => Promise<AuthResult>
+      getModelsDevProviders: () => Promise<Array<ModelsDevProviderOption>>
+      getCodexAccounts: () => Promise<Array<CodexAccountSummary>>
+      switchCodexAccount: (accountId: string) => Promise<AuthResult>
+      removeCodexAccount: (accountId: string) => Promise<AuthResult>
+      startCodexLogin: (input?: CodexLoginInput) => Promise<AuthResult>
+      logout: () => Promise<void>
+      startServer: (
+        port: number,
+        authMode?: DesktopAuthMode,
+        host?: string,
+      ) => Promise<ServerStatus>
+      stopServer: () => Promise<void>
+      getServerStatus: () => Promise<ServerStatus>
+      getSettings: () => Promise<DesktopSettings>
+      getAppUpdateStatus: () => Promise<AppUpdateStatus>
+      checkAppUpdate: () => Promise<AppUpdateStatus>
+      installAppUpdate: () => Promise<AppUpdateStatus>
+      onAppUpdateStatus: (
+        callback: (status: AppUpdateStatus) => void,
+      ) => () => void
+      saveSettings: (settings: DesktopSettings) => Promise<void>
+      getModelMappingsConfig: () => Promise<ModelMappingsConfig>
+      getProviderManagementConfig: () => Promise<ProviderManagementConfig>
+      saveProviderManagementConfig: (
+        input: ProviderManagementUpdate,
+      ) => Promise<ProviderManagementConfig>
+      saveModelMappings: (
+        modelMappings: Record<string, string>,
+      ) => Promise<void>
+      openUrl: (url: string) => Promise<void>
+      fetchUsage: () => Promise<unknown>
+      fetchModels: () => Promise<unknown>
+      getProviderModelOptions: () => Promise<ProviderModelOptions>
+      fetchTokenUsage: (period: TokenUsagePeriod) => Promise<unknown>
+      fetchTokenUsageDaily: (period: TokenUsagePeriod) => Promise<unknown>
+      fetchTokenUsageEvents: (
+        period: TokenUsagePeriod,
+        page: number,
+        pageSize: number,
+      ) => Promise<unknown>
+      getServerAuthInfo: () => Promise<ServerAuthInfo>
+      getServerKeys: () => Promise<ServerKeysConfig>
+      saveServerKeys: (
+        keys: ServerKeysConfigUpdate,
+      ) => Promise<ServerKeysConfig>
+      getLogs: () => Promise<string[]>
+      playgroundSend: (
+        requestId: string,
+        path: string,
+        body: unknown,
+      ) => Promise<PlaygroundSendResult>
+      playgroundCancel: (requestId: string) => Promise<void>
+      onPlaygroundChunk: (
+        callback: (requestId: string, chunk: string) => void,
+      ) => () => void
+      tunnelGetStatus: () => Promise<TunnelStatus>
+      tunnelInstall: () => Promise<TunnelStatus>
+      tunnelLogin: (provider: TunnelLoginProvider) => Promise<TunnelStatus>
+      tunnelCancelLogin: () => Promise<void>
+      tunnelLogout: () => Promise<TunnelStatus>
+      tunnelStart: () => Promise<TunnelStatus>
+      tunnelStop: () => Promise<TunnelStatus>
+      onTunnelStatus: (callback: (status: TunnelStatus) => void) => () => void
+      onAuthSuccess: (callback: (result: AuthResult) => void) => () => void
+      onServerStatus: (callback: (status: ServerStatus) => void) => () => void
+      onServerLog: (callback: (log: string) => void) => () => void
+      platform: NodeJS.Platform
+      windowReload: () => void
+      windowMinimize: () => void
+      windowMaximizeToggle: () => void
+      windowClose: () => void
+      windowQuit: () => void
+      windowZoomIn: () => void
+      windowZoomOut: () => void
+      windowZoomReset: () => void
+      windowIsMaximized: () => Promise<boolean>
+      onWindowMaximizeChange: (
+        callback: (maximized: boolean) => void,
+      ) => () => void
+    }
+  }
+}

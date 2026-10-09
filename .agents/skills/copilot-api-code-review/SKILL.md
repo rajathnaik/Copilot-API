@@ -35,7 +35,7 @@ Before judging a change, gather the minimum relevant context:
 - Current change set: `git status`, `git --no-pager diff`, `git --no-pager diff --cached`, and recent commits when needed.
 - Local code context: changed files plus nearby callers, callees, tests, config, schema, and related modules.
 - Project docs: `AGENTS.md`, `README.md`, `CLAUDE.md`, `docs/`, and `package.json` scripts.
-- Protocol contract types under `src/lib/types/` (OpenAI Chat Completions, OpenAI Responses, Anthropic Messages) whenever a change touches request/response translation; verify every claimed field against these types instead of assuming it exists.
+- Protocol contract types under `apps/gateway/src/lib/types/` (OpenAI Chat Completions, OpenAI Responses, Anthropic Messages) whenever a change touches request/response translation; verify every claimed field against these types instead of assuming it exists.
 
 If a context file does not exist, continue. Missing optional docs should not block the review.
 
@@ -43,7 +43,7 @@ Minimum context protocol:
 
 - Read the relevant full function, class, or module around every changed hunk before judging it.
 - Search for changed public symbols, exported APIs, commands, config keys, schemas, and routes to find callers and dependents.
-- Read related tests under `tests/` before claiming behavior is untested; if tests were not inspected, say so instead of reporting a missing-test finding.
+- Read related tests under the owning workspace's `tests/` before claiming behavior is untested; root `tests/` covers workspace architecture. If tests were not inspected, say so instead of reporting a missing-test finding.
 - Read related configuration, schema, migration, or API docs before claiming compatibility or release risk.
 - If a command fails or a file cannot be read, record the limitation and avoid conclusions that depend on that missing context.
 
@@ -81,37 +81,38 @@ Severity must follow verified impact, not reviewer confidence or preference. Do 
    - Meets requirements; no obvious logic gaps.
    - Edge cases and failure paths handled (null/empty, retries, timeouts, partial failures).
 2. **Protocol & Translation Fidelity**
-   - Translation between OpenAI Chat Completions, OpenAI Responses, and Anthropic Messages matches the contract types under `src/lib/types/`; no invented or mistyped fields.
+   - Translation between OpenAI Chat Completions, OpenAI Responses, and Anthropic Messages matches the contract types under `apps/gateway/src/lib/types/`; no invented or mistyped fields.
    - Request/response/entity/DTO fields are modeled from the actual source types; no `any`, no guessed optional fields.
    - Both directions of a translation change are checked (request in, response out), including non-stream vs stream parity.
 3. **Streaming & Realtime**
-   - SSE and websocket paths (`src/services/responses-websocket*.ts`, `fetch-event-stream` usage) keep correct event ordering, emit completion/termination events, propagate mid-stream errors, and handle client abort/cancellation without leaked or unterminated streams.
-   - Rate-limit and token-usage accounting (`src/lib/copilot-rate-limit.ts`, `src/lib/codex-rate-limit.ts`, `src/lib/token-usage/`) stays correct when a stream aborts partway.
+   - SSE and websocket paths (`apps/gateway/src/services/responses-websocket*.ts`, `fetch-event-stream` usage) keep correct event ordering, emit completion/termination events, propagate mid-stream errors, and handle client abort/cancellation without leaked or unterminated streams.
+   - Rate-limit and token-usage accounting (`apps/gateway/src/lib/copilot-rate-limit.ts`, `apps/gateway/src/lib/codex-rate-limit.ts`, `apps/gateway/src/lib/token-usage/`) stays correct when a stream aborts partway.
 4. **Auth, Credentials & Tokens**
-   - Changes touching `src/auth.ts`, `src/lib/oauth/`, `src/lib/credential-store.ts`, `src/lib/token.ts`, or `src/services/github/` get extra scrutiny: token refresh, expiry, redaction, atomic persistence.
+   - Changes touching `apps/gateway/src/auth.ts`, `apps/gateway/src/lib/oauth/`, `apps/gateway/src/lib/credential-store.ts`, `apps/gateway/src/lib/token.ts`, `apps/gateway/src/services/github/`, or Connector credential helpers get extra scrutiny: token refresh, expiry, redaction, atomic persistence.
    - No tokens, secrets, or PII in logs, error messages, telemetry, client code, or committed config.
 5. **Proxy, TLS & Networking**
-   - Proxy/TLS behavior (`src/lib/proxy.ts`, `src/lib/tls.ts`, `NODE_USE_SYSTEM_CA`, `src/lib/electron-fetch.ts`) does not break corporate proxy or system-CA setups.
-   - Request timeouts and cancellation go through the established dispatcher (`src/lib/timeout-dispatcher.ts`) instead of ad-hoc timers where applicable.
+   - Proxy/TLS behavior (`apps/gateway/src/lib/proxy.ts`, `apps/gateway/src/lib/tls.ts`, `NODE_USE_SYSTEM_CA`, `apps/gateway/src/lib/electron-fetch.ts`) does not break corporate proxy or system-CA setups.
+   - Request timeouts and cancellation go through the established dispatcher (`apps/gateway/src/lib/timeout-dispatcher.ts`) instead of ad-hoc timers where applicable.
 6. **Config & State Compatibility**
-   - Config store and SQLite schema changes (`src/lib/config-store.ts`, `src/lib/config.ts`, `src/lib/sqlite.ts`, `src/lib/atomic-file.ts`) are backward compatible or migrate safely; defaults are safe for existing installs.
-   - Public route and API contract changes under `src/routes/` are backward compatible or carry an explicit migration note.
+   - Config store and SQLite schema changes (`apps/gateway/src/lib/config-store.ts`, `apps/gateway/src/lib/config.ts`, `apps/gateway/src/lib/sqlite.ts`, `packages/shared/src/atomic-file.ts`) are backward compatible or migrate safely; defaults are safe for existing installs.
+   - Public route and API contract changes under `apps/gateway/src/routes/` are backward compatible or carry an explicit migration note.
 7. **Reliability**
    - No obvious races, resource leaks, unbounded loops, or brittle dependencies.
    - Proper error handling; meaningful errors for callers that match existing route error patterns.
 8. **Maintainability & Project Conventions**
-   - ES modules and strict TypeScript; `~/*` imports for files under `src/`; camelCase variables/functions, PascalCase types/classes, descriptive filenames.
-   - Formatting follows the repo ESLint/Prettier setup (semicolons disabled); changed files were formatted with `bun run lint --fix <files>`, never standalone `prettier`/`bunx prettier`.
-   - Clear naming; single-responsibility functions; complex logic explained or decomposed; respects the existing `src/lib` vs `src/services` vs `src/routes` boundaries.
+   - ES modules and strict TypeScript; `~/*` imports for files under Gateway `src/`; camelCase variables/functions, PascalCase types/classes, descriptive filenames.
+   - Formatting follows the owning workspace's ESLint/Prettier setup (semicolons disabled); changed files were formatted from that workspace with `bun run lint --fix <files>`, never standalone `prettier`/`bunx prettier`.
+   - Clear naming; single-responsibility functions; complex logic explained or decomposed; respects the existing Gateway `src/lib` vs `src/services` vs `src/routes` boundaries.
 9. **Tests**
-   - Bun's built-in test runner is used; tests live in `tests/` as `*.test.ts` mirroring the source feature names.
+   - Bun's built-in test runner is used; tests live in each workspace's `tests/` as `*.test.ts` mirroring the source feature names.
    - Changed code reaches at least 85% unit test coverage near the modification; request translation, provider behavior, auth, config, and streaming edge cases are covered.
    - Tests are deterministic; no flaky timing or network assumptions.
 10. **Cross-Surface Impact**
-    - The Electron desktop app under `desktop/` is isolated with its own package files; shared changes must not break `bun run build:desktop` or the desktop typecheck.
-    - `plugin/` scripts are excluded from the root ESLint config and `pages/` holds static assets; do not apply root src assumptions to them.
+    - Gateway API/desktop under `apps/gateway/` and Connector under `apps/connector/` own their manifests, builds, and versions. Connector must not import Gateway source; preserve app identities and data paths.
+    - Private `packages/shared/` code must be bundled into distributed artifacts, not become an unpublished runtime dependency.
+    - `plugin/` scripts remain at root and `apps/gateway/pages/` holds static assets; do not apply root src assumptions to them.
 11. **Observability**
-    - Useful logs for critical behavior via the existing logger (`src/lib/logger.ts`); logs are actionable, not noisy, and contain no sensitive data.
+    - Useful logs for critical behavior via the existing logger (`apps/gateway/src/lib/logger.ts`); logs are actionable, not noisy, and contain no sensitive data.
 
 ## Checklist - Nice to Have (Non-blocking)
 
@@ -124,12 +125,12 @@ Severity must follow verified impact, not reviewer confidence or preference. Do 
 
 Run the commands that match the scope of the change and record results in `Test Notes`:
 
-- `bun run lint:all` (or `bun run lint --fix <changed files>` to format).
-- `bun run typecheck`.
-- `bun test`, or `bun test tests/<file>.test.ts` for targeted runs.
-- `bun run build`; add `bun run build:desktop` when shared or desktop code is touched.
+- `bun run lint:all` (or from the owning workspace, `bun run lint --fix <changed files>` to format).
+- `bun run typecheck:all`.
+- `bun run test`, or from the owning workspace, `bun test ./tests/<file>.test.ts` for targeted runs. Explicit directories avoid discovering other workspace suites with the wrong setup.
+- `bun run build`; add `bun run build:gateway` / `bun run build:connector` for affected apps.
 
-CI (`.github/workflows/ci.yml`) runs lint:all, root and desktop typecheck, `bun test`, and `bun run build`; review conclusions should not contradict what CI would enforce.
+CI (`.github/workflows/ci.yml`) installs once with the frozen root lockfile and checks all workspaces, API/app builds, and the Gateway container. Review conclusions should not contradict what CI would enforce.
 
 ## Review Summaries
 

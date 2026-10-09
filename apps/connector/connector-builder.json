@@ -1,0 +1,48 @@
+{
+  "appId": "com.copilot-api.connector",
+  "productName": "Copilot API Connector",
+  "directories": {
+    "buildResources": "build",
+    "output": "release-connector"
+  },
+  "files": ["out-connector/**/*", "!node_modules/**/*"],
+  "extraResources": [
+    { "from": "assets/connector-icon.png", "to": "icon.png" },
+    { "from": "../../LICENSE", "to": "licenses/copilot-api.txt" },
+    { "from": "../../node_modules/toml-eslint-parser/LICENSE", "to": "licenses/toml-eslint-parser.txt" },
+    { "from": "../../node_modules/jsonc-eslint-parser/LICENSE", "to": "licenses/jsonc-eslint-parser.txt" },
+    { "from": "../../node_modules/yaml/LICENSE", "to": "licenses/yaml.txt" },
+    { "from": "../../node_modules/acorn/LICENSE", "to": "licenses/acorn.txt" },
+    { "from": "../../node_modules/acorn-jsx/LICENSE", "to": "licenses/acorn-jsx.txt" },
+    { "from": "../../node_modules/espree/LICENSE", "to": "licenses/espree.txt" },
+    { "from": "../../node_modules/semver/LICENSE", "to": "licenses/semver.txt" },
+    { "from": "../../node_modules/eslint-visitor-keys/LICENSE", "to": "licenses/eslint-visitor-keys.txt" },
+    { "from": "../../node_modules/react/LICENSE", "to": "licenses/react.txt" },
+    { "from": "../../node_modules/react-dom/LICENSE", "to": "licenses/react-dom.txt" },
+    { "from": "../../node_modules/scheduler/LICENSE", "to": "licenses/scheduler.txt" },
+    { "from": "../../node_modules/tailwindcss/LICENSE", "to": "licenses/tailwindcss.txt" }
+  ],
+  "publish": null,
+  "mac": {
+    "target": "dmg",
+    "artifactName": "Copilot.API.Connector-${version}-${arch}.${ext}",
+    "category": "public.app-category.developer-tools",
+    "icon": "assets/connector-icon.png"
+  },
+  "win": {
+    "target": "nsis",
+    "artifactName": "Copilot.API.Connector.Setup.${version}.${ext}",
+    "icon": "build/connector-icon.ico"
+  },
+  "nsis": {
+    "installerIcon": "build/connector-icon.ico",
+    "uninstallerIcon": "build/connector-icon.ico"
+  },
+  "linux": {
+    "target": "AppImage",
+    "artifactName": "Copilot-API-Connector-${version}-linux-${arch}.${ext}",
+    "category": "Development",
+    "executableName": "copilot-api-connector",
+    "icon": "assets/connector-icon.png"
+  }
+}

@@ -37,7 +37,7 @@ opencode v2 does not need this bridge. It already defers MCP tools through Code 
 }
 ```
 
-For local development, use `bun` as the command and `["run", "./src/main.ts", "mcp"]` as the args.
+For local development, use `bun` as the command and `["run", "./apps/gateway/src/main.ts", "mcp"]` as the args.
 
 Internally, the gateway now configures OpenAI Responses `tool_search` in client-executed mode. Deferred tools are still exposed as searchable namespaces, but the model is explicitly asked to return the exact deferred tool names it wants to load next.
 

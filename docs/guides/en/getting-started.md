@@ -59,7 +59,7 @@ bun run dev start
 bun run start start
 ```
 
-> The trailing `start` is the CLI subcommand passed to `src/main.ts`, not a typo: `bun run dev start` runs watch mode, `bun run start start` runs production.
+> The trailing `start` is the CLI subcommand passed to `apps/gateway/src/main.ts`, not a typo: `bun run dev start` runs watch mode, `bun run start start` runs production.
 
 ## Using with npx
 

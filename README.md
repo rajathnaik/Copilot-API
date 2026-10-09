@@ -80,7 +80,7 @@ Every client talks to the same local endpoint. The gateway routes each request t
 
 ## Desktop App
 
-Prefer a GUI? The Electron desktop app in `desktop/` covers GitHub Copilot sign-in, OpenAI Codex OAuth, and API-key configuration for Kimi, DeepSeek, DashScope, OpenRouter, or a custom provider — with one-click start/stop of the local server, and the local endpoint, auth header, available models, usage, and logs in one window.
+Prefer a GUI? The Electron desktop app in [apps/gateway/desktop](apps/gateway/desktop/) covers GitHub Copilot sign-in, OpenAI Codex OAuth, and API-key configuration for Kimi, DeepSeek, DashScope, OpenRouter, or a custom provider — with one-click start/stop of the local server, and the local endpoint, auth header, available models, usage, and logs in one window.
 
 <p align="center">
   <img src="docs/screenshots/desktop-dashboard.png" alt="Copilot API desktop app dashboard" width="49%" />
@@ -88,6 +88,19 @@ Prefer a GUI? The Electron desktop app in `desktop/` covers GitHub Copilot sign-
 </p>
 
 Windows x64 (`.exe`), macOS Apple Silicon (`.dmg`), and Linux x64 (`.AppImage`) packages are published in [GitHub Releases](https://github.com/caozhiyuan/copilot-api/releases). See [Electron Desktop App](docs/guides/en/desktop.md#electron-desktop-app) for full setup and advanced configuration.
+
+## Two independent products
+
+| Product | Install it on | Source |
+| --- | --- | --- |
+| **Gateway** | The machine that signs in to Copilot/providers and serves the API or tunnel | [apps/gateway](apps/gateway/) |
+| **Connector** | Each consumer machine running Codex, Claude Code, OpenCode, Hermes Agent, or OpenClaw | [apps/connector](apps/connector/) |
+
+Connector only needs the Gateway/tunnel URL and API key. It discovers models and manages native harness configuration; consumers do not need another Gateway or Copilot sign-in. Products have separate versions, release tags, and installers.
+
+**Share the current Connector installer:** [Windows 2.7.2](https://github.com/rajathnaik/Copilot-API/releases/download/connector-v2.7.2/Copilot.API.Connector.Setup.2.7.2.exe), or [macOS/Linux release downloads](https://github.com/rajathnaik/Copilot-API/releases/tag/connector-v2.7.2). See the [Connector guide](docs/guides/en/connector.md). Normal upgrades are in-place; source restructuring does not require reinstalling or resetting existing settings.
+
+For development, run one `bun install --frozen-lockfile` at the repository root. `bun run build:gateway` and `bun run build:connector` build the separate apps; `bun run test`, `bun run typecheck:all`, and `bun run lint:all` check all workspaces. [packages/shared](packages/shared/) contains private shared utilities, bundled into each product. Committing/pushing source does not publish installers; releases require separate approval.
 
 ## Documentation
 

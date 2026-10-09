@@ -1,0 +1,135 @@
+{
+  "name": "copilot-api-desktop",
+  "version": "2.7.0",
+  "description": "Copilot API Desktop App",
+  "author": "jeffreycao",
+  "desktopName": "copilot-api.desktop",
+  "main": "out/main/index.js",
+  "trustedDependencies": [
+    "electron"
+  ],
+  "scripts": {
+    "dev": "node ../../../scripts/ensure-electron.mjs && electron-vite dev",
+    "build": "electron-vite build",
+    "build:server": "bun run --cwd .. build:desktop",
+    "test": "bun test ./tests",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "preview": "electron-vite preview",
+    "gen-icons": "node ../../../scripts/generate-icons.mjs",
+    "lint": "eslint --cache .",
+    "lint:fix": "eslint --cache --fix .",
+    "package": "bun run build:server && electron-vite build && electron-builder --publish never",
+    "package:mac": "bun run build:server && electron-vite build && electron-builder --mac --publish never",
+    "package:win": "bun run build:server && electron-vite build && electron-builder --win --publish never",
+    "package:linux": "bun run build:server && electron-vite build && electron-builder --linux --publish never"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.4"
+  },
+  "build": {
+    "appId": "com.copilot-api.desktop",
+    "publish": {
+      "provider": "github",
+      "owner": "caozhiyuan",
+      "repo": "copilot-api",
+      "releaseType": "release"
+    },
+    "productName": "Copilot API",
+    "directories": {
+      "buildResources": "build",
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "resources/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../dist",
+        "to": "server",
+        "filter": ["**/*.js"]
+      },
+      {
+        "from": "../pages",
+        "to": "pages"
+      },
+      {
+        "from": "build/server-package.json",
+        "to": "server/package.json"
+      },
+      {
+        "from": "assets/tray-icon.png",
+        "to": "tray-icon.png"
+      },
+      {
+        "from": "assets/tray-icon@2x.png",
+        "to": "tray-icon@2x.png"
+      },
+      {
+        "from": "assets/tray-iconTemplate.png",
+        "to": "tray-iconTemplate.png"
+      },
+      {
+        "from": "assets/tray-iconTemplate@2x.png",
+        "to": "tray-iconTemplate@2x.png"
+      },
+      {
+        "from": "assets/icon.png",
+        "to": "icon.png"
+      }
+    ],
+    "mac": {
+      "target": "dmg",
+      "artifactName": "Copilot.API-${version}-${arch}.${ext}",
+      "category": "public.app-category.developer-tools",
+      "icon": "assets/icon.png"
+    },
+    "dmg": {
+      "format": "ULFO"
+    },
+    "win": {
+      "target": "nsis",
+      "artifactName": "Copilot.API.Setup.${version}.${ext}",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
+    },
+    "linux": {
+      "target": "AppImage",
+      "artifactName": "Copilot-API-${version}-linux-${arch}.${ext}",
+      "category": "Development",
+      "executableName": "copilot-api",
+      "icon": "assets/icon.png",
+      "syncDesktopName": true
+    }
+  },
+  "devDependencies": {
+    "@copilot-api/shared": "workspace:*",
+    "@electron-toolkit/tsconfig": "^1.0.1",
+    "@eslint/js": "^9.37.0",
+    "@tailwindcss/vite": "^4.1.4",
+    "@types/bun": "1.3.14",
+    "@types/node": "26.0.0",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "43.4.1",
+    "electron-builder": "^26.8.1",
+    "electron-vite": "^3.1.0",
+    "eslint": "^9.37.0",
+    "eslint-config-flat-gitignore": "^2.1.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.4",
+    "eslint-plugin-unused-imports": "^4.2.0",
+    "globals": "^16.3.0",
+    "prettier": "3.6.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwindcss": "^4.1.4",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "8.45.0",
+    "vite": "^6.3.3"
+  }
+}

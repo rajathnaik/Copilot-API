@@ -83,7 +83,7 @@ curl http://localhost:4141/v1/models
 
 ## 桌面应用
 
-更喜欢图形界面？`desktop/` 目录下的 Electron 桌面应用支持 GitHub Copilot 登录、OpenAI Codex OAuth，以及 Kimi、DeepSeek、DashScope、OpenRouter 或自定义 provider 的 API Key 配置——可以一键启动 / 停止本地服务，并在一个窗口里查看本地端点、鉴权 Header、可用模型、用量和日志。
+更喜欢图形界面？`apps/gateway/desktop/` 目录下的 Electron 桌面应用支持 GitHub Copilot 登录、OpenAI Codex OAuth，以及 Kimi、DeepSeek、DashScope、OpenRouter 或自定义 provider 的 API Key 配置——可以一键启动 / 停止本地服务，并在一个窗口里查看本地端点、鉴权 Header、可用模型、用量和日志。
 
 <p align="center">
   <img src="docs/screenshots/desktop-dashboard.png" alt="Copilot API 桌面应用首页" width="49%" />
@@ -91,6 +91,19 @@ curl http://localhost:4141/v1/models
 </p>
 
 Windows x64（`.exe`）、macOS Apple Silicon（`.dmg`）和 Linux x64（`.AppImage`）安装包发布在 [GitHub Releases](https://github.com/caozhiyuan/copilot-api/releases)。完整配置与高级设置见 [Electron 桌面应用](docs/guides/zh-CN/desktop.md#electron-desktop-app)。
+
+## 两个独立产品
+
+| 产品 | 安装位置 | 源码 |
+| --- | --- | --- |
+| **Gateway** | 登录 Copilot / provider 并提供 API 或隧道的机器 | [apps/gateway](apps/gateway/) |
+| **Connector** | 运行 Codex、Claude Code、OpenCode、Hermes Agent 或 OpenClaw 的客户端机器 | [apps/connector](apps/connector/) |
+
+Connector 只需要 Gateway / 隧道 URL 和 API Key，即可发现模型并管理各工具的原生配置；客户端不需要另装 Gateway 或登录 Copilot。两个产品具有独立版本、发布标签和安装包。
+
+当前 Connector：[Windows 2.7.2 安装包](https://github.com/rajathnaik/Copilot-API/releases/download/connector-v2.7.2/Copilot.API.Connector.Setup.2.7.2.exe)、[macOS / Linux 下载](https://github.com/rajathnaik/Copilot-API/releases/tag/connector-v2.7.2)。详见 [Connector 指南（英文）](docs/guides/en/connector.md)。正常升级可直接覆盖安装；源码目录调整不会要求重装或重置已有设置。
+
+开发时在仓库根目录执行一次 `bun install --frozen-lockfile`。使用 `bun run build:gateway` 和 `bun run build:connector` 分别构建，使用 `bun run test`、`bun run typecheck:all` 和 `bun run lint:all` 检查所有工作区。[packages/shared](packages/shared/) 中的私有公共代码会打包进各产品。提交或推送源码不会自动发布安装包；发布需要单独批准。
 
 ## 文档导航
 

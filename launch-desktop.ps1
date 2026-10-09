@@ -3,8 +3,10 @@
 # launch", and opens the Copilot API desktop app, which starts the gateway.
 $ErrorActionPreference = 'Stop'
 
-$root = $PSScriptRoot
+$workspace = $PSScriptRoot
+$root = Join-Path $workspace 'apps\gateway'
 $desktop = Join-Path $root 'desktop'
+$shared = Join-Path $workspace 'packages\shared\src'
 $dataDir = Join-Path $env:USERPROFILE '.local\share\copilot-api'
 $bun = Join-Path $env:USERPROFILE '.bun\bin\bun.exe'
 if (-not (Test-Path $bun)) { $bun = (Get-Command bun -ErrorAction Stop).Source }
@@ -26,8 +28,7 @@ function Invoke-Bun([string]$dir, [string[]]$bunArgs) {
   } finally { Pop-Location }
 }
 
-if (-not (Test-Path (Join-Path $root 'node_modules'))) { Invoke-Bun $root @('install') }
-if (-not (Test-Path (Join-Path $desktop 'node_modules'))) { Invoke-Bun $desktop @('install') }
+if (-not (Test-Path (Join-Path $workspace 'node_modules'))) { Invoke-Bun $workspace @('install') }
 
 $tokenFile = Join-Path $dataDir 'github_token'
 if (-not (Test-Path $tokenFile) -or (Get-Item $tokenFile).Length -eq 0) {
@@ -35,12 +36,12 @@ if (-not (Test-Path $tokenFile) -or (Get-Item $tokenFile).Length -eq 0) {
   Invoke-Bun $root @('./src/main.ts', 'auth', 'login', '--provider', 'copilot')
 }
 
-if (Test-Stale (Join-Path $root 'dist\main.js') @((Join-Path $root 'src'))) {
+if (Test-Stale (Join-Path $root 'dist\main.js') @((Join-Path $root 'src'), $shared)) {
   Write-Host 'Building server bundle...'
   Invoke-Bun $root @('run', 'build:desktop')
 }
 $desktopBuilt = (Test-Path (Join-Path $desktop 'out\renderer\index.html')) -and
-  -not (Test-Stale (Join-Path $desktop 'out\main\index.js') @((Join-Path $desktop 'electron'), (Join-Path $desktop 'src')))
+  -not (Test-Stale (Join-Path $desktop 'out\main\index.js') @((Join-Path $desktop 'electron'), (Join-Path $desktop 'src'), $shared))
 if (-not $desktopBuilt) {
   Write-Host 'Building desktop app...'
   Invoke-Bun $desktop @('run', 'build')
@@ -52,8 +53,9 @@ $settings | Add-Member -NotePropertyName autoStartServer -NotePropertyValue $tru
 New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
 [IO.File]::WriteAllText($settingsFile, ($settings | ConvertTo-Json -Depth 5), (New-Object System.Text.UTF8Encoding $false))
 
-$electron = Join-Path $desktop 'node_modules\electron\dist\electron.exe'
-if (-not (Test-Path $electron)) { Invoke-Bun $desktop @('scripts/ensure-electron.mjs') }
+Invoke-Bun $workspace @('scripts/ensure-electron.mjs')
+$electron = & $bun -e 'console.log(require("electron"))'
+if ($LASTEXITCODE -ne 0) { throw 'Could not resolve the workspace Electron runtime.' }
 
 $listener = Get-NetTCPConnection -LocalPort 4141 -State Listen -ErrorAction SilentlyContinue
 if ($listener -and -not (Get-Process electron -ErrorAction SilentlyContinue)) {

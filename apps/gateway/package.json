@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@jeffreycao/copilot-api",
+  "version": "2.7.0",
+  "description": "GitHub Copilot, OpenAI Codex, OpenCode Go, and third-party AI provider gateway with OpenAI and Anthropic API compatibility.",
+  "keywords": [
+    "github-copilot",
+    "codex",
+    "ai-gateway",
+    "opencode",
+    "anthropic-compatible",
+    "openai-responses"
+  ],
+  "homepage": "https://github.com/caozhiyuan/copilot-api",
+  "bugs": "https://github.com/caozhiyuan/copilot-api/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/caozhiyuan/copilot-api"
+  },
+  "license": "MIT",
+  "author": "caozhiyuan",
+  "type": "module",
+  "bin": {
+    "copilot-api": "./dist/main.js"
+  },
+  "files": [
+    "dist",
+    "pages"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "build:desktop": "tsdown --config tsdown.desktop.config.ts",
+    "dev": "NODE_USE_SYSTEM_CA=1 bun run --watch ./src/main.ts",
+    "knip": "knip-bun",
+    "lint": "eslint --cache",
+    "lint:all": "bun run lint && bun run --cwd desktop lint",
+    "lint:desktop": "bun run --cwd desktop lint",
+    "prepack": "bun run build",
+    "release": "bumpp package.json desktop/package.json && bun publish --access public",
+    "start": "NODE_USE_SYSTEM_CA=1 NODE_ENV=production bun run ./src/main.ts",
+    "test": "bun test ./tests",
+    "typecheck": "tsc",
+    "typecheck:all": "bun run typecheck && bun run --cwd desktop typecheck",
+    "typecheck:desktop": "bun run --cwd desktop typecheck"
+  },
+  "overrides": {
+    "@hono/node-server": "^1.19.15"
+  },
+  "dependencies": {
+    "@azure/identity": "^4.13.2",
+    "@clack/prompts": "^1.7.0",
+    "@fastify/busboy": "^3.2.2",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "citty": "^0.1.6",
+    "clipboardy": "^5.0.0",
+    "consola": "^3.4.2",
+    "fetch-event-stream": "^0.1.5",
+    "fzstd": "^0.1.1",
+    "gpt-tokenizer": "^3.0.1",
+    "hono": "^4.13.2",
+    "proxy-from-env": "^1.1.0",
+    "srvx": "^0.11.15",
+    "tiny-invariant": "^1.3.3",
+    "undici": "^7.29.0",
+    "winreg": "^1.2.5",
+    "zod": "^4.1.11"
+  },
+  "devDependencies": {
+    "@copilot-api/shared": "workspace:*",
+    "@eslint/js": "^9.37.0",
+    "@opencode-ai/models": "0.0.85",
+    "@types/bun": "1.2.23",
+    "@types/node": "24.6.2",
+    "@types/proxy-from-env": "^1.0.4",
+    "@types/winreg": "^1.2.36",
+    "bumpp": "^10.2.3",
+    "eslint": "^9.37.0",
+    "eslint-config-flat-gitignore": "^2.1.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.4",
+    "eslint-plugin-unused-imports": "^4.2.0",
+    "globals": "^16.3.0",
+    "happy-dom": "20.14.5",
+    "knip": "^5.64.1",
+    "lint-staged": "^16.2.3",
+    "prettier": "3.6.2",
+    "prettier-plugin-packagejson": "^2.5.19",
+    "simple-git-hooks": "^2.13.1",
+    "tsdown": "^0.23.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "8.45.0"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

@@ -8,7 +8,7 @@ This is the **host** application. Consumers connecting to its remote tunnel use
 the separate [Copilot API Connector](connector.md); they do not need to install
 this gateway or sign in to Copilot.
 
-If you prefer a GUI, this repository also includes an Electron desktop app in `desktop/`. It supports GitHub Copilot sign-in, OpenAI Codex OAuth with manual switching among up to 3 Codex accounts and removal of accounts that are not in use, and API-key configuration for Kimi, DeepSeek, DashScope, OpenRouter, or a custom provider. Provider configuration, server API keys, and account changes automatically refresh the running service; new requests use the updated configuration. After authorization or provider configuration, it can start and stop the local proxy with one click and shows the local endpoint, auth header, available models, usage, and logs in the app.
+If you prefer a GUI, this repository also includes an Electron desktop app in `apps/gateway/desktop/`. It supports GitHub Copilot sign-in, OpenAI Codex OAuth with manual switching among up to 3 Codex accounts and removal of accounts that are not in use, and API-key configuration for Kimi, DeepSeek, DashScope, OpenRouter, or a custom provider. Provider configuration, server API keys, and account changes automatically refresh the running service; new requests use the updated configuration. After authorization or provider configuration, it can start and stop the local proxy with one click and shows the local endpoint, auth header, available models, usage, and logs in the app.
 
 Listening host, proxy, verbose logging, and token logging are server startup options. Saving changes automatically restarts a running service and may interrupt active requests. OAuth App, API Home, SQLite DB Path, and Enterprise URL still require restarting the desktop app. Saving while the service is stopped does not start it.
 
@@ -37,9 +37,9 @@ The desktop app's Advanced Config page reads and writes the shared model mapping
 
 ### Application icon
 
-The original robot artwork in `desktop/assets/app-icon.svg` is shared by the
+The original robot artwork in `apps/gateway/desktop/assets/app-icon.svg` is shared by the
 header and sign-in screen. Its generated PNG is the runtime window icon, and
-`desktop/build/icon.ico` supplies the Windows installer and executable icon.
+`apps/gateway/desktop/build/icon.ico` supplies the Windows installer and executable icon.
 The Windows/Linux tray uses small versions of the same artwork; macOS retains
 its monochrome template tray icon.
 
@@ -47,7 +47,7 @@ To regenerate the PNG, tray images, and multi-resolution Windows ICO after
 editing the SVG, install `rsvg-convert` from librsvg and run:
 
 ```sh
-cd desktop
+cd apps/gateway/desktop
 bun run gen-icons
 ```
 

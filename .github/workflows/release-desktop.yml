@@ -30,16 +30,13 @@ jobs:
       - name: Build server
         run: bun run build
 
-      - name: Install desktop dependencies
-        working-directory: desktop
-        run: bun install --frozen-lockfile
 
       - name: Typecheck desktop
-        working-directory: desktop
+        working-directory: apps/gateway/desktop
         run: bun run typecheck
 
       - name: Build macOS arm64 package
-        working-directory: desktop
+        working-directory: apps/gateway/desktop
         run: bun run package:mac
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
@@ -48,7 +45,7 @@ jobs:
         with:
           name: mac-arm64
           path: |
-            desktop/release/*.dmg
+            apps/gateway/desktop/release/*.dmg
           if-no-files-found: warn
 
   # ─── Windows ─────────────────────────────────────────────────────────────
@@ -72,22 +69,19 @@ jobs:
       - name: Build server
         run: bun run build
 
-      - name: Install desktop dependencies
-        working-directory: desktop
-        run: bun install --frozen-lockfile
 
       - name: Typecheck desktop
-        working-directory: desktop
+        working-directory: apps/gateway/desktop
         run: bun run typecheck
 
       - name: Build Windows package
-        working-directory: desktop
+        working-directory: apps/gateway/desktop
         run: bun run package:win
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
       - name: Verify Windows update metadata
-        working-directory: desktop
+        working-directory: apps/gateway/desktop
         run: |
           if (!(Test-Path -LiteralPath 'release/latest.yml')) {
             throw 'Windows update metadata was not generated'
@@ -97,10 +91,10 @@ jobs:
         with:
           name: win
           path: |
-            desktop/release/*.exe
-            desktop/release/*.msi
-            desktop/release/*.blockmap
-            desktop/release/latest.yml
+            apps/gateway/desktop/release/*.exe
+            apps/gateway/desktop/release/*.msi
+            apps/gateway/desktop/release/*.blockmap
+            apps/gateway/desktop/release/latest.yml
           if-no-files-found: error
 
   # ─── Linux (x64) ────────────────────────────────────────────────────────
@@ -124,28 +118,25 @@ jobs:
       - name: Build server
         run: bun run build
 
-      - name: Install desktop dependencies
-        working-directory: desktop
-        run: bun install --frozen-lockfile
 
       - name: Typecheck desktop
-        working-directory: desktop
+        working-directory: apps/gateway/desktop
         run: bun run typecheck
 
       - name: Build Linux x64 package
-        working-directory: desktop
+        working-directory: apps/gateway/desktop
         run: bun run package:linux -- --x64
 
       - name: Verify Linux update metadata
-        working-directory: desktop
+        working-directory: apps/gateway/desktop
         run: test -f release/latest-linux.yml
 
       - uses: actions/upload-artifact@v4
         with:
           name: linux-x64
           path: |
-            desktop/release/*.AppImage
-            desktop/release/latest-linux.yml
+            apps/gateway/desktop/release/*.AppImage
+            apps/gateway/desktop/release/latest-linux.yml
           if-no-files-found: error
 
   # ─── Upload all artifacts to the GitHub Release ──────────────────────────

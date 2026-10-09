@@ -84,6 +84,7 @@ jobs:
         uses: docker/build-push-action@v3
         with:
           context: .
+          file: apps/gateway/Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           platforms: linux/amd64,linux/arm64
