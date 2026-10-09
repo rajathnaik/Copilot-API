@@ -132,6 +132,12 @@ jobs no longer build Connector installers, and Connector releases do not replace
 the repository's global latest Gateway release. GitHub Actions publishes with
 its repository-scoped workflow token; no personal token belongs in source.
 
+GitHub has only one repository-wide latest release. When Connector is the
+repository's first stable release, `/releases/latest` can still return it despite
+`--latest=false`. Keep it stable and use the product-specific download link above,
+not a generic latest-release link. An approved Gateway release can take the
+Latest designation when it is published.
+
 ## Protocols and native configurations
 
 | Harness | Protocol and request endpoint | Configured API base | Credential integration |

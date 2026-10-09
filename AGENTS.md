@@ -47,3 +47,7 @@ Use short, imperative Conventional Commit subjects such as `feat: support custom
 - Connector releases use `connector-v<version>`; existing Gateway releases use `v<version>`. Never use a Gateway tag to publish Connector installers, or mark a Connector release as the repository's global latest release.
 - Release only tested source already pushed to the remote. Check that package metadata, tag, and actual installer versions match; verify the public download after publishing.
 - Normal branch pushes may run checks but must not publish. The Connector publishing workflow accepts only an explicitly approved product tag or manual workflow dispatch.
+
+## Learnings
+
+- GitHub has one repository-wide latest release. Its `/releases/latest` endpoint can return the first stable Connector release even with `--latest=false`; that flag does not guarantee product filtering. The user approved keeping Connector stable with this fallback: share product-specific tag/asset links, and designate an approved Gateway release as latest when one exists.
