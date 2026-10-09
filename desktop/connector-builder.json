@@ -3,6 +3,7 @@
   "productName": "Copilot API Connector",
   "extraMetadata": {
     "name": "copilot-api-connector",
+    "version": "2.7.1",
     "desktopName": "copilot-api-connector.desktop",
     "description": "Connect coding harnesses to a remote Copilot API gateway",
     "main": "out-connector/main/index.js"

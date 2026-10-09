@@ -3,6 +3,7 @@ import type { Locale } from './index'
 const zh: Locale = {
   connector: {
     title: 'Copilot API Connector',
+    version: '连接器版本 {{version}}',
     subtitle: '将编程工具连接到现有网关，无需在本机运行网关或登录 Copilot。',
     harness: '编程工具',
     harnessNotDetected:

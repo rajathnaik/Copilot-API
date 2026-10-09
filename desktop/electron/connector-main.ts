@@ -221,6 +221,7 @@ async function status(
     }
   })
   return {
+    appVersion: app.getVersion(),
     installation: await installation(harness),
     connection: harnessStore(harness).state()?.connection ?? null,
     secureStorage: codec.available(),

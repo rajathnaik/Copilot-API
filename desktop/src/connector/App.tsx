@@ -225,6 +225,11 @@ export default function ConnectorApp() {
           <img src={icon} width="48" height="48" className="shrink-0" alt="" />
           <div className="min-w-0">
             <h1 className="text-xl font-semibold">{t('connector.title')}</h1>
+            {status && (
+              <p className="mt-1 text-xs text-ink-soft">
+                {t('connector.version', { version: status.appVersion })}
+              </p>
+            )}
             <p className="mt-2 max-w-lg text-sm text-ink-soft">
               {t('connector.subtitle')}
             </p>

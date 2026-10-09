@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 import { Window } from 'happy-dom'
 import { act, createElement } from 'react'
 import type { Root } from 'react-dom/client'
+import connectorBuilder from '../connector-builder.json'
 import ConnectorApp from '../src/connector/App'
 import { LanguageProvider } from '../src/contexts/LanguageContext'
 import type {
@@ -22,6 +23,7 @@ const connection: ConnectorConnection = {
   configPath: 'C:\\Fixture\\Codex\\config.toml',
 }
 const initial: ConnectorStatus = {
+  appVersion: '2.7.1',
   installation: {
     executable: 'codex',
     version: '0.160.0',
@@ -197,6 +199,24 @@ function profileStatuses(
 }
 
 describe('standalone connector UI', () => {
+  test('packages a newer connector version without changing its installation identity', () => {
+    expect(
+      Bun.semver.satisfies(connectorBuilder.extraMetadata.version, '>2.7.0'),
+    ).toBe(true)
+    expect(connectorBuilder.appId).toBe('com.copilot-api.connector')
+    expect(connectorBuilder.productName).toBe('Copilot API Connector')
+    expect(connectorBuilder.extraMetadata.name).toBe('copilot-api-connector')
+    expect(connectorBuilder.win.artifactName).toBe(
+      'Copilot.API.Connector.Setup.${version}.${ext}',
+    )
+  })
+
+  test('shows the actual connector version independently of the harness version', async () => {
+    await render()
+    expect(container.textContent).toContain('Connector version 2.7.1')
+    expect(container.textContent).not.toContain('Connector version 0.160.0')
+  })
+
   test('shows damaged saved-profile errors without invalid nested paragraphs', async () => {
     status.mockResolvedValueOnce({
       ok: true,

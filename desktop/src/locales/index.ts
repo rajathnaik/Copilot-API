@@ -4,6 +4,7 @@ import zh from './zh'
 export interface Locale {
   connector: {
     title: string
+    version: string
     subtitle: string
     harness: string
     harnessNotDetected: string

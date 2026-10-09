@@ -84,6 +84,7 @@ export interface ConnectorProfile {
 }
 
 export interface ConnectorStatus {
+  appVersion: string
   installation: HarnessInstallation | null
   connection: ConnectorConnection | null
   secureStorage: boolean

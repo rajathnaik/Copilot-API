@@ -3,6 +3,7 @@ import type { Locale } from './index'
 const en: Locale = {
   connector: {
     title: 'Copilot API Connector',
+    version: 'Connector version {{version}}',
     subtitle:
       'Connect your coding harness to an existing gateway. No local gateway or Copilot sign-in required.',
     harness: 'Coding harness',

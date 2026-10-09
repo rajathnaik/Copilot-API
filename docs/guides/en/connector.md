@@ -68,6 +68,40 @@ The two-input workflow requires a tunnel accessible without a separate tunnel
 login. Gateway API-key authentication must still be enabled. A gateway key
 does not replace Microsoft Dev Tunnels transport authentication.
 
+## Installing, upgrading, and removing the Windows connector
+
+Use the installer on the computer running the coding harness. Copy it to that
+computer if the gateway and consumer are different machines; the consumer does
+not need the gateway application.
+
+For an upgrade, close the connector and pause active harness sessions, then run
+the newer installer under the same Windows account. Keep its existing install
+location. The standard installer replaces application files and preserves
+saved profiles and OS-encrypted credentials; uninstalling first is unnecessary.
+
+The connector has its own release version in
+`desktop/connector-builder.json` (`extraMetadata.version`), independent of the
+gateway's package version. The multi-harness follow-up release is **2.7.1**,
+with installer **Copilot.API.Connector.Setup.2.7.1.exe**. Earlier Codex-only and
+multi-harness builds both used 2.7.0 and the same installer filename, so an older
+downloaded copy is not distinguishable by its name/version alone.
+
+After installation, open Copilot API Connector from the Start menu and verify
+**Connector version 2.7.1** in its header and all five harness options. If an old
+window was still running, fully exit it and reopen the app. If the old UI still
+appears, check the launched executable's location and Windows file properties
+before removing anything; the shortcut may point to another installation.
+Installing on a different Windows account does not update the first account's
+per-user installation.
+
+For permanent removal, Undo each configured connection before uninstalling
+through Windows Settings > Apps > Installed apps. Do not uninstall a
+helper-backed connection while Undo is blocked by external configuration edits:
+removing the executable can break authentication. Upgrading preserves that
+ownership conflict rather than clearing or overwriting it.
+
+Updates remain manual; there is no automatic connector updater.
+
 ## Protocols and native configurations
 
 | Harness | Protocol and request endpoint | Configured API base | Credential integration |
