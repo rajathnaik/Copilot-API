@@ -21,6 +21,10 @@ __pycache__/
 
 # build output
 dist/
+**/out/
+**/release/
+**/coverage/
+*.tsbuildinfo
 
 .opencode/plans
 .opencode/package-lock.json

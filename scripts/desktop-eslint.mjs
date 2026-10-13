@@ -10,13 +10,12 @@ export function desktopESLintConfig(configDir, extraIgnores = []) {
   return defineConfig(
     {
       ignores: [
-        'node_modules/**',
-        'out/**',
-        'out-connector/**',
-        'release/**',
-        'release-connector/**',
-        'dist/**',
-        '*.tsbuildinfo',
+        '**/node_modules/**',
+        '**/out/**',
+        '**/release/**',
+        '**/dist/**',
+        '**/coverage/**',
+        '**/*.tsbuildinfo',
         'electron.vite.config.*.mjs',
         ...extraIgnores,
       ],

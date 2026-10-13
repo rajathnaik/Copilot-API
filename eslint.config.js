@@ -5,5 +5,4 @@ import { desktopESLintConfig } from './scripts/desktop-eslint.mjs'
 export default desktopESLintConfig(dirname(fileURLToPath(import.meta.url)), [
   'apps/**',
   'packages/**',
-  'plugin/**',
 ])

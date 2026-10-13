@@ -1,0 +1,29 @@
+:root { font-family: "Segoe UI", system-ui, sans-serif; color: #17243a; background: #edf2f8; font-size: 14px; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { max-width: 1200px; margin: auto; padding: 28px; }
+header { display: flex; align-items: center; gap: 14px; margin-bottom: 24px; }
+h1 { font-size: 27px; margin: 0; } h2 { font-size: 18px; margin: 0 0 12px; }
+p { line-height: 1.6; margin: 8px 0; } header p { margin: 2px 0; color: #526178; }
+.version { margin-left: auto; color: #526178; }
+section { margin-top: 18px; background: white; border: 1px solid #dbe3ef; border-radius: 12px; padding: 22px; }
+.notice { padding: 16px; background: #e0ebfa; border-radius: 10px; line-height: 1.6; }
+.error { margin-top: 16px; padding: 15px; background: #ffe8e8; color: #8b2020; border-radius: 8px; }
+form { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+label { display: grid; gap: 6px; } .wide { grid-column: 1 / -1; }
+input, select, button { font: inherit; border-radius: 6px; border: 1px solid #a7b6ca; padding: 10px; }
+button { cursor: pointer; background: #f2f6fb; } button:disabled { opacity: .55; cursor: not-allowed; }
+.primary { color: white; background: #183c70; border-color: #183c70; }
+.actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 14px; }
+code { font-size: 12px; overflow-wrap: anywhere; }
+.muted, .actions span { color: #526178; }
+.source { display: flex; gap: 18px; align-items: center; padding: 12px 0; border-bottom: 1px solid #edf2f8; }
+.checkbox { display: flex; align-items: center; margin-left: auto; }
+table { width: 100%; border-collapse: collapse; margin-top: 12px; } th, td { text-align: left; padding: 10px; border-bottom: 1px solid #edf2f8; }
+.key { border-color: #9ab5d8; } .key button { margin-left: 14px; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid #45a9be; outline-offset: 2px; }
+@media (max-width: 800px) { main { padding: 16px; } form { grid-template-columns: 1fr; } table { display: block; overflow-x: auto; } }
+.config-diff { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background: #edf2f8; border-radius: 6px; font-size: 12px; }
+li { line-height: 1.6; } details { margin-top: 16px; } summary { cursor: pointer; }
+@media (max-width: 800px) { .config-diff { grid-template-columns: 1fr; } .source { flex-wrap: wrap; } }

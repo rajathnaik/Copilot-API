@@ -1,0 +1,26 @@
+{
+  "name": "@modelbridge/runtime",
+  "version": "0.1.0-dev.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/runtime.ts",
+    "./contracts": "./src/contracts.ts",
+    "./credentials": "./src/credentials/vault.ts",
+    "./dev-tunnels": "./src/remote-access/dev-tunnels.ts",
+    "./copilot": "./src/providers/copilot.ts",
+    "./codex": "./src/harnesses/codex-configurations.ts"
+  },
+  "scripts": {
+    "lint": "eslint --cache .",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test ./tests"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.15",
+    "hono": "^4.13.2",
+    "fetch-event-stream": "^0.1.5",
+    "toml-eslint-parser": "^0.10.0",
+    "zod": "^4.1.11"
+  }
+}

@@ -1,64 +1,68 @@
-# Repository Guidelines
+# ModelBridge repository guidelines
 
-## Project Layout
+## Architecture
 
-- `apps/gateway/`: private Bun/TypeScript Gateway package, with `src/`, `tests/`, and `pages/`; `src/lib/types/` defines the protocol contracts. Its Electron app is under `desktop/`, with its own manifest and checks.
-- `apps/connector/`: standalone consumer Electron app, with its own manifest, version, harness configurations, tests, and installer settings. It must not import Gateway source.
-- `packages/shared/`: private, genuinely shared atomic file writing, typed English strings, theme preference, and styling. Bundle this package into distributed artifacts. Both desktop products are English-only; do not restore language selectors or system-language detection.
-- `tests/`: workspace architecture tests; `scripts/`: shared build/development tools; `docs/`: documentation and screenshots; `plugin/`: Gateway plugin scripts.
-- Root is a private Bun workspace with one hoisted lockfile/install. Keep `docker-compose.yaml` at root so existing relative data mounts remain unchanged.
+- This is a clean-slate rebuild. Do not restore the legacy Gateway/Connector
+  shells, compatibility entry points, automatic state imports or old release
+  workflows to accelerate implementation.
+- Preserve the original direct Copilot device OAuth, token exchange, discovery
+  and forwarding approach. Reuse its protocol translators; do not introduce
+  the Copilot SDK or replace conversations with lossy prompt serialization.
+- `apps/modelbridge/` owns Electron, IPC, protected-profile composition, UI,
+  tray and external CLI processes. Its new app ID is
+  `com.rajathnaik.modelbridge`; data defaults to `%APPDATA%\ModelBridge`.
+- `packages/runtime/` owns source/model contracts, routing, authenticated
+  gateways, credential abstractions and Dev Tunnels provisioning. It must
+  not import Electron or application source.
+- Source-qualified model IDs are explicit routes, not aliases that may fall
+  back to another account/provider. Local and shared listeners use separate
+  keys; only explicitly shared sources may be exposed remotely.
+- Preserve Git history, published releases and unrelated user data. Replacement
+  of the old local products is approved only after the unified installer is
+  ready; use their exact uninstallers, not broad directory deletion.
 
-## Commands
+## Validation
 
-Run from the repository root unless noted:
+- Use one root `bun install --frozen-lockfile`, with Bun 1.4.2.
+- Run `bun run lint:all`, `bun run typecheck:all`, `bun run test` and
+  `bun run build`; run affected tests first during iteration.
+- Tests live in their owning workspace's `tests/`. Never use a bare `tests`
+  filter spanning workspaces.
+- Changed production logic must have at least 80% line coverage. Exercise
+  streaming, exact routes, credentials, source-sharing boundaries, restart
+  persistence and tunnel failure paths, not only successful discovery.
+- Native desktop tests use isolated temporary profiles and synthetic local
+  providers. Never launch automated tests against real user profiles, modify
+  real harness settings, provision live tunnels or print credentials.
+- Use the owning ESLint configuration for formatting (no semicolons, single
+  quotes in TypeScript). Keep strict types and explicit validation/errors.
 
-- `bun run dev` / `bun run start`: watch / production API entrypoint, with system CA enabled.
-- `bun install --frozen-lockfile`: install all workspaces; do not perform separate desktop installs.
-- `bun run build`: Gateway API bundle; `bun run build:desktop`: Gateway server bundle; `bun run build:gateway`: Gateway server and Electron app; `bun run build:connector`: Connector Electron app.
-- `bun run typecheck` / `bun run lint`: root tooling (and Gateway API for typecheck).
-- `bun run typecheck:all` / `bun run lint:all`: all workspaces.
-- `bun run test`: all suites with their correct working directories and test setup.
-- `bun run knip`: workspace-aware inventory; verify ownership, internal use and runtime entrypoints before removing flagged exports or dependencies.
-- From `apps/gateway/`, `bun test ./tests/provider-resolver.test.ts`: one Gateway test; `bun run test`: its suite.
-- `bun run --cwd apps/gateway/desktop test` / `bun run --cwd apps/connector test`: individual Electron suites.
-- Use explicit `./tests` directories, not the bare `tests` filter, which discovers nested workspaces and bypasses their working-directory assumptions.
+## Product scope and releases
 
-## Code Style
-
-- Use ES modules, strict TypeScript, and `~/*` imports within Gateway `src/`; avoid `any` and derive request/response fields from actual contract types.
-- Use `camelCase` for variables/functions, `PascalCase` for types/classes, and descriptive filenames such as `responses-stream-translation.ts`.
-- Format files using the owning package's ESLint configuration; from that package run `bun run lint --fix <files>`.
-- ESLint embeds Prettier options, including `semi: false`; do not run standalone `prettier` or `bunx prettier`.
-
-## Verification
-
-- Use Bun tests named `*.test.ts` in the owning workspace's `tests/`.
-- Changed code must reach at least 80% unit test coverage; run `bun test --coverage ./tests/<file>.test.ts` from the owning workspace.
-- Test affected request translation, providers, auth, config, and streaming edge cases; run the relevant tests, lint, and typecheck for code changes, expanding validation for shared behavior.
-- For documentation-only changes, verify referenced paths/commands and inspect the diff; application tests are unnecessary.
-
-## Security
-
-Never commit tokens, local credentials, or generated secrets; carefully check Gateway auth, proxy, TLS, and token refresh changes, especially in `apps/gateway/src/lib/`, `apps/gateway/src/auth.ts`, and `apps/gateway/src/services/github/`, and Connector credential helpers.
-
-## Commits and Pull Requests
-
-Use short, imperative Conventional Commit subjects such as `feat: support custom provider auth flow`; PRs should describe the resulting behavior, link relevant issues, list checks and results, and include screenshots for desktop/UI changes.
-
-## Product Releases
-
-- Gateway and Connector are independent products: keep their versions, release tags, builds, and installer assets separate.
-- Gateway versions live in `apps/gateway/package.json` and `apps/gateway/desktop/package.json` and must match. Connector version lives only in `apps/connector/package.json`. Preserve installed app identities and saved-data locations when reorganizing source.
-- After a successful commit or push handled by the agent, ask whether the user wants a release. For a combined commit-and-push operation, ask once after the push. Propose the affected product and an appropriate patch/minor/major version.
-- Commit/push approval is not release approval. Do not create release tags, publish releases, or upload installers without explicit approval for that product/version.
-- Connector releases use `connector-v<version>`; existing Gateway releases use `v<version>`. Never use a Gateway tag to publish Connector installers, or mark a Connector release as the repository's global latest release.
-- Release only tested source already pushed to the remote. Check that package metadata, tag, and actual installer versions match; verify the public download after publishing.
-- Normal branch pushes may run checks but must not publish. The Connector publishing workflow accepts only an explicitly approved product tag or manual workflow dispatch.
-- Gateway installer publishing is self-contained and targets this fork. Do not restore upstream npm, container-registry or GitHub Pages publication. Docker Compose builds the local fork image; keep the runtime usage page and functional plugins.
+- `0.1.0-dev.0` is a development foundation, not a shipped universal product.
+  Direct Copilot hosting and revision-safe Codex configuration are implemented
+  with synthetic/native isolated checks. Do not claim real subscription,
+  tunnel or two-machine acceptance before live verification. Other harnesses
+  and subscription adapters remain subsequent milestones.
+- Desktop and runtime are private workspaces of one product with matching
+  versions, not independent installer products.
+- No release/update publishing workflow is active during the rebuild. Future
+  tags use `modelbridge-v<version>`, with explicit product/version approval,
+  tested pushed source, installer/checksum and upgrade validation.
+- Never force-push, replace historical tags, delete release assets or uninstall
+  old apps merely as part of source restructuring.
+- Retain LICENSE and NOTICE attribution and provider permitted-use boundaries.
+  A consumer subscription does not automatically grant third-party API access.
 
 ## Learnings
 
-- Regenerate consolidated lockfiles with Bun, not by merging package records: identical record keys can hide incompatible transitive versions (for example `signal-exit` 3 vs 4). Remove stale per-workspace install shims when changing linker layouts, and verify a frozen install plus actual packaging.
-- Electron Builder needs an exact Electron version when dependencies are hoisted outside the product directory; keep both Electron manifests pinned consistently. The shared lint toolchain pins the original Gateway formatter/TypeScript-ESLint versions to avoid unrelated source/style changes.
-- Preserve each product's Node/Bun declaration versions explicitly during workspace migration. Hoisting newer Node declarations can change error and mock inference; validate typing before applying lint autofixes that may remove necessary type assertions.
-- GitHub has one repository-wide latest release. Its `/releases/latest` endpoint can return the first stable Connector release even with `--latest=false`; that flag does not guarantee product filtering. The user approved keeping Connector stable with this fallback: share product-specific tag/asset links, and designate an approved Gateway release as latest when one exists.
+- The Dev Tunnels SDK's MIT license does not license redistribution of the
+  proprietary Microsoft CLI. Do not bundle or auto-download it; retain the
+  manual Microsoft instructions/recheck flow, gate hosting with offline
+  `--help` validation, and allow client-only installation without the CLI.
+- A credential helper tested only after the desktop exits can pass while
+  first-run concurrent retrieval fails. On fresh Windows profiles, this
+  occurred with Electron safeStorage; retain profile-bound DPAPI CurrentUser
+  protection and test applying Codex settings while the app is still running.
+  Migration must preserve the existing local key, and credential-only mode
+  should decrypt only that key, not unrelated subscription credentials.

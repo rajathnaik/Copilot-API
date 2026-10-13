@@ -1,56 +1,28 @@
 ## Summary
 
-<!-- What changed and why. Link related issues when applicable. Keep it short and imperative, following the repo's Conventional Commit style (feat:, fix:, chore:, ...). -->
+<!-- Explain the ModelBridge change and link related issues. -->
 
-## Code Review (Required)
+## Review
 
-> [!IMPORTANT]
-> Every pull request in this repository **MUST** be reviewed with the project code-review skill before merge:
->
-> - Skill: `copilot-api-code-review` (`.agents/skills/copilot-api-code-review/SKILL.md`)
-> - Invoke it with a prompt such as: "Use the copilot-api-code-review skill to review this PR".
-> - The review output is written in English and **MUST be pasted in full below** (Summary, Context Checked, CHANGESET_SUMMARY, CODE_REVIEW_SUMMARY, Test Notes, Release Risk).
-> - A `BLOCKING` review decision must be resolved before merge. PRs without a completed code-review block will not be merged.
+<!-- Record findings and resolve blocking issues before merging. -->
 
-### Review Output
+- [ ] Architecture and source-qualified routing reviewed
+- [ ] Credential, source-sharing and failure behavior reviewed
+- [ ] No legacy shells/imports, installer identities or release workflows restored
 
-<!-- Paste the full copilot-api-code-review output here. Do not summarize or trim the CODE_REVIEW_SUMMARY block. -->
+## Validation
 
-- **Summary**:
-- **Context Checked**:
-- **CHANGESET_SUMMARY**:
-- **CODE_REVIEW_SUMMARY**:
-
-  ```text
-  Review Decision: BLOCKING | NON_BLOCKING
-  Findings Total: <N> (CRITICAL=<n1>, HIGH_PRIORITY=<n2>, SUGGESTION=<n3>)
-
-  [CRITICAL]
-  None
-
-  [HIGH_PRIORITY]
-  None
-
-  [SUGGESTION]
-  None
-  ```
-
-- **Test Notes**:
-- **Release Risk**: <!-- low / med / high + why -->
-
-## Test Evidence
-
-<!-- Check what you actually ran; CI enforces all of these. -->
-
-- [ ] `bun run lint:all` passes
-- [ ] `bun run typecheck:all` passes
-- [ ] `bun run test` passes - targeted files run: <!-- e.g. from apps/gateway: bun test ./tests/provider-resolver.test.ts -->
-- [ ] `bun run build` succeeds; affected apps pass `bun run build:gateway` / `bun run build:connector`
+- [ ] `bun run lint:all`
+- [ ] `bun run typecheck:all`
+- [ ] `bun run test`
+- [ ] `bun run build`
+- [ ] At least 80% line coverage for changed production logic
+- [ ] Isolated native profile restart test, when desktop/state behavior changes
 
 ## Screenshots
 
-<!-- Required for apps/gateway/desktop, apps/connector, or apps/gateway/pages UI changes; delete this section otherwise. -->
+<!-- Include screenshots for UI changes. -->
 
-## Notes
+## Product and release impact
 
-<!-- Migration/compatibility notes, follow-ups, or anything reviewers should know. -->
+<!-- State limitations, follow-ups and any separately approved release scope. -->

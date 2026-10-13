@@ -1,0 +1,51 @@
+{
+  "name": "modelbridge-desktop",
+  "version": "0.1.0-dev.0",
+  "private": true,
+  "description": "A single desktop hub for local providers and remote AI sources.",
+  "author": "Rajath Naik",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "node ../../scripts/ensure-electron.mjs && electron-vite dev",
+    "build": "electron-vite build",
+    "gen-icons": "node ../../scripts/generate-modelbridge-icons.mjs",
+    "lint": "eslint --cache .",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test ./tests",
+    "package:win": "bun run build && electron-builder --win --publish never"
+  },
+  "devDependencies": {
+    "@modelbridge/runtime": "workspace:*",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "43.4.1",
+    "electron-builder": "^26.8.1",
+    "electron-vite": "^3.1.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "vite": "^6.3.3"
+  },
+  "build": {
+    "appId": "com.rajathnaik.modelbridge",
+    "productName": "ModelBridge",
+    "electronLanguages": ["en-US"],
+    "directories": { "output": "release" },
+    "files": ["out/**/*", "assets/**/*"],
+    "extraFiles": [
+      { "from": "../../LICENSE", "to": "LICENSE" },
+      { "from": "../../NOTICE.md", "to": "NOTICE.md" }
+    ],
+    "win": {
+      "target": "nsis",
+      "artifactName": "ModelBridge.Setup.${version}.${ext}",
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "include": "installer/prerequisites.nsh",
+      "installerLanguages": ["en_US"],
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}

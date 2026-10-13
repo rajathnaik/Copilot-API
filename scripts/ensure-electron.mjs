@@ -8,8 +8,12 @@ const require = createRequire(import.meta.url)
 let installScript
 try {
   installScript = require.resolve('electron/install.js')
-} catch {
-  process.exit(0)
+} catch (error) {
+  console.error(
+    '[ensure-electron] Electron is not installed. Run bun install --frozen-lockfile.',
+    error instanceof Error ? error.message : 'Dependency resolution failed.',
+  )
+  process.exit(1)
 }
 
 const electronDir = path.dirname(installScript)
