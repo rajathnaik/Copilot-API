@@ -1,5 +1,6 @@
 import { expect, spyOn, test } from 'bun:test'
 import { EventEmitter } from 'node:events'
+import * as childProcess from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import os from 'node:os'
 import path from 'node:path'
@@ -148,6 +149,7 @@ test('a missing tunnel CLI is an explicit error and never triggers installation 
   process.env.PATH = missing
   process.env.LOCALAPPDATA = missing
   const exists = spyOn(fs, 'existsSync').mockReturnValue(false)
+  const registry = spyOn(childProcess, 'execFileSync').mockReturnValue('')
   try {
     const transport = new TunnelProcess()
     await expect(transport.command(['show'])).rejects.toThrow(
@@ -159,7 +161,9 @@ test('a missing tunnel CLI is an explicit error and never triggers installation 
     await expect(transport.start('owned')).rejects.toThrow(
       'Install the Microsoft Dev Tunnels CLI',
     )
+    expect(registry).toHaveBeenCalledTimes(process.platform === 'win32' ? 3 : 0)
   } finally {
+    registry.mockRestore()
     exists.mockRestore()
     if (originalPath === undefined) delete process.env.PATH
     else process.env.PATH = originalPath
