@@ -10,6 +10,9 @@ const root = fileURLToPath(new URL('..', import.meta.url))
 
 test('one clean-slate product has matching versions and a distinct Windows identity', () => {
   expect(workspace.workspaces).toEqual(['apps/modelbridge', 'packages/runtime'])
+  expect(fs.readFileSync(path.join(root, '.gitattributes'), 'utf8')).toContain(
+    '* text=auto eol=lf',
+  )
   expect(desktop.version).toBe(workspace.version)
   expect(runtime.version).toBe(workspace.version)
   expect(desktop.build.appId).toBe('com.rajathnaik.modelbridge')
