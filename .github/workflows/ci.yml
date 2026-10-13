@@ -27,8 +27,13 @@ jobs:
       - name: Verify isolated native profile persistence
         shell: pwsh
         run: |
+          node .\scripts\ensure-electron.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $env:MODELBRIDGE_TEST_ELECTRON = node -p "require('electron')"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path -LiteralPath $env:MODELBRIDGE_TEST_ELECTRON -PathType Leaf)) {
+            throw 'Electron discovery did not return an executable file.'
+          }
           Set-Location apps\modelbridge
           bun test ./tests/native-profile.test.ts
           exit $LASTEXITCODE

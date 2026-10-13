@@ -200,6 +200,8 @@ The Windows native restart test uses a temporary Electron application/profile
 and a synthetic provider. After building, run it from PowerShell:
 
 ```powershell
+node .\scripts\ensure-electron.mjs
+if ($LASTEXITCODE -ne 0) { throw 'Electron binary initialization failed.' }
 $env:MODELBRIDGE_TEST_ELECTRON = node -p "require('electron')"
 Set-Location apps\modelbridge
 bun test .\tests\native-profile.test.ts
