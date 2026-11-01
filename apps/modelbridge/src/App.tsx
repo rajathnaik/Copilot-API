@@ -63,8 +63,8 @@ export default function App() {
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   useEffect(() => {
     let active = true
-    // The runtime answers only after protected credentials are unlocked, so
-    // never stack status requests behind a slow startup.
+    // The runtime answers only after it has started, so never stack status
+    // requests behind a slow startup.
     let pending = false
     const refresh = () => {
       if (pending) return
@@ -184,10 +184,7 @@ export default function App() {
       {!status ?
         <section className="starting" role="status" aria-live="polite">
           <h2>Starting ModelBridge…</h2>
-          <p>
-            Unlocking protected credentials and starting the local gateway. This
-            usually takes a few seconds.
-          </p>
+          <p>Starting the local gateway. This usually takes a few seconds.</p>
         </section>
       : <>
           <div

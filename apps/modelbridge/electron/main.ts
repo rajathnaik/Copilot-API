@@ -5,7 +5,6 @@ import {
   ipcMain,
   Menu,
   nativeImage,
-  safeStorage,
   Tray,
   shell,
 } from 'electron'
@@ -24,15 +23,11 @@ import {
 import type { CopilotLogin } from '@modelbridge/runtime/copilot'
 import { CodexConfigurations } from '@modelbridge/runtime/codex'
 import { DevTunnels } from '@modelbridge/runtime/dev-tunnels'
-import {
-  EncryptedVault,
-  type CredentialCodec,
-} from '@modelbridge/runtime/credentials'
+import { CredentialStore } from '@modelbridge/runtime/credentials'
 import type { AppStatus, Result } from '../src/types'
-import { AppState } from './state'
+import { AppState, credentialsFile } from './state'
 import { TunnelProcess } from './devtunnel-process'
 import { codexConfigPath, discoverCodex, inspectCodex } from './codex-discovery'
-import { windowsCredentialCodec } from './windows-credentials'
 import { createDiagnosticsLog, describeError } from './diagnostics'
 
 app.setName('ModelBridge')
@@ -117,16 +112,6 @@ function registerIpc(): void {
     )
 }
 
-function credentialCodec(): CredentialCodec {
-  const legacy: CredentialCodec = {
-    encrypt: (value) => safeStorage.encryptString(value).toString('base64'),
-    decrypt: (value) => safeStorage.decryptString(Buffer.from(value, 'base64')),
-  }
-  return process.platform === 'win32' ?
-      windowsCredentialCodec(app.getPath('userData'), legacy)
-    : legacy
-}
-
 async function closeServer(
   server: ReturnType<typeof serve> | null,
 ): Promise<void> {
@@ -149,25 +134,13 @@ async function listen(gateway: ReturnType<typeof createGateway>, port: number) {
 }
 
 async function initialize(): Promise<void> {
-  if (
-    !safeStorage.isEncryptionAvailable()
-    || (process.platform === 'linux'
-      && safeStorage.getSelectedStorageBackend() === 'basic_text')
-  )
-    throw new Error(
-      'OS-protected credential storage is required. Plaintext storage is not supported.',
+  const state = AppState.open(app.getPath('userData'))
+  log('profile loaded')
+  if (state.archivedLegacyProfile)
+    log(
+      'archived encrypted profile from an earlier build; sign in again',
+      state.archivedLegacyProfile,
     )
-  const unlocking = performance.now()
-  const state = await AppState.open(app.getPath('userData'), credentialCodec())
-  log(
-    'protected credentials unlocked',
-    `${Math.round(performance.now() - unlocking)}ms`,
-  )
-  if (
-    process.platform === 'win32'
-    && (await state.vault.upgrade('local-access'))
-  )
-    log('local key re-protected for the credential helper')
   const sources = new SourceService(state.value.sources, state.vault, (next) =>
     state.save({ ...state.value, sources: next }),
   )
@@ -511,9 +484,7 @@ app.on('before-quit', (event) => {
 if (credentialMode) {
   void app
     .whenReady()
-    .then(async () => {
-      if (!safeStorage.isEncryptionAvailable())
-        throw new Error('OS-protected key storage is unavailable.')
+    .then(() => {
       if (!fs.existsSync(path.join(app.getPath('userData'), 'state.json')))
         throw new Error(
           'This ModelBridge profile has no saved gateway state. Open the app and reconnect; the helper will not generate replacement keys.',
@@ -526,12 +497,10 @@ if (credentialMode) {
           ),
         ),
       )
-      const vault = await EncryptedVault.open(
-        path.join(app.getPath('userData'), 'credentials.encrypted.json'),
-        credentialCodec(),
-        ['local-access'],
+      const store = CredentialStore.open(
+        path.join(app.getPath('userData'), credentialsFile),
       )
-      process.stdout.write(vault.get('local-access'), () => app.exit(0))
+      process.stdout.write(store.get('local-access'), () => app.exit(0))
     })
     .catch((error: unknown) => {
       process.stderr.write(

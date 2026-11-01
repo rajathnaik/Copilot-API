@@ -7,22 +7,22 @@ The new desktop structure retains the original Copilot API's direct
 authentication, token exchange, forwarding and protocol translations.
 **There is no Copilot SDK integration.**
 
-**Development pre-release: 0.1.0-dev.1.**
+**Development pre-release: 0.1.0-dev.2.**
 
 Download the unsigned Windows installer from the
-[ModelBridge development release](https://github.com/rajathnaik/Copilot-API/releases/tag/modelbridge-v0.1.0-dev.1):
+[ModelBridge development release](https://github.com/rajathnaik/Copilot-API/releases/tag/modelbridge-v0.1.0-dev.2):
 
-- [Windows installer](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.0-dev.1/ModelBridge.Setup.0.1.0-dev.1.exe)
-- [SHA256 checksum](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.0-dev.1/ModelBridge.Setup.0.1.0-dev.1.exe.sha256)
+- [Windows installer](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.0-dev.2/ModelBridge.Setup.0.1.0-dev.2.exe)
+- [SHA256 checksum](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.0-dev.2/ModelBridge.Setup.0.1.0-dev.2.exe.sha256)
 
-Compare `Get-FileHash .\ModelBridge.Setup.0.1.0-dev.1.exe -Algorithm SHA256`
+Compare `Get-FileHash .\ModelBridge.Setup.0.1.0-dev.2.exe -Algorithm SHA256`
 with the downloaded checksum before running the installer. Windows may warn
 about an unknown publisher because this development build is not code-signed.
 Use the same installer on the host and client machines.
 
 To build the unsigned Windows development installer locally, run
 `bun run --cwd apps/modelbridge package:win`. Its output is
-`apps/modelbridge/release/ModelBridge.Setup.0.1.0-dev.1.exe`. This is a test
+`apps/modelbridge/release/ModelBridge.Setup.0.1.0-dev.2.exe`. This is a test
 candidate, not a verified production release; installation/upgrade/uninstall
 and the real two-machine acceptance test are still pending.
 
@@ -45,20 +45,18 @@ and the real two-machine acceptance test are still pending.
   across remote hops, supports ETag refresh, and enforces Codex's 1 MiB limit.
 - Independently selected sources for sharing through a separate authenticated
   listener on `127.0.0.1:4322`.
-- OS-encrypted credentials in the app's own profile. Codex obtains its local
-  key by running the same installed ModelBridge executable in credential-only
-  mode; there is no second application or plaintext key in its TOML.
-  There is no automatic import of old product settings.
-- Windows credentials use DPAPI CurrentUser protection bound to the canonical
-  profile path, independent of Chromium's in-memory encryption key. Existing
-  decryptable safeStorage entries remain readable; startup re-protects a legacy
-  local key once, without changing its value, for the concurrent helper.
-  PowerShell receives secret data through stdin, never command-line arguments.
-  Protection runs in a batched, asynchronous PowerShell process with a 30-second
-  deadline, so slow security software cannot freeze the window. Credential-only
-  mode decrypts only the local key.
-- The window opens immediately and shows a startup state while credentials
-  unlock. Sections are split into Overview, Host, Connect, Sources & models and
+- Credentials (access keys and the Copilot sign-in token) are stored
+  **unencrypted** in `%APPDATA%\ModelBridge\credentials.json`, protected only
+  by your Windows user account. This is a deliberate simplification for a
+  personal tool; at-rest encryption is deferred. Codex obtains its local key by
+  running the same installed ModelBridge executable in credential-only mode,
+  so the key is still never written into Codex's TOML.
+  There is no automatic import of old product settings. A profile encrypted by
+  0.1.0-dev.0/dev.1 is archived to a `legacy-encrypted-*` folder on first start;
+  the tunnel ID (and therefore the URL) is kept, but you must sign in to Copilot
+  again and re-apply the Codex configuration.
+- The window opens immediately and shows a startup state while the runtime
+  starts. Sections are split into Overview, Host, Connect, Sources & models and
   Codex tabs.
 - Codex installation discovery, redacted configuration previews, named
   revisions, reactivation, native configuration restoration, external-edit
@@ -94,8 +92,15 @@ installing ModelBridge. Successful CLI detection does not replace Microsoft
 sign-in or verify subscription/tunnel connectivity.
 
 Electron and its Node runtime are bundled. Bun is only a development/build
-prerequisite. Windows PowerShell is an operating-system prerequisite, used
-for Windows credential protection and fresh PATH discovery.
+prerequisite. The app uses Windows PowerShell only asynchronously, to refresh
+PATH when looking for the Dev Tunnels and Codex CLIs.
+
+When you click **Install**, the installer checks whether ModelBridge is
+already running using an in-process lookup (`nsProcess`). The stock
+electron-builder check shells out to PowerShell/WMI without a timeout and could
+hang indefinitely on machines where PowerShell or WMI is slow or held by
+security software; ModelBridge overrides it in both the installer and
+uninstaller.
 
 Source discovery is not inference verification. Generic API and remote
 sources forward their advertised protocol; Copilot has its own inherited
@@ -107,13 +112,10 @@ for every provider.
 
 ModelBridge writes a non-secret diagnostics log to
 `%APPDATA%\ModelBridge\logs\modelbridge.log` (rotated at 512 KB). It records
-startup timings, credential unlock duration, window responsiveness and
-renderer/child-process failures; it never records keys or tokens. If the window
-stays on "Starting ModelBridge…" or startup fails, check this file first. A
-long credential unlock usually means security software is delaying Windows
-PowerShell; allow ModelBridge or Windows PowerShell rather than deleting the
-profile. ModelBridge is single-instance: launching it again focuses the running
-window, including one hidden in the tray.
+startup timings, window responsiveness and renderer/child-process failures; it
+never records keys or tokens. If the window stays on "Starting ModelBridge…" or
+startup fails, check this file first. ModelBridge is single-instance: launching
+it again focuses the running window, including one hidden in the tray.
 
 ## Pending live verification and subsequent work
 
@@ -126,11 +128,14 @@ remain subsequent implementation milestones. Claude subscription integration
 requires a separate feasibility and permitted-use assessment.
 
 The development installer has been built and its unpacked executable has been
-smoke-tested outside the workspace, including protected helper retrieval while
+smoke-tested outside the workspace, including helper key retrieval while
 the app runs, authenticated inference and packaged attribution. The prerequisite wizard has been tested with isolated missing/invalid/working
 CLI fixtures and the full installer has been opened and cancelled before
-installation, including detection of this host's installed CLI. The installer
-has not been installed/upgrade/uninstall-tested. Existing
+installation, including detection of this host's installed CLI. An isolated variant of the
+installer (different app ID/product name) has been silently installed,
+reinstalled over a running app, and uninstalled without starting PowerShell;
+upgrading a real dev.0/dev.1 installation still runs that build's old
+uninstaller, which uses the stock PowerShell check. Existing
 installations and historical Git/releases have not been removed. Codex
 configuration is modified only after approving an explicit preview.
 
@@ -158,7 +163,7 @@ ModelBridge edits the user-level `CODEX_HOME\config.toml` (normally
   capabilities. Unrelated TOML settings/comments are preserved.
 
 The preview shows the current and proposed TOML with secrets redacted.
-Revisions and the original managed settings are encrypted in ModelBridge's
+Revisions and the original managed settings are stored in ModelBridge's
 profile. Restore native settings returns the owned fields/provider to their
 original values while preserving later unrelated edits. External changes to
 managed fields require explicit acknowledgement instead of being overwritten.
@@ -207,11 +212,11 @@ bun run test
 `MODELBRIDGE_PORT` overrides the local port; `0` selects an ephemeral port for
 tests. Sharing uses port 4322. The desktop defaults to
 `%APPDATA%\ModelBridge`; `--user-data-dir` explicitly selects an isolated
-profile. Never copy encrypted credentials between OS users or profiles.
+profile. `credentials.json` holds keys in plain text; do not share or commit it.
 
-Missing, corrupt or undecryptable profile metadata/credentials are explicit
-failures, not permission to silently regenerate keys. Preserve the affected
-profile for recovery, or choose a fresh isolated profile for a new setup.
+Missing or corrupt profile metadata/credentials are explicit failures, not
+permission to silently regenerate keys. Preserve the affected profile for
+recovery, or choose a fresh isolated profile for a new setup.
 Interactive profile recovery is a later milestone.
 
 The Windows native restart test uses a temporary Electron application/profile
@@ -225,7 +230,7 @@ Set-Location apps\modelbridge
 bun test .\tests\native-profile.test.ts
 ```
 
-It verifies authenticated inference, encrypted storage, the actual
+It verifies authenticated inference, credential storage, the actual
 credential-only executable mode and stable local-key hashes across two
 graceful application launches. It never provisions live
 tunnels or modifies existing user profiles.
@@ -294,7 +299,7 @@ original ChatGPT sign-in independently of a custom local provider.
 
 | Location | Responsibility |
 | --- | --- |
-| [apps/modelbridge](apps/modelbridge/) | Desktop lifecycle, IPC, UI, protected-profile composition, tray and CLI process management |
+| [apps/modelbridge](apps/modelbridge/) | Desktop lifecycle, IPC, UI, profile composition, tray and CLI process management |
 | [packages/runtime](packages/runtime/) | Validated source contracts, explicit routing, gateway authentication, streaming, credential storage abstraction and tunnel provisioning |
 | [tests](tests/) | Product identity and architectural boundaries |
 | [scripts](scripts/) | Electron bootstrap, lint conventions and ModelBridge icon generation |

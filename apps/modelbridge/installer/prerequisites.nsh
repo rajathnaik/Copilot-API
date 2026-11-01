@@ -1,3 +1,39 @@
+!include "LogicLib.nsh"
+
+; Replaces electron-builder's default running-app check, which shells out to
+; PowerShell/WMI without a timeout and can hang the installer at "Install".
+!macro customCheckAppRunning
+  nsProcess::_FindProcess "${APP_EXECUTABLE_FILENAME}"
+  Pop $R0
+  ${If} $R0 == 0
+    ${IfNot} ${isUpdated}
+      ${If} ${Cmd} `MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "$(appRunning)" /SD IDOK IDCANCEL`
+        Quit
+      ${EndIf}
+    ${EndIf}
+    DetailPrint "$(appClosing)"
+    StrCpy $R1 0
+    ${Do}
+      nsProcess::_KillProcess "${APP_EXECUTABLE_FILENAME}"
+      Pop $R0
+      Sleep 500
+      nsProcess::_FindProcess "${APP_EXECUTABLE_FILENAME}"
+      Pop $R0
+      ${If} $R0 != 0
+        ${ExitDo}
+      ${EndIf}
+      IntOp $R1 $R1 + 1
+      ${If} $R1 >= 6
+        ${If} ${Cmd} `MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(appCannotBeClosed)" /SD IDCANCEL IDCANCEL`
+          Quit
+        ${EndIf}
+        StrCpy $R1 0
+      ${EndIf}
+    ${Loop}
+  ${EndIf}
+  nsProcess::_Unload
+!macroend
+
 !ifndef BUILD_UNINSTALLER
 !include "MUI2.nsh"
 !include "nsDialogs.nsh"

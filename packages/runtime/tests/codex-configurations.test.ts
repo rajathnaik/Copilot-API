@@ -8,7 +8,7 @@ import {
   configureCodex,
   redactConfig,
 } from '../src/harnesses/codex-config'
-import { EncryptedVault } from '../src/credentials/vault'
+import { CredentialStore } from '../src/credentials/vault'
 import type { AvailableModel } from '../src/contracts'
 
 const directories: string[] = []
@@ -53,13 +53,7 @@ async function fixture() {
     path.join(directory, 'auth.json'),
     'native-account-do-not-touch',
   )
-  const vault = await EncryptedVault.open(
-    path.join(directory, 'credentials.json'),
-    {
-      encrypt: (value) => Buffer.from(value).reverse().toString('base64'),
-      decrypt: (value) => Buffer.from(value, 'base64').reverse().toString(),
-    },
-  )
+  const vault = CredentialStore.open(path.join(directory, 'credentials.json'))
   const revisions = path.join(directory, 'revisions')
   return {
     directory,
@@ -128,9 +122,12 @@ test('activation, revision switching, restart and native restoration preserve un
   expect(fs.readFileSync(path.join(directory, 'auth.json'), 'utf8')).toBe(
     'native-account-do-not-touch',
   )
-  expect(
+  const stored = JSON.parse(
     fs.readFileSync(path.join(directory, 'credentials.json'), 'utf8'),
-  ).not.toContain('Native account')
+  ) as Record<string, string>
+  expect(
+    Object.keys(stored).some((key) => key.startsWith('codex-configurations-')),
+  ).toBe(true)
 })
 test('stale previews and external provider edits cannot overwrite newer settings without acknowledgement', async () => {
   const { file, service } = await fixture()

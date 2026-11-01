@@ -2,7 +2,7 @@ import { afterEach, expect, test, spyOn } from 'bun:test'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { atomicWrite, EncryptedVault } from '../src/credentials/vault'
+import { atomicWrite, CredentialStore } from '../src/credentials/vault'
 import {
   DevTunnels,
   validateTunnelUrl,
@@ -19,107 +19,21 @@ function directory() {
   directories.push(value)
   return value
 }
-const codec = {
-  encrypt: (value: string) => Buffer.from(value).reverse().toString('base64'),
-  decrypt: (value: string) => Buffer.from(value, 'base64').reverse().toString(),
-}
-
-test('protected storage survives restart without plaintext or silent credential recovery', async () => {
-  const file = path.join(directory(), 'vault.json')
-  const vault = await EncryptedVault.open(file, codec)
-  await expect(vault.set('source', '  ')).rejects.toThrow('nonempty')
-  expect(() => vault.get('missing')).toThrow('No saved')
-  await vault.set('source', 'synthetic-protected-key')
-  const empty = await EncryptedVault.open(file, { ...codec, decrypt: () => '' })
-  expect(() => empty.get('source')).toThrow('OS profile')
-  expect(fs.readFileSync(file, 'utf8')).not.toContain('synthetic-protected-key')
-  expect((await EncryptedVault.open(file, codec)).get('source')).toBe(
-    'synthetic-protected-key',
-  )
-  const changed = await EncryptedVault.open(file, {
-    ...codec,
-    decrypt: () => {
-      throw new Error('profile changed')
-    },
-  })
-  expect(() => changed.get('source')).toThrow('OS profile')
-  await vault.remove('source')
-  expect(() => vault.get('source')).toThrow()
+test('credential store persists plain values across restarts and rejects empty or corrupt data', () => {
+  const file = path.join(directory(), 'credentials.json')
+  const store = CredentialStore.open(file)
+  expect(() => store.set('source', '  ')).toThrow('nonempty')
+  expect(() => store.get('missing')).toThrow('No saved')
+  store.set('source', 'synthetic-key')
+  store.setMany({ first: 'first-value', second: 'second-value' })
+  const reopened = CredentialStore.open(file)
+  expect(reopened.get('source')).toBe('synthetic-key')
+  expect(reopened.get('second')).toBe('second-value')
+  reopened.remove('source')
+  expect(() => reopened.get('source')).toThrow('No saved')
+  expect(() => CredentialStore.open(file).get('source')).toThrow('No saved')
   fs.writeFileSync(file, '{broken')
-  await expect(EncryptedVault.open(file, codec)).rejects.toThrow()
-})
-
-test('vault decrypts once on open, serializes concurrent writes and upgrades only outdated records', async () => {
-  const file = path.join(directory(), 'vault.json')
-  let decrypts = 0
-  const asyncCodec = {
-    encrypt: async (value: string) => {
-      await new Promise((resolve) => setTimeout(resolve, 5))
-      return `v2:${codec.encrypt(value)}`
-    },
-    decrypt: async (value: string) => {
-      decrypts++
-      await Promise.resolve()
-      return codec.decrypt(value.replace(/^v[12]:/u, ''))
-    },
-    isCurrent: (value: string) => value.startsWith('v2:'),
-  }
-  fs.writeFileSync(
-    file,
-    JSON.stringify({
-      old: `v1:${codec.encrypt('legacy-value')}`,
-      fresh: `v2:${codec.encrypt('fresh-value')}`,
-    }),
-  )
-  const narrow = await EncryptedVault.open(file, asyncCodec, ['fresh'])
-  expect(decrypts).toBe(1)
-  expect(narrow.get('fresh')).toBe('fresh-value')
-  expect(() => narrow.get('old')).toThrow('cannot decrypt')
-  decrypts = 0
-  const vault = await EncryptedVault.open(file, asyncCodec)
-  expect(decrypts).toBe(2)
-  expect(vault.get('old')).toBe('legacy-value')
-  expect(vault.get('old')).toBe('legacy-value')
-  expect(decrypts).toBe(2)
-  await Promise.all([
-    vault.set('first', 'first-value'),
-    vault.set('second', 'second-value'),
-    vault.setMany({ third: 'third-value', fourth: 'fourth-value' }),
-  ])
-  const saved = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<
-    string,
-    string
-  >
-  expect(Object.keys(saved).sort()).toEqual([
-    'first',
-    'fourth',
-    'fresh',
-    'old',
-    'second',
-    'third',
-  ])
-  expect(await vault.upgrade('fresh')).toBe(false)
-  expect(await vault.upgrade('missing')).toBe(false)
-  expect(await vault.upgrade('old')).toBe(true)
-  const upgraded = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<
-    string,
-    string
-  >
-  expect(upgraded.old).toStartWith('v2:')
-  expect((await EncryptedVault.open(file, asyncCodec)).get('old')).toBe(
-    'legacy-value',
-  )
-  const failing = await EncryptedVault.open(file, {
-    ...asyncCodec,
-    encrypt: () => Promise.reject(new Error('provider unavailable')),
-  })
-  await expect(failing.set('first', 'replacement')).rejects.toThrow(
-    'provider unavailable',
-  )
-  expect(failing.get('first')).toBe('first-value')
-  expect(fs.readFileSync(file, 'utf8')).toBe(JSON.stringify(upgraded))
-  await failing.remove('fresh')
-  expect(() => failing.get('fresh')).toThrow('No saved')
+  expect(() => CredentialStore.open(file)).toThrow()
 })
 
 test('atomic writes preserve an existing credential when replacement fails and clean their own temporary file', () => {

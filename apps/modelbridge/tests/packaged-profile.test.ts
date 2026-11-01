@@ -5,12 +5,11 @@ import path from 'node:path'
 import { createHash } from 'node:crypto'
 import { SourceService } from '@modelbridge/runtime'
 import { AppState } from '../electron/state'
-import { windowsCredentialCodec } from '../electron/windows-credentials'
 
 test.skipIf(
   process.platform !== 'win32' || !process.env.MODELBRIDGE_TEST_PACKAGED_EXE,
 )(
-  'packaged ModelBridge starts independently of workspace dependencies and serves its protected command key while running',
+  'packaged ModelBridge starts independently of workspace dependencies and serves its command key while running',
   async () => {
     const executable = process.env.MODELBRIDGE_TEST_PACKAGED_EXE
     if (!executable) throw new Error('Set MODELBRIDGE_TEST_PACKAGED_EXE.')
@@ -53,15 +52,7 @@ test.skipIf(
       CODEX_HOME: path.join(directory, 'codex-home'),
     }
     delete env.ELECTRON_RUN_AS_NODE
-    const codec = windowsCredentialCodec(profile, {
-      encrypt: () => {
-        throw new Error('Unexpected legacy encryption')
-      },
-      decrypt: () => {
-        throw new Error('Unexpected legacy credential')
-      },
-    })
-    const state = await AppState.open(profile, codec)
+    const state = AppState.open(profile)
     const sources = new SourceService([], state.vault, (next) =>
       state.save({ ...state.value, sources: next }),
     )

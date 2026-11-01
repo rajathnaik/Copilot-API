@@ -216,7 +216,7 @@ export class CodexConfigurations {
             'model selects the exact source-qualified gateway model; no subscription or billing fallback.',
             'model_catalog_json supplies Codex-native picker metadata, not OpenAI /models JSON.',
             'base_url points to the local ModelBridge gateway, which routes to the remote host URL/key.',
-            'auth.command asks this same installed app for its OS-protected local key. No secret is written to TOML.',
+            'auth.command asks this same installed app for its local key. No secret is written to TOML.',
             'requires_openai_auth=false keeps custom-provider requests independent of native ChatGPT sign-in.',
             'Unrelated settings and native auth.json/keychain remain unchanged. Restart Codex and open a new local chat.',
           ],

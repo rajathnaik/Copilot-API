@@ -8,7 +8,7 @@
 - Preserve the original direct Copilot device OAuth, token exchange, discovery
   and forwarding approach. Reuse its protocol translators; do not introduce
   the Copilot SDK or replace conversations with lossy prompt serialization.
-- `apps/modelbridge/` owns Electron, IPC, protected-profile composition, UI,
+- `apps/modelbridge/` owns Electron, IPC, profile composition, UI,
   tray and external CLI processes. Its new app ID is
   `com.rajathnaik.modelbridge`; data defaults to `%APPDATA%\ModelBridge`.
 - `packages/runtime/` owns source/model contracts, routing, authenticated
@@ -39,7 +39,7 @@
 
 ## Product scope and releases
 
-- `0.1.0-dev.1` is a development foundation, not a shipped universal product.
+- `0.1.0-dev.2` is a development foundation, not a shipped universal product.
   Direct Copilot hosting and revision-safe Codex configuration are implemented
   with synthetic/native isolated checks. Do not claim real subscription,
   tunnel or two-machine acceptance before live verification. Other harnesses
@@ -61,13 +61,14 @@
   manual Microsoft instructions/recheck flow, gate hosting with offline
   `--help` validation, and allow client-only installation without the CLI.
 - A credential helper tested only after the desktop exits can pass while
-  first-run concurrent retrieval fails. On fresh Windows profiles, this
-  occurred with Electron safeStorage; retain profile-bound DPAPI CurrentUser
-  protection and test applying Codex settings while the app is still running.
-  Migration must preserve the existing local key, and credential-only mode
-  should decrypt only that key, not unrelated subscription credentials.
+  first-run concurrent retrieval fails. Test applying Codex settings while the
+  app is still running. Credentials are deliberately plain JSON (owner decision:
+  personal tool, encryption deferred); safeStorage could not be read by the
+  concurrent helper and PowerShell DPAPI froze a client behind antivirus.
 - Never run synchronous child processes (`spawnSync`, `execFileSync`) on the
-  Electron main thread. Sequential hidden PowerShell DPAPI calls before window
-  creation froze a fresh client profile behind antivirus scanning. Create the
-  window first, keep credential work async and batched, and log startup timing
-  to the non-secret diagnostics file.
+  Electron main thread. Create the window first and log startup timing to the
+  non-secret diagnostics file.
+- electron-builder's default NSIS running-app check runs PowerShell/WMI with no
+  timeout and hung a client installer at "Install". Keep the
+  `customCheckAppRunning` override (nsProcess) in `installer/prerequisites.nsh`
+  outside the `BUILD_UNINSTALLER` guard so both installer and uninstaller use it.

@@ -4,13 +4,6 @@ import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import type { Credentials } from '../contracts'
 
-export interface CredentialCodec {
-  encrypt(value: string): string | Promise<string>
-  decrypt(value: string): string | Promise<string>
-  /** Returns false when a stored record should be re-protected in the current format. */
-  isCurrent?(encrypted: string): boolean
-}
-
 const transientLocks = new Set(['EPERM', 'EACCES', 'EBUSY'])
 
 // Antivirus and indexers briefly lock freshly written files on Windows.
@@ -61,112 +54,50 @@ export function readOptional(file: string): string | null {
   }
 }
 
-const vaultSchema = z.record(z.string(), z.string().min(1))
+const storeSchema = z.record(z.string(), z.string().min(1))
 
 /**
- * Decrypts every record once when opened so reads never wait on the OS
- * credential provider. Writes are serialized to keep the file consistent.
+ * Plain JSON credential store inside the user's profile. Keys are not
+ * encrypted at rest; protection relies on the Windows user account.
  */
-export class EncryptedVault implements Credentials {
-  private readonly plain = new Map<string, string>()
-  private readonly failures = new Map<string, unknown>()
-  private queue: Promise<void> = Promise.resolve()
-
+export class CredentialStore implements Credentials {
   private constructor(
     private readonly file: string,
-    private readonly codec: CredentialCodec,
     private values: Record<string, string>,
   ) {}
 
-  /**
-   * Pass `only` to decrypt a subset; other records stay encrypted and any
-   * `get` for them fails, which keeps least-privilege readers narrow.
-   */
-  static async open(
-    file: string,
-    codec: CredentialCodec,
-    only?: readonly string[],
-  ): Promise<EncryptedVault> {
+  static open(file: string): CredentialStore {
     const saved = readOptional(file)
-    const vault = new EncryptedVault(
+    return new CredentialStore(
       file,
-      codec,
-      saved === null ? {} : vaultSchema.parse(JSON.parse(saved)),
+      saved === null ? {} : storeSchema.parse(JSON.parse(saved)),
     )
-    await Promise.all(
-      Object.entries(vault.values)
-        .filter(([id]) => !only || only.includes(id))
-        .map(async ([id, encrypted]) => {
-          try {
-            const value = await codec.decrypt(encrypted)
-            if (!value.trim())
-              throw new Error('The decrypted credential is empty.')
-            vault.plain.set(id, value)
-          } catch (error) {
-            vault.failures.set(id, error)
-          }
-        }),
-    )
-    return vault
   }
 
   get(id: string): string {
-    const value = this.plain.get(id)
-    if (value !== undefined) return value
-    if (!this.values[id])
-      throw new Error('No saved credential exists for this source.')
-    throw new Error(
-      'ModelBridge cannot decrypt this credential in the current OS profile. Preserve or restore the protected profile; use a fresh isolated profile for a new setup. Saved keys were not replaced.',
-      { cause: this.failures.get(id) },
-    )
+    const value = this.values[id]
+    if (!value) throw new Error('No saved credential exists for this source.')
+    return value
   }
 
-  set(id: string, value: string): Promise<void> {
-    return this.setMany({ [id]: value })
+  set(id: string, value: string): void {
+    this.setMany({ [id]: value })
   }
 
-  setMany(entries: Record<string, string>): Promise<void> {
+  setMany(entries: Record<string, string>): void {
     if (Object.values(entries).some((value) => !value.trim()))
-      return Promise.reject(new Error('A nonempty credential is required.'))
-    return this.enqueue(async () => {
-      const encrypted = await Promise.all(
-        Object.entries(entries).map(
-          async ([id, value]) => [id, await this.codec.encrypt(value)] as const,
-        ),
-      )
-      const next = { ...this.values, ...Object.fromEntries(encrypted) }
-      atomicWrite(this.file, JSON.stringify(next))
-      this.values = next
-      for (const [id, value] of Object.entries(entries)) {
-        this.plain.set(id, value)
-        this.failures.delete(id)
-      }
-    })
+      throw new Error('A nonempty credential is required.')
+    this.write({ ...this.values, ...entries })
   }
 
-  remove(id: string): Promise<void> {
-    return this.enqueue(() => {
-      const next = { ...this.values }
-      delete next[id]
-      atomicWrite(this.file, JSON.stringify(next))
-      this.values = next
-      this.plain.delete(id)
-      this.failures.delete(id)
-    })
+  remove(id: string): void {
+    const next = { ...this.values }
+    delete next[id]
+    this.write(next)
   }
 
-  /** Re-protects a readable record when the codec reports an older format. */
-  async upgrade(id: string): Promise<boolean> {
-    const encrypted = this.values[id]
-    if (!encrypted || !this.codec.isCurrent || this.codec.isCurrent(encrypted))
-      return false
-    await this.set(id, this.get(id))
-    return true
-  }
-
-  private enqueue(operation: () => void | Promise<void>): Promise<void> {
-    const result = this.queue.then(operation)
-    this.queue = result.catch(() => undefined)
-    return result
+  private write(next: Record<string, string>): void {
+    atomicWrite(this.file, JSON.stringify(next))
+    this.values = next
   }
 }

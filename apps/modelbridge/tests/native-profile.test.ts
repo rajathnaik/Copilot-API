@@ -153,7 +153,7 @@ test.skipIf(
           if (!fs.readFileSync(configPath, 'utf8').includes('web_search = "disabled"')) throw new Error('Unrelated native settings were changed.')
           codexWorkflow = true
         }
-        const encrypted = fs.readFileSync(path.join(profile, 'credentials.encrypted.json'),'utf8')
+        const stored = JSON.parse(fs.readFileSync(path.join(profile, 'credentials.json'),'utf8'))
         if (process.env.MODELBRIDGE_TEST_SCREENSHOT && !process.env.MODELBRIDGE_TEST_CODEX) {
           await new Promise(resolve => setTimeout(resolve, 2500))
           const image = await window.webContents.capturePage()
@@ -162,7 +162,7 @@ test.skipIf(
         const result = {fresh, codexWorkflow, version:status.version, sources:status.sources.length,
           health:health.status, unauthorized:unauthorized.status, inference:response.status,
           reply:output.includes('NATIVE_MODELBRIDGE_OK'),
-          encrypted:!encrypted.includes(sourceKey) && !encrypted.includes(key),
+          stored:stored['local-access'] === key && !fs.existsSync(path.join(profile, 'credentials.encrypted.json')),
           keyHash:crypto.createHash('sha256').update(key).digest('hex'),
           legacyBridge:await window.webContents.executeJavaScript('typeof window.connectorAPI'),
           legacyUi:await window.webContents.executeJavaScript('typeof window.electronAPI')}
@@ -223,7 +223,7 @@ test.skipIf(
           unauthorized: 401,
           inference: 200,
           reply: true,
-          encrypted: true,
+          stored: true,
           legacyBridge: 'undefined',
           legacyUi: 'undefined',
         })

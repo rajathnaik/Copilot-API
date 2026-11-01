@@ -221,7 +221,7 @@ export function createGateway(
       {
         error: {
           message:
-            'Gateway request failed. Check ModelBridge source status and protected storage.',
+            'Gateway request failed. Check ModelBridge source status and saved credentials.',
         },
       },
       500,
