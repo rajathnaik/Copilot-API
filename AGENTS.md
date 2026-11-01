@@ -39,7 +39,7 @@
 
 ## Product scope and releases
 
-- `0.1.0-dev.0` is a development foundation, not a shipped universal product.
+- `0.1.0-dev.1` is a development foundation, not a shipped universal product.
   Direct Copilot hosting and revision-safe Codex configuration are implemented
   with synthetic/native isolated checks. Do not claim real subscription,
   tunnel or two-machine acceptance before live verification. Other harnesses
@@ -66,3 +66,8 @@
   protection and test applying Codex settings while the app is still running.
   Migration must preserve the existing local key, and credential-only mode
   should decrypt only that key, not unrelated subscription credentials.
+- Never run synchronous child processes (`spawnSync`, `execFileSync`) on the
+  Electron main thread. Sequential hidden PowerShell DPAPI calls before window
+  creation froze a fresh client profile behind antivirus scanning. Create the
+  window first, keep credential work async and batched, and log startup timing
+  to the non-secret diagnostics file.

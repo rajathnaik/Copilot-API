@@ -33,6 +33,7 @@ import { AppState } from './state'
 import { TunnelProcess } from './devtunnel-process'
 import { codexConfigPath, discoverCodex, inspectCodex } from './codex-discovery'
 import { windowsCredentialCodec } from './windows-credentials'
+import { createDiagnosticsLog, describeError } from './diagnostics'
 
 app.setName('ModelBridge')
 app.setAppUserModelId('com.rajathnaik.modelbridge')
@@ -53,6 +54,68 @@ let remoteServer: ReturnType<typeof serve> | null = null
 const transport = new TunnelProcess()
 let copilotController: AbortController | null = null
 const credentialMode = process.argv.includes('--modelbridge-credential')
+const diagnostics = createDiagnosticsLog(app.getPath('userData'))
+const log = (event: string, detail?: string) => {
+  if (!credentialMode) void diagnostics.write(event, detail)
+}
+const channels = [
+  'modelbridge:status',
+  'modelbridge:local-key',
+  'modelbridge:remote-key',
+  'modelbridge:copilot-login',
+  'modelbridge:copilot-cancel',
+  'modelbridge:open-login',
+  'modelbridge:refresh-source',
+  'modelbridge:codex-status',
+  'modelbridge:codex-discover',
+  'modelbridge:codex-select',
+  'modelbridge:codex-preview',
+  'modelbridge:codex-revision',
+  'modelbridge:codex-restore',
+  'modelbridge:codex-apply',
+  'modelbridge:codex-reconcile',
+  'modelbridge:add-source',
+  'modelbridge:share-source',
+  'modelbridge:tunnel-login',
+  'modelbridge:sharing-start',
+  'modelbridge:sharing-stop',
+] as const
+type Channel = (typeof channels)[number]
+const operations = new Map<Channel, (value: unknown) => unknown>()
+let runtimeReady: Promise<void> = new Promise(() => undefined)
+
+function registerIpc(): void {
+  for (const channel of channels)
+    ipcMain.handle(
+      channel,
+      async (event, value: unknown): Promise<Result<unknown>> => {
+        if (
+          !window
+          || event.sender !== window.webContents
+          || event.senderFrame !== window.webContents.mainFrame
+        )
+          return {
+            ok: false,
+            error: 'Only the ModelBridge main window may perform this action.',
+          }
+        try {
+          await runtimeReady
+          const operation = operations.get(channel)
+          if (!operation)
+            throw new Error('This ModelBridge action is unavailable.')
+          return { ok: true, value: await operation(value) }
+        } catch (error) {
+          const message =
+            error instanceof Error ?
+              error.message
+            : 'ModelBridge operation failed.'
+          console.error(`[ModelBridge] ${channel} failed.`)
+          log(`${channel} failed`, describeError(error))
+          return { ok: false, error: message }
+        }
+      },
+    )
+}
 
 function credentialCodec(): CredentialCodec {
   const legacy: CredentialCodec = {
@@ -94,9 +157,17 @@ async function initialize(): Promise<void> {
     throw new Error(
       'OS-protected credential storage is required. Plaintext storage is not supported.',
     )
-  const state = new AppState(app.getPath('userData'), credentialCodec())
-  if (process.platform === 'win32')
-    state.vault.set('local-access', state.vault.get('local-access'))
+  const unlocking = performance.now()
+  const state = await AppState.open(app.getPath('userData'), credentialCodec())
+  log(
+    'protected credentials unlocked',
+    `${Math.round(performance.now() - unlocking)}ms`,
+  )
+  if (
+    process.platform === 'win32'
+    && (await state.vault.upgrade('local-access'))
+  )
+    log('local key re-protected for the credential helper')
   const sources = new SourceService(state.value.sources, state.vault, (next) =>
     state.save({ ...state.value, sources: next }),
   )
@@ -112,6 +183,7 @@ async function initialize(): Promise<void> {
     requestedPort,
   )
   localServer = local.server
+  log('local gateway listening', `port ${local.port}`)
   let remoteUrl: string | null = null
   let copilotLogin: CopilotLogin | null = null
   let copilotError: string | null = null
@@ -123,7 +195,7 @@ async function initialize(): Promise<void> {
       `--user-data-dir=${app.getPath('userData')}`,
     ],
   }
-  const codex = new CodexConfigurations(
+  const codex = await CodexConfigurations.open(
     codexConfigPath(),
     path.join(app.getPath('userData'), 'codex'),
     state.vault,
@@ -162,33 +234,10 @@ async function initialize(): Promise<void> {
     copilotError,
   })
   const handle = <T>(
-    channel: string,
+    channel: Channel,
     operation: (value: unknown) => T | Promise<T>,
   ) => {
-    ipcMain.handle(
-      channel,
-      async (event, value: unknown): Promise<Result<T>> => {
-        if (
-          !window
-          || event.sender !== window.webContents
-          || event.senderFrame !== window.webContents.mainFrame
-        )
-          return {
-            ok: false,
-            error: 'Only the ModelBridge main window may perform this action.',
-          }
-        try {
-          return { ok: true, value: await operation(value) }
-        } catch (error) {
-          const message =
-            error instanceof Error ?
-              error.message
-            : 'ModelBridge operation failed.'
-          console.error(`[ModelBridge] ${channel} failed.`)
-          return { ok: false, error: message }
-        }
-      },
-    )
+    operations.set(channel, operation)
   }
   handle('modelbridge:status', snapshot)
   handle('modelbridge:local-key', () => state.vault.get('local-access'))
@@ -317,7 +366,8 @@ async function initialize(): Promise<void> {
     sources.setShared(value.sourceId, value.shared)
     return snapshot()
   })
-  handle('modelbridge:tunnel-login', () => {
+  handle('modelbridge:tunnel-login', async () => {
+    await transport.prepare()
     transport.beginLogin()
     return snapshot()
   })
@@ -337,6 +387,7 @@ async function initialize(): Promise<void> {
         4322,
       )
       remoteServer = remote.server
+      await transport.prepare()
       const resource = await new DevTunnels(state.value.tunnelId, (args) =>
         transport.command(args),
       ).provision(remote.port)
@@ -368,12 +419,27 @@ async function initialize(): Promise<void> {
     remoteUrl = null
     return snapshot()
   })
+  const missing = channels.filter((channel) => !operations.has(channel))
+  if (missing.length)
+    throw new Error(`ModelBridge actions are missing: ${missing.join(', ')}`)
+}
+
+function showWindow(): void {
+  if (!window) return
+  if (window.isMinimized()) window.restore()
+  window.show()
+  window.focus()
+}
+
+/** Creates the window before the runtime starts so slow OS services never leave the app invisible. */
+function createWindow(): void {
   window = new BrowserWindow({
     title: 'ModelBridge',
     width: 1120,
     height: 820,
     minWidth: 760,
     minHeight: 600,
+    backgroundColor: '#edf2f8',
     icon: path.join(app.getAppPath(), 'assets', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
@@ -388,6 +454,14 @@ async function initialize(): Promise<void> {
       window?.hide()
     }
   })
+  window.on('unresponsive', () => log('window unresponsive'))
+  window.on('responsive', () => log('window responsive again'))
+  window.webContents.on('render-process-gone', (_event, details) =>
+    log('renderer process gone', details.reason),
+  )
+  window.webContents.on('did-fail-load', (_event, code, description) =>
+    log('renderer load failed', `${code} ${description}`),
+  )
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   window.webContents.on('will-navigate', (event) => event.preventDefault())
   tray = new Tray(
@@ -398,14 +472,20 @@ async function initialize(): Promise<void> {
   tray.setToolTip('ModelBridge')
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: 'Open ModelBridge', click: () => window?.show() },
+      { label: 'Open ModelBridge', click: showWindow },
       { label: 'Exit ModelBridge', click: () => app.quit() },
     ]),
   )
-  tray.on('double-click', () => window?.show())
-  if (!app.isPackaged && process.env.ELECTRON_RENDERER_URL)
-    await window.loadURL(process.env.ELECTRON_RENDERER_URL)
-  else await window.loadFile(path.join(__dirname, '../renderer/index.html'))
+  tray.on('double-click', showWindow)
+  const loading =
+    !app.isPackaged && process.env.ELECTRON_RENDERER_URL ?
+      window.loadURL(process.env.ELECTRON_RENDERER_URL)
+    : window.loadFile(path.join(__dirname, '../renderer/index.html'))
+  void loading.then(
+    () => log('renderer loaded'),
+    (error: unknown) => log('renderer load failed', describeError(error)),
+  )
+  log('window created')
 }
 
 app.on('before-quit', (event) => {
@@ -431,7 +511,7 @@ app.on('before-quit', (event) => {
 if (credentialMode) {
   void app
     .whenReady()
-    .then(() => {
+    .then(async () => {
       if (!safeStorage.isEncryptionAvailable())
         throw new Error('OS-protected key storage is unavailable.')
       if (!fs.existsSync(path.join(app.getPath('userData'), 'state.json')))
@@ -446,9 +526,10 @@ if (credentialMode) {
           ),
         ),
       )
-      const vault = new EncryptedVault(
+      const vault = await EncryptedVault.open(
         path.join(app.getPath('userData'), 'credentials.encrypted.json'),
         credentialCodec(),
+        ['local-access'],
       )
       process.stdout.write(vault.get('local-access'), () => app.exit(0))
     })
@@ -461,16 +542,27 @@ if (credentialMode) {
 } else if (!app.requestSingleInstanceLock()) app.quit()
 else {
   app.on('second-instance', () => {
-    window?.show()
-    window?.focus()
+    log('second launch focused the running window')
+    showWindow()
   })
+  app.on('child-process-gone', (_event, details) =>
+    log('child process gone', `${details.type} ${details.reason}`),
+  )
   void app
     .whenReady()
-    .then(initialize)
-    .catch((error: unknown) => {
+    .then(async () => {
+      log('app ready', `version ${app.getVersion()}`)
+      registerIpc()
+      createWindow()
+      runtimeReady = initialize()
+      await runtimeReady
+      log('runtime ready')
+    })
+    .catch(async (error: unknown) => {
+      await diagnostics.write('startup failed', describeError(error))
       dialog.showErrorBox(
         'ModelBridge startup failed',
-        error instanceof Error ? error.message : 'Unknown startup error.',
+        `${error instanceof Error ? error.message : 'Unknown startup error.'}\n\nDiagnostics: ${diagnostics.file}`,
       )
       app.exit(1)
     })

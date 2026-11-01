@@ -72,42 +72,64 @@ export class CodexConfigurations {
     }
   >()
   private readonly vaultId: string
+  private writing = false
 
-  constructor(
+  private constructor(
     readonly configPath: string,
     private readonly directory: string,
     private readonly credentials: Credentials,
     private readonly helper: { command: string; args: string[] },
   ) {
     this.vaultId = `codex-configurations-${hash(configPath)}`
-    const marker = path.join(directory, `${hash(configPath)}.managed`)
-    if (fs.existsSync(marker)) {
-      this.saved = savedSchema.parse(JSON.parse(credentials.get(this.vaultId)))
-      if (this.saved.pending) {
-        const pending = this.saved.pending
-        const current = readOptional(configPath)
-        if (current === pending.after) {
-          const revision = this.saved.revisions.find(
-            (item) => item.id === pending.revisionId,
-          )
-          if (!revision)
-            throw new Error(
-              'Codex configuration recovery is missing its revision.',
-            )
-          this.saved.active = revision.action === 'restore' ? null : revision.id
-          this.saved.fingerprint = managedFingerprint(pending.after)
-        } else if (current !== pending.before)
-          throw new Error(
-            'An interrupted Codex configuration change conflicts with an external edit. Preserve both profiles for recovery.',
-          )
-        this.saved.pending = null
-        this.persist(this.saved)
-      }
-    }
   }
 
-  private persist(next: z.infer<typeof savedSchema>) {
-    this.credentials.set(this.vaultId, JSON.stringify(savedSchema.parse(next)))
+  static async open(
+    configPath: string,
+    directory: string,
+    credentials: Credentials,
+    helper: { command: string; args: string[] },
+  ): Promise<CodexConfigurations> {
+    const configurations = new CodexConfigurations(
+      configPath,
+      directory,
+      credentials,
+      helper,
+    )
+    await configurations.recover()
+    return configurations
+  }
+
+  private async recover(): Promise<void> {
+    const marker = path.join(this.directory, `${hash(this.configPath)}.managed`)
+    if (!fs.existsSync(marker)) return
+    const saved = savedSchema.parse(
+      JSON.parse(this.credentials.get(this.vaultId)),
+    )
+    this.saved = saved
+    if (!saved.pending) return
+    const pending = saved.pending
+    const current = readOptional(this.configPath)
+    if (current === pending.after) {
+      const revision = saved.revisions.find(
+        (item) => item.id === pending.revisionId,
+      )
+      if (!revision)
+        throw new Error('Codex configuration recovery is missing its revision.')
+      saved.active = revision.action === 'restore' ? null : revision.id
+      saved.fingerprint = managedFingerprint(pending.after)
+    } else if (current !== pending.before)
+      throw new Error(
+        'An interrupted Codex configuration change conflicts with an external edit. Preserve both profiles for recovery.',
+      )
+    saved.pending = null
+    await this.persist(saved)
+  }
+
+  private async persist(next: z.infer<typeof savedSchema>) {
+    await this.credentials.set(
+      this.vaultId,
+      JSON.stringify(savedSchema.parse(next)),
+    )
     atomicWrite(
       path.join(this.directory, `${hash(this.configPath)}.managed`),
       'ModelBridge manages revisions for this Codex configuration.',
@@ -274,22 +296,40 @@ export class CodexConfigurations {
       : this.preview(revision.label, revision.model, models, url)
   }
 
-  reconcile(): CodexConfigurationStatus {
-    if (!this.saved || this.saved.pending)
-      throw new Error(
-        'No committed Codex configuration is available to reconcile.',
-      )
-    const current = readOptional(this.configPath) ?? ''
-    const next = {
-      ...this.saved,
-      fingerprint: managedFingerprint(current),
-      active: null,
-    }
-    this.persist(next)
-    return this.status()
+  async reconcile(): Promise<CodexConfigurationStatus> {
+    return this.exclusive(async () => {
+      if (!this.saved || this.saved.pending)
+        throw new Error(
+          'No committed Codex configuration is available to reconcile.',
+        )
+      const current = readOptional(this.configPath) ?? ''
+      await this.persist({
+        ...this.saved,
+        fingerprint: managedFingerprint(current),
+        active: null,
+      })
+      return this.status()
+    })
   }
 
-  apply(id: string): CodexConfigurationStatus {
+  async apply(id: string): Promise<CodexConfigurationStatus> {
+    return this.exclusive(() => this.write(id))
+  }
+
+  private async exclusive<T>(operation: () => Promise<T>): Promise<T> {
+    if (this.writing)
+      throw new Error(
+        'Another Codex configuration change is in progress. Wait for it to finish.',
+      )
+    this.writing = true
+    try {
+      return await operation()
+    } finally {
+      this.writing = false
+    }
+  }
+
+  private async write(id: string): Promise<CodexConfigurationStatus> {
     const operation = this.previews.get(id)
     if (!operation)
       throw new Error(
@@ -314,9 +354,9 @@ export class CodexConfigurations {
         revisionId: revision.id,
       },
     }
-    this.persist(next)
+    await this.persist(next)
     atomicWrite(this.configPath, content)
-    this.persist({
+    await this.persist({
       ...next,
       active: revision.action === 'restore' ? null : revision.id,
       fingerprint: managedFingerprint(content),

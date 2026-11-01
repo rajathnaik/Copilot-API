@@ -236,12 +236,12 @@ export class SourceService {
         }
       }),
     }
-    this.credentials.set(source.id, input.apiKey)
+    await this.credentials.set(source.id, input.apiKey)
     const next = [...this.sources, source]
     try {
       this.persist(next)
     } catch (error) {
-      this.credentials.remove(source.id)
+      await this.credentials.remove(source.id)
       throw error
     }
     this.sources = next
@@ -263,11 +263,11 @@ export class SourceService {
       shared,
       ...catalog,
     })
-    this.credentials.set(source.id, githubToken)
+    await this.credentials.set(source.id, githubToken)
     try {
       this.persist([...this.sources, source])
     } catch (error) {
-      this.credentials.remove(source.id)
+      await this.credentials.remove(source.id)
       throw error
     }
     this.sources.push(source)

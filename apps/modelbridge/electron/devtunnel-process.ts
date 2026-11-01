@@ -1,4 +1,4 @@
-import { execFile, execFileSync, spawn } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import type { EventEmitter } from 'node:events'
 import type { Readable } from 'node:stream'
 import fs from 'node:fs'
@@ -13,38 +13,50 @@ interface TunnelChild extends EventEmitter {
 }
 
 interface TunnelLauncher {
+  prepare?(): Promise<void>
   command(args: string[]): Promise<CommandResult>
   spawn(args: string[]): TunnelChild
 }
 
-function registryPath(): string {
-  if (process.platform !== 'win32') return ''
-  return execFileSync(
-    path.join(
-      process.env.SystemRoot ?? 'C:\\Windows',
-      'System32',
-      'WindowsPowerShell',
-      'v1.0',
-      'powershell.exe',
-    ),
-    [
-      '-NoProfile',
-      '-NonInteractive',
-      '-Command',
-      "[Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')",
-    ],
-    {
-      encoding: 'utf8',
-      windowsHide: true,
-      timeout: 10_000,
-      maxBuffer: 128_000,
-    },
-  ).trim()
+let registryCache = ''
+
+/** Reads the fresh machine and user PATH so newly installed CLIs are found without restarting. */
+function registryPath(): Promise<string> {
+  if (process.platform !== 'win32') return Promise.resolve('')
+  return new Promise((resolve) => {
+    execFile(
+      path.join(
+        process.env.SystemRoot ?? 'C:\\Windows',
+        'System32',
+        'WindowsPowerShell',
+        'v1.0',
+        'powershell.exe',
+      ),
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        "[Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')",
+      ],
+      {
+        encoding: 'utf8',
+        windowsHide: true,
+        timeout: 10_000,
+        maxBuffer: 128_000,
+      },
+      (error, stdout) => resolve(error ? '' : String(stdout).trim()),
+    )
+  })
+}
+
+export async function refreshRegistryPath(): Promise<string> {
+  registryCache = await registryPath()
+  return registryCache
 }
 
 export function resolveDevTunnelExecutable(
   env: NodeJS.ProcessEnv = process.env,
-  installedPath: string = registryPath(),
+  installedPath: string = registryCache,
 ): string {
   const name = process.platform === 'win32' ? 'devtunnel.exe' : 'devtunnel'
   const candidates = `${env.PATH ?? ''}${path.delimiter}${installedPath}`
@@ -89,10 +101,15 @@ export function resolveDevTunnelExecutable(
 }
 
 const launcher: TunnelLauncher = {
-  command: (args) =>
-    new Promise((resolve, reject) => {
+  prepare: async () => {
+    await refreshRegistryPath()
+  },
+  command: async (args) => {
+    await refreshRegistryPath()
+    const executable = resolveDevTunnelExecutable()
+    return new Promise((resolve, reject) => {
       execFile(
-        resolveDevTunnelExecutable(),
+        executable,
         args,
         { windowsHide: true, timeout: 30_000, maxBuffer: 1024 * 1024 },
         (error, stdout, stderr) => {
@@ -112,7 +129,8 @@ const launcher: TunnelLauncher = {
           })
         },
       )
-    }),
+    })
+  },
   spawn: (args) =>
     spawn(resolveDevTunnelExecutable(), args, { windowsHide: true }),
 }
@@ -127,6 +145,11 @@ export class TunnelProcess {
   onUnexpectedStop: (() => void) | null = null
 
   constructor(private readonly processLauncher: TunnelLauncher = launcher) {}
+
+  /** Refreshes CLI discovery off the main thread before a user-initiated tunnel action. */
+  async prepare(): Promise<void> {
+    await this.processLauncher.prepare?.()
+  }
 
   command(args: string[]): Promise<CommandResult> {
     return this.processLauncher.command(args)

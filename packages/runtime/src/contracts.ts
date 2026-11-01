@@ -78,8 +78,8 @@ export interface AvailableModel {
 
 export interface Credentials {
   get(id: string): string
-  set(id: string, value: string): void
-  remove(id: string): void
+  set(id: string, value: string): void | Promise<void>
+  remove(id: string): void | Promise<void>
 }
 
 export const stateSchema = z

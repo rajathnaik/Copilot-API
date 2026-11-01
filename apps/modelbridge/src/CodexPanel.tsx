@@ -56,8 +56,8 @@ export function CodexPanel({ models }: { models: AvailableModel[] }) {
     )
   return (
     <section>
-      <h2>Client: configure Codex</h2>
-      <p>
+      <h2>Configure Codex</h2>
+      <p className="muted">
         Codex uses your local ModelBridge gateway. This does not add models to
         your ChatGPT subscription or alter its sign-in. ModelBridge routes each
         request to the source you selected.

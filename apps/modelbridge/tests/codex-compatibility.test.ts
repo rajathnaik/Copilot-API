@@ -551,7 +551,7 @@ test
         path.join(home, 'config.toml'),
         '# Isolated native Codex settings\nweb_search = "disabled"\n',
       )
-      const configurations = new CodexConfigurations(
+      const configurations = await CodexConfigurations.open(
         path.join(home, 'config.toml'),
         path.join(directory, 'revisions'),
         memoryCredentials(),
@@ -563,7 +563,7 @@ test
         models,
         url,
       )
-      configurations.apply(plan.id)
+      await configurations.apply(plan.id)
       for (const [index, model] of [...models, models[0]].entries()) {
         toolsPhase = index === 2
         const process = Bun.spawn({
@@ -621,7 +621,7 @@ test
       expect(
         fs.readFileSync(path.join(home, 'config.toml'), 'utf8'),
       ).not.toContain('synthetic-consumer-key')
-      configurations.apply(configurations.restore().id)
+      await configurations.apply(configurations.restore().id)
       expect(
         fs.readFileSync(path.join(home, 'config.toml'), 'utf8'),
       ).not.toContain('[model_providers.modelbridge]')

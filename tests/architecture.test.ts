@@ -57,6 +57,16 @@ test('runtime modules do not depend on Electron, legacy shells, globals or compa
   visit(path.join(root, 'packages', 'runtime', 'src'))
 })
 
+test('the Electron main process never blocks on synchronous child processes', () => {
+  const directory = path.join(root, 'apps', 'modelbridge', 'electron')
+  for (const name of fs
+    .readdirSync(directory)
+    .filter((item) => item.endsWith('.ts')))
+    expect(fs.readFileSync(path.join(directory, name), 'utf8')).not.toMatch(
+      /\b(?:spawnSync|execFileSync|execSync)\b/u,
+    )
+})
+
 test('documentation keeps legal attribution and identifies unsigned development downloads', () => {
   const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8')
   const release = `https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v${workspace.version}`

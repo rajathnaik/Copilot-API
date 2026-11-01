@@ -7,9 +7,26 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { PassThrough } from 'node:stream'
 import {
+  refreshRegistryPath,
   resolveDevTunnelExecutable,
   TunnelProcess,
 } from '../electron/devtunnel-process'
+
+type ExecCallback = (
+  error: Error | null,
+  stdout: string,
+  stderr: string,
+) => void
+
+function fakeRegistry(reply: () => string) {
+  return spyOn(childProcess, 'execFile').mockImplementation(((
+    ...args: unknown[]
+  ) => {
+    const callback = args.at(-1) as ExecCallback
+    callback(null, reply(), '')
+    return new EventEmitter()
+  }) as unknown as typeof childProcess.execFile)
+}
 
 test('tunnel CLI lifecycle reports device login, readiness, replacement, failures and explicit stopping', async () => {
   const callbacks: Array<() => void> = []
@@ -149,9 +166,11 @@ test('a missing tunnel CLI is an explicit error and never triggers installation 
   process.env.PATH = missing
   process.env.LOCALAPPDATA = missing
   const exists = spyOn(fs, 'existsSync').mockReturnValue(false)
-  const registry = spyOn(childProcess, 'execFileSync').mockReturnValue('')
+  const registry = fakeRegistry(() => '')
+  const blocking = spyOn(childProcess, 'execFileSync')
   try {
     const transport = new TunnelProcess()
+    await transport.prepare()
     await expect(transport.command(['show'])).rejects.toThrow(
       'Install the Microsoft Dev Tunnels CLI',
     )
@@ -161,8 +180,10 @@ test('a missing tunnel CLI is an explicit error and never triggers installation 
     await expect(transport.start('owned')).rejects.toThrow(
       'Install the Microsoft Dev Tunnels CLI',
     )
-    expect(registry).toHaveBeenCalledTimes(process.platform === 'win32' ? 3 : 0)
+    expect(registry).toHaveBeenCalledTimes(process.platform === 'win32' ? 2 : 0)
+    expect(blocking).not.toHaveBeenCalled()
   } finally {
+    blocking.mockRestore()
     registry.mockRestore()
     exists.mockRestore()
     if (originalPath === undefined) delete process.env.PATH
@@ -171,6 +192,27 @@ test('a missing tunnel CLI is an explicit error and never triggers installation 
     else process.env.LOCALAPPDATA = originalLocal
   }
 })
+
+test.skipIf(process.platform !== 'win32')(
+  'a prepared registry PATH is reused by later CLI resolution without blocking',
+  async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'modelbridge-reg-'))
+    fs.writeFileSync(path.join(directory, 'devtunnel.exe'), 'fixture')
+    let reply = directory
+    const registry = fakeRegistry(() => `${reply}\r\n`)
+    try {
+      expect(await refreshRegistryPath()).toBe(directory)
+      expect(resolveDevTunnelExecutable({ PATH: '' })).toBe(
+        path.join(directory, 'devtunnel.exe'),
+      )
+      reply = ''
+      expect(await refreshRegistryPath()).toBe('')
+    } finally {
+      registry.mockRestore()
+      fs.rmSync(directory, { recursive: true, force: true })
+    }
+  },
+)
 
 test('CLI resolution uses explicit absolute paths, fresh registry PATH and excludes directories', () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'modelbridge-cli-'))
@@ -182,7 +224,10 @@ test('CLI resolution uses explicit absolute paths, fresh registry PATH and exclu
   fs.mkdirSync(fresh)
   fs.writeFileSync(path.join(fresh, name), 'fixture')
   try {
-    const env = { PATH: `relative${path.delimiter}"${first}"`, CLI_HOME: fresh }
+    const env = {
+      PATH: `relative${path.delimiter}"${first}"`,
+      CLI_HOME: fresh,
+    }
     expect(resolveDevTunnelExecutable(env, '%CLI_HOME%')).toBe(
       path.join(fresh, name),
     )

@@ -124,6 +124,7 @@ test.skipIf(
               await new Promise(resolve => setTimeout(resolve, 100))
             }
           }
+          await waitUI('[...document.querySelectorAll("button")].some(item => item.textContent.trim() === "Discover installed Codex")')
           await clickButton('Discover installed Codex')
           await waitUI('[...document.querySelectorAll("button")].some(item => item.textContent.trim() === "Preview exact Codex changes" && !item.disabled)')
           await clickButton('Preview exact Codex changes')
@@ -216,7 +217,7 @@ test.skipIf(
         expect(value).toMatchObject({
           fresh: restart === 0,
           codexWorkflow: !!process.env.MODELBRIDGE_TEST_CODEX,
-          version: '0.1.0-dev.0',
+          version: desktop.version,
           sources: 1,
           health: 200,
           unauthorized: 401,

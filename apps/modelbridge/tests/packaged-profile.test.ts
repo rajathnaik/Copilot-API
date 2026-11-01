@@ -61,7 +61,7 @@ test.skipIf(
         throw new Error('Unexpected legacy credential')
       },
     })
-    const state = new AppState(profile, codec)
+    const state = await AppState.open(profile, codec)
     const sources = new SourceService([], state.vault, (next) =>
       state.save({ ...state.value, sources: next }),
     )

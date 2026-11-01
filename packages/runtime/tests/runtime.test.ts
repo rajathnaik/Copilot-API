@@ -303,7 +303,7 @@ describe('authenticated explicit routing', () => {
     expect(error.status).toBe(429)
     expect(error.headers.get('retry-after')).toBe('2')
     expect(await error.text()).not.toContain(input.apiKey)
-    sources.credentials.remove(source.id)
+    await sources.credentials.remove(source.id)
     expect((await send()).status).toBe(500)
   })
 })

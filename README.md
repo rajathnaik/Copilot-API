@@ -7,22 +7,22 @@ The new desktop structure retains the original Copilot API's direct
 authentication, token exchange, forwarding and protocol translations.
 **There is no Copilot SDK integration.**
 
-**Development pre-release: 0.1.0-dev.0.**
+**Development pre-release: 0.1.0-dev.1.**
 
 Download the unsigned Windows installer from the
-[ModelBridge development release](https://github.com/rajathnaik/Copilot-API/releases/tag/modelbridge-v0.1.0-dev.0):
+[ModelBridge development release](https://github.com/rajathnaik/Copilot-API/releases/tag/modelbridge-v0.1.0-dev.1):
 
-- [Windows installer](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.0-dev.0/ModelBridge.Setup.0.1.0-dev.0.exe)
-- [SHA256 checksum](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.0-dev.0/ModelBridge.Setup.0.1.0-dev.0.exe.sha256)
+- [Windows installer](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.0-dev.1/ModelBridge.Setup.0.1.0-dev.1.exe)
+- [SHA256 checksum](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.0-dev.1/ModelBridge.Setup.0.1.0-dev.1.exe.sha256)
 
-Compare `Get-FileHash .\ModelBridge.Setup.0.1.0-dev.0.exe -Algorithm SHA256`
+Compare `Get-FileHash .\ModelBridge.Setup.0.1.0-dev.1.exe -Algorithm SHA256`
 with the downloaded checksum before running the installer. Windows may warn
 about an unknown publisher because this development build is not code-signed.
 Use the same installer on the host and client machines.
 
 To build the unsigned Windows development installer locally, run
 `bun run --cwd apps/modelbridge package:win`. Its output is
-`apps/modelbridge/release/ModelBridge.Setup.0.1.0-dev.0.exe`. This is a test
+`apps/modelbridge/release/ModelBridge.Setup.0.1.0-dev.1.exe`. This is a test
 candidate, not a verified production release; installation/upgrade/uninstall
 and the real two-machine acceptance test are still pending.
 
@@ -51,9 +51,15 @@ and the real two-machine acceptance test are still pending.
   There is no automatic import of old product settings.
 - Windows credentials use DPAPI CurrentUser protection bound to the canonical
   profile path, independent of Chromium's in-memory encryption key. Existing
-  decryptable safeStorage entries remain readable; startup re-protects the
-  same local key for the concurrent helper without changing its value.
+  decryptable safeStorage entries remain readable; startup re-protects a legacy
+  local key once, without changing its value, for the concurrent helper.
   PowerShell receives secret data through stdin, never command-line arguments.
+  Protection runs in a batched, asynchronous PowerShell process with a 30-second
+  deadline, so slow security software cannot freeze the window. Credential-only
+  mode decrypts only the local key.
+- The window opens immediately and shows a startup state while credentials
+  unlock. Sections are split into Overview, Host, Connect, Sources & models and
+  Codex tabs.
 - Codex installation discovery, redacted configuration previews, named
   revisions, reactivation, native configuration restoration, external-edit
   detection and recovery of interrupted configuration writes.
@@ -96,6 +102,18 @@ sources forward their advertised protocol; Copilot has its own inherited
 cross-protocol adapters. Some provider APIs require dedicated discovery
 adapters or pagination; the generic source integration does not claim support
 for every provider.
+
+## Troubleshooting startup
+
+ModelBridge writes a non-secret diagnostics log to
+`%APPDATA%\ModelBridge\logs\modelbridge.log` (rotated at 512 KB). It records
+startup timings, credential unlock duration, window responsiveness and
+renderer/child-process failures; it never records keys or tokens. If the window
+stays on "Starting ModelBridge…" or startup fails, check this file first. A
+long credential unlock usually means security software is delaying Windows
+PowerShell; allow ModelBridge or Windows PowerShell rather than deleting the
+profile. ModelBridge is single-instance: launching it again focuses the running
+window, including one hidden in the tray.
 
 ## Pending live verification and subsequent work
 

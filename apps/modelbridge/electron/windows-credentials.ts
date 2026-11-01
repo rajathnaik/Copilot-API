@@ -1,89 +1,171 @@
-import { spawnSync } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import type { CredentialCodec } from '@modelbridge/runtime/credentials'
 
 const prefix = 'modelbridge-dpapi-v1:'
+const base64 = /^[A-Za-z0-9+/]+={0,2}$/u
+const outputLimit = 16 * 1024 * 1024
 
-export function windowsCredentialCodec(
-  directory: string,
-  legacy: CredentialCodec,
-): CredentialCodec {
-  fs.mkdirSync(directory, { recursive: true })
-  const entropy = createHash('sha256')
-    .update(fs.realpathSync.native(directory).toLowerCase())
-    .digest('hex')
-  const shell = path.join(
+type Operation = 'Protect' | 'Unprotect'
+export type PowerShellRunner = (
+  script: string,
+  input: string,
+  timeoutMs: number,
+) => Promise<{ status: number | null; stdout: string }>
+
+export function windowsPowerShell(): string {
+  return path.join(
     process.env.SystemRoot ?? 'C:\\Windows',
     'System32',
     'WindowsPowerShell',
     'v1.0',
     'powershell.exe',
   )
-  const cache = new Map<string, string>()
-  const remember = (encrypted: string, plain: string) => {
-    if (cache.size >= 32) {
-      const first = cache.keys().next().value
-      if (first !== undefined) cache.delete(first)
-    }
-    cache.set(encrypted, plain)
-    return plain
-  }
-  function transform(value: string, operation: 'Protect' | 'Unprotect') {
-    const script = [
-      '$ErrorActionPreference = "Stop"',
-      'Add-Type -AssemblyName System.Security',
-      '$data = [Convert]::FromBase64String([Console]::In.ReadToEnd())',
-      `$entropy = [Text.Encoding]::UTF8.GetBytes("${entropy}")`,
-      `$result = [Security.Cryptography.ProtectedData]::${operation}($data, $entropy, [Security.Cryptography.DataProtectionScope]::CurrentUser)`,
-      '[Console]::Write([Convert]::ToBase64String($result))',
-    ].join('; ')
-    const result = spawnSync(
-      shell,
+}
+
+/** Runs PowerShell without blocking the Electron main thread. */
+export const runPowerShell: PowerShellRunner = (script, input, timeoutMs) =>
+  new Promise((resolve, reject) => {
+    const child = spawn(
+      windowsPowerShell(),
       ['-NoProfile', '-NonInteractive', '-Command', script],
-      {
-        input: value,
-        encoding: 'utf8',
-        windowsHide: true,
-        timeout: 15_000,
-        maxBuffer: 16 * 1024 * 1024,
-      },
+      { windowsHide: true },
     )
-    if (
-      result.error
-      || result.status !== 0
-      || !/^[A-Za-z0-9+/]+={0,2}$/u.test(result.stdout.trim())
-    )
-      throw new Error(
-        `Windows protected credential ${operation.toLowerCase()} failed. Preserve the profile and check its OS user and permissions.`,
-        {
-          cause:
-            result.error
-            ?? new Error(`PowerShell exited with status ${result.status}.`),
-        },
+    let stdout = ''
+    let settled = false
+    const finish = (error: Error | null, status: number | null = null) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      if (error) reject(error)
+      else resolve({ status, stdout })
+    }
+    const timer = setTimeout(() => {
+      child.kill()
+      finish(
+        new Error(
+          `PowerShell did not respond within ${Math.round(timeoutMs / 1000)} seconds. Security software may be blocking or delaying it.`,
+        ),
       )
-    return result.stdout.trim()
+    }, timeoutMs)
+    child.stdout.setEncoding('utf8')
+    child.stdout.on('data', (chunk: string) => {
+      stdout += chunk
+      if (stdout.length > outputLimit) {
+        child.kill()
+        finish(new Error('PowerShell returned an oversized response.'))
+      }
+    })
+    child.stderr.resume()
+    child.stdin.on('error', () => undefined)
+    child.on('error', (error) => finish(error))
+    child.on('close', (status) => finish(null, status))
+    child.stdin.end(input)
+  })
+
+interface Request {
+  operation: Operation
+  data: string
+  resolve(value: string): void
+  reject(error: Error): void
+}
+
+function failure(operation: Operation, cause: unknown): Error {
+  return new Error(
+    `Windows protected credential ${operation.toLowerCase()} failed. Preserve the profile and check its OS user and permissions.`,
+    { cause },
+  )
+}
+
+export function windowsCredentialCodec(
+  directory: string,
+  legacy: CredentialCodec,
+  options: { run?: PowerShellRunner; timeoutMs?: number } = {},
+): CredentialCodec {
+  const run = options.run ?? runPowerShell
+  const timeoutMs = options.timeoutMs ?? 30_000
+  fs.mkdirSync(directory, { recursive: true })
+  const entropy = createHash('sha256')
+    .update(fs.realpathSync.native(directory).toLowerCase())
+    .digest('hex')
+  // One process handles every queued request, so startup costs a single launch.
+  const script = [
+    '$ErrorActionPreference = "Stop"',
+    'Add-Type -AssemblyName System.Security',
+    `$entropy = [Text.Encoding]::UTF8.GetBytes("${entropy}")`,
+    '$scope = [Security.Cryptography.DataProtectionScope]::CurrentUser',
+    '$output = New-Object Text.StringBuilder',
+    'foreach ($line in [Console]::In.ReadToEnd().Split([char]10)) { $item = $line.Trim(); if ($item.Length -eq 0) { continue }; try { $data = [Convert]::FromBase64String($item.Substring(2)); if ($item.StartsWith("P:")) { $result = [Security.Cryptography.ProtectedData]::Protect($data, $entropy, $scope) } else { $result = [Security.Cryptography.ProtectedData]::Unprotect($data, $entropy, $scope) }; [void]$output.Append("+" + [Convert]::ToBase64String($result) + [char]10) } catch { [void]$output.Append("-" + [char]10) } }',
+    '[Console]::Write($output.ToString())',
+  ].join('; ')
+  let pending: Request[] = []
+  let scheduled = false
+  let running = false
+  const schedule = () => {
+    if (scheduled || running || !pending.length) return
+    scheduled = true
+    setImmediate(() => void drain())
   }
+  async function drain() {
+    scheduled = false
+    running = true
+    const batch = pending
+    pending = []
+    try {
+      const input = batch
+        .map(
+          (item) => `${item.operation === 'Protect' ? 'P' : 'U'}:${item.data}`,
+        )
+        .join('\n')
+      const result = await run(script, `${input}\n`, timeoutMs)
+      const lines = result.stdout
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean)
+      if (result.status !== 0 || lines.length !== batch.length)
+        throw new Error(`PowerShell exited with status ${result.status}.`)
+      batch.forEach((item, index) => {
+        const value = lines[index].slice(1)
+        if (lines[index].startsWith('+') && base64.test(value))
+          item.resolve(value)
+        else
+          item.reject(
+            failure(item.operation, new Error('The record was rejected.')),
+          )
+      })
+    } catch (error) {
+      for (const item of batch) item.reject(failure(item.operation, error))
+    } finally {
+      running = false
+      schedule()
+    }
+  }
+  const transform = (data: string, operation: Operation) =>
+    new Promise<string>((resolve, reject) => {
+      if (!base64.test(data)) {
+        reject(failure(operation, new Error('The record is not valid data.')))
+        return
+      }
+      pending.push({ operation, data, resolve, reject })
+      schedule()
+    })
   return {
-    encrypt(value) {
-      const encrypted =
-        prefix + transform(Buffer.from(value).toString('base64'), 'Protect')
-      remember(encrypted, value)
-      return encrypted
+    async encrypt(value) {
+      return (
+        prefix
+        + (await transform(Buffer.from(value).toString('base64'), 'Protect'))
+      )
     },
-    decrypt(value) {
-      const existing = cache.get(value)
-      if (existing !== undefined) return existing
+    async decrypt(value) {
       // Independent processes must not depend on Chromium's profile-key cache.
-      const plain =
-        value.startsWith(prefix) ?
-          Buffer.from(
-            transform(value.slice(prefix.length), 'Unprotect'),
-            'base64',
-          ).toString('utf8')
-        : legacy.decrypt(value)
-      return remember(value, plain)
+      if (!value.startsWith(prefix)) return legacy.decrypt(value)
+      return Buffer.from(
+        await transform(value.slice(prefix.length), 'Unprotect'),
+        'base64',
+      ).toString('utf8')
     },
+    isCurrent: (encrypted) => encrypted.startsWith(prefix),
   }
 }

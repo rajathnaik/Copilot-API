@@ -1,9 +1,9 @@
 :root { font-family: "Segoe UI", system-ui, sans-serif; color: #17243a; background: #edf2f8; font-size: 14px; }
 * { box-sizing: border-box; }
 body { margin: 0; }
-main { max-width: 1200px; margin: auto; padding: 28px; }
-header { display: flex; align-items: center; gap: 14px; margin-bottom: 24px; }
-h1 { font-size: 27px; margin: 0; } h2 { font-size: 18px; margin: 0 0 12px; }
+main { max-width: 1100px; margin: auto; padding: 24px 28px; }
+header { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+h1 { font-size: 24px; margin: 0; } h2 { font-size: 17px; margin: 0 0 10px; }
 p { line-height: 1.6; margin: 8px 0; } header p { margin: 2px 0; color: #526178; }
 .version { margin-left: auto; color: #526178; }
 section { margin-top: 18px; background: white; border: 1px solid #dbe3ef; border-radius: 12px; padding: 22px; }
@@ -20,9 +20,22 @@ code { font-size: 12px; overflow-wrap: anywhere; }
 .source { display: flex; gap: 18px; align-items: center; padding: 12px 0; border-bottom: 1px solid #edf2f8; }
 .checkbox { display: flex; align-items: center; margin-left: auto; }
 table { width: 100%; border-collapse: collapse; margin-top: 12px; } th, td { text-align: left; padding: 10px; border-bottom: 1px solid #edf2f8; }
-.key { border-color: #9ab5d8; } .key button { margin-left: 14px; }
-button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid #45a9be; outline-offset: 2px; }
-@media (max-width: 800px) { main { padding: 16px; } form { grid-template-columns: 1fr; } table { display: block; overflow-x: auto; } }
+.key { margin-top: 14px; padding: 14px; border: 1px solid #9ab5d8; border-radius: 8px; background: #f6f9fd; } .key button { margin-left: 14px; }
+button:focus-visible, input:focus-visible, select:focus-visible, [role="tabpanel"]:focus-visible { outline: 3px solid #45a9be; outline-offset: 2px; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid #c9d5e5; margin-top: 8px; overflow-x: auto; }
+.tabs button { border: 0; border-bottom: 3px solid transparent; border-radius: 6px 6px 0 0; background: transparent; padding: 10px 16px; color: #526178; white-space: nowrap; }
+.tabs button:hover { background: #e2eaf5; }
+.tabs button[aria-selected="true"] { color: #183c70; border-bottom-color: #183c70; font-weight: 600; background: white; }
+.count { margin-left: 8px; padding: 1px 7px; border-radius: 10px; background: #dbe3ef; font-size: 12px; font-weight: 600; }
+[role="tabpanel"] { outline: none; }
+.cards { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.card { display: flex; flex-direction: column; } .card > button, .card .actions { margin-top: auto; } .card > button { align-self: flex-start; }
+.state { font-weight: 600; color: #183c70; }
+.starting { text-align: center; padding: 48px 22px; }
+.login { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 12px; margin-top: 12px; background: #fff7e0; border-radius: 8px; } .login p { margin: 0; }
+.pairs { display: grid; grid-template-columns: max-content 1fr; gap: 10px 18px; align-items: center; margin: 0; } .pairs dt { color: #526178; } .pairs dd { margin: 0; }
+.table { overflow-x: auto; }
+@media (max-width: 800px) { main { padding: 16px; } form { grid-template-columns: 1fr; } .cards { grid-template-columns: 1fr; } }
 .config-diff { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background: #edf2f8; border-radius: 6px; font-size: 12px; }
 li { line-height: 1.6; } details { margin-top: 16px; } summary { cursor: pointer; }

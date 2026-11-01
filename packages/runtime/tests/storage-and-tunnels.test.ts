@@ -24,31 +24,102 @@ const codec = {
   decrypt: (value: string) => Buffer.from(value, 'base64').reverse().toString(),
 }
 
-test('protected storage survives restart without plaintext or silent credential recovery', () => {
+test('protected storage survives restart without plaintext or silent credential recovery', async () => {
   const file = path.join(directory(), 'vault.json')
-  const vault = new EncryptedVault(file, codec)
-  expect(() => vault.set('source', '  ')).toThrow('nonempty')
+  const vault = await EncryptedVault.open(file, codec)
+  await expect(vault.set('source', '  ')).rejects.toThrow('nonempty')
   expect(() => vault.get('missing')).toThrow('No saved')
-  vault.set('source', 'synthetic-protected-key')
-  expect(() =>
-    new EncryptedVault(file, { ...codec, decrypt: () => '' }).get('source'),
-  ).toThrow('OS profile')
+  await vault.set('source', 'synthetic-protected-key')
+  const empty = await EncryptedVault.open(file, { ...codec, decrypt: () => '' })
+  expect(() => empty.get('source')).toThrow('OS profile')
   expect(fs.readFileSync(file, 'utf8')).not.toContain('synthetic-protected-key')
-  expect(new EncryptedVault(file, codec).get('source')).toBe(
+  expect((await EncryptedVault.open(file, codec)).get('source')).toBe(
     'synthetic-protected-key',
   )
-  expect(() =>
-    new EncryptedVault(file, {
-      ...codec,
-      decrypt: () => {
-        throw new Error('profile changed')
-      },
-    }).get('source'),
-  ).toThrow('OS profile')
-  vault.remove('source')
+  const changed = await EncryptedVault.open(file, {
+    ...codec,
+    decrypt: () => {
+      throw new Error('profile changed')
+    },
+  })
+  expect(() => changed.get('source')).toThrow('OS profile')
+  await vault.remove('source')
   expect(() => vault.get('source')).toThrow()
   fs.writeFileSync(file, '{broken')
-  expect(() => new EncryptedVault(file, codec)).toThrow()
+  await expect(EncryptedVault.open(file, codec)).rejects.toThrow()
+})
+
+test('vault decrypts once on open, serializes concurrent writes and upgrades only outdated records', async () => {
+  const file = path.join(directory(), 'vault.json')
+  let decrypts = 0
+  const asyncCodec = {
+    encrypt: async (value: string) => {
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      return `v2:${codec.encrypt(value)}`
+    },
+    decrypt: async (value: string) => {
+      decrypts++
+      await Promise.resolve()
+      return codec.decrypt(value.replace(/^v[12]:/u, ''))
+    },
+    isCurrent: (value: string) => value.startsWith('v2:'),
+  }
+  fs.writeFileSync(
+    file,
+    JSON.stringify({
+      old: `v1:${codec.encrypt('legacy-value')}`,
+      fresh: `v2:${codec.encrypt('fresh-value')}`,
+    }),
+  )
+  const narrow = await EncryptedVault.open(file, asyncCodec, ['fresh'])
+  expect(decrypts).toBe(1)
+  expect(narrow.get('fresh')).toBe('fresh-value')
+  expect(() => narrow.get('old')).toThrow('cannot decrypt')
+  decrypts = 0
+  const vault = await EncryptedVault.open(file, asyncCodec)
+  expect(decrypts).toBe(2)
+  expect(vault.get('old')).toBe('legacy-value')
+  expect(vault.get('old')).toBe('legacy-value')
+  expect(decrypts).toBe(2)
+  await Promise.all([
+    vault.set('first', 'first-value'),
+    vault.set('second', 'second-value'),
+    vault.setMany({ third: 'third-value', fourth: 'fourth-value' }),
+  ])
+  const saved = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<
+    string,
+    string
+  >
+  expect(Object.keys(saved).sort()).toEqual([
+    'first',
+    'fourth',
+    'fresh',
+    'old',
+    'second',
+    'third',
+  ])
+  expect(await vault.upgrade('fresh')).toBe(false)
+  expect(await vault.upgrade('missing')).toBe(false)
+  expect(await vault.upgrade('old')).toBe(true)
+  const upgraded = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<
+    string,
+    string
+  >
+  expect(upgraded.old).toStartWith('v2:')
+  expect((await EncryptedVault.open(file, asyncCodec)).get('old')).toBe(
+    'legacy-value',
+  )
+  const failing = await EncryptedVault.open(file, {
+    ...asyncCodec,
+    encrypt: () => Promise.reject(new Error('provider unavailable')),
+  })
+  await expect(failing.set('first', 'replacement')).rejects.toThrow(
+    'provider unavailable',
+  )
+  expect(failing.get('first')).toBe('first-value')
+  expect(fs.readFileSync(file, 'utf8')).toBe(JSON.stringify(upgraded))
+  await failing.remove('fresh')
+  expect(() => failing.get('fresh')).toThrow('No saved')
 })
 
 test('atomic writes preserve an existing credential when replacement fails and clean their own temporary file', () => {
@@ -66,6 +137,34 @@ test('atomic writes preserve an existing credential when replacement fails and c
   expect(fs.readFileSync(file, 'utf8')).toBe('original')
   expect(fs.readdirSync(root)).toEqual(['vault.json'])
 })
+
+test.skipIf(process.platform !== 'win32')(
+  'atomic writes ride out transient Windows file locks but not persistent ones',
+  () => {
+    const root = directory()
+    const file = path.join(root, 'vault.json')
+    const real = fs.renameSync.bind(fs)
+    const locked = () =>
+      Object.assign(new Error('EPERM: operation not permitted'), {
+        code: 'EPERM',
+      })
+    let failures = 2
+    const rename = spyOn(fs, 'renameSync').mockImplementation((from, to) => {
+      if (failures-- > 0) throw locked()
+      real(from, to)
+    })
+    try {
+      atomicWrite(file, 'saved')
+      expect(rename).toHaveBeenCalledTimes(3)
+      failures = Number.POSITIVE_INFINITY
+      expect(() => atomicWrite(file, 'replacement')).toThrow('EPERM')
+    } finally {
+      rename.mockRestore()
+    }
+    expect(fs.readFileSync(file, 'utf8')).toBe('saved')
+    expect(fs.readdirSync(root)).toEqual(['vault.json'])
+  },
+)
 
 const id = `modelbridge-${'a'.repeat(32)}`
 test('provisions an owned persistent tunnel and reads Microsoft-issued URLs without deleting other ports', async () => {
