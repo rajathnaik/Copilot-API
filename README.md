@@ -7,7 +7,7 @@ The new desktop structure retains the original Copilot API's direct
 authentication, token exchange, forwarding and protocol translations.
 **There is no Copilot SDK integration.**
 
-**Pre-release: 0.1.0, the first ModelBridge release.**
+**Development pre-release: 0.1.0**, the first ModelBridge release.
 
 Download the unsigned Windows installer from the
 [ModelBridge 0.1.0 release](https://github.com/rajathnaik/Copilot-API/releases/tag/modelbridge-v0.1.0):
