@@ -15,6 +15,17 @@ const dayMs = 24 * 60 * 60 * 1000
 // Copilot reports cost in nano AI units; the original gateway billed
 // 100 AI units per US dollar.
 export const nanoAiuPerUsd = 100_000_000_000
+
+// Coding tools ModelBridge recognizes in usage; anything else is `other`.
+export const usageApps = [
+  'codex',
+  'claude-code',
+  'hermes',
+  'openclaw',
+  'playground',
+  'other',
+] as const
+export type UsageApp = (typeof usageApps)[number]
 const tokens = z.number().int().nonnegative()
 
 export const usageRecordSchema = z
@@ -39,6 +50,8 @@ export const usageRecordSchema = z
     initiator: z.enum(['user', 'agent']).nullable().optional(),
     premium: z.number().nonnegative().max(10_000).nullable().optional(),
     client: z.string().min(1).max(64).optional(),
+    // Added in 0.1.2; older records omit it.
+    app: z.enum(usageApps).optional(),
   })
   .strict()
 export type UsageRecord = z.infer<typeof usageRecordSchema>
@@ -88,6 +101,9 @@ export interface UsageSummary {
   access: Record<UsageRecord['access'], UsageTotals>
   // Remote access grouped by the name each client machine reports.
   clients: Array<UsageTotals & { client: string; lastSeen: number }>
+  // Requests grouped by the coding tool that sent them; older records are
+  // grouped as `unknown`.
+  apps: Array<UsageTotals & { app: UsageApp | 'unknown' }>
   daily: Array<{ date: string } & UsageTotals>
   // Daily values aligned with `daily`, per model and per remote client.
   series: { models: UsageSeries[]; clients: UsageSeries[] }
@@ -305,6 +321,7 @@ export class UsageLedger {
     >()
     const access = { local: new Totals(), remote: new Totals() }
     const clients = new Map<string, { totals: Totals; lastSeen: number }>()
+    const apps = new Map<UsageApp | 'unknown', Totals>()
     const dayIndex = new Map<string, number>()
     const daily = new Map<string, Totals>()
     for (
@@ -341,6 +358,8 @@ export class UsageLedger {
       access[record.access].add(record)
       daily.get(localDay(record.at))?.add(record)
       plot(series.models, record.model, record)
+      const app = record.app ?? 'unknown'
+      apps.set(app, (apps.get(app) ?? new Totals()).add(record))
       if (record.access === 'remote') {
         const name = record.client ?? unnamedClientLabel
         const client = clients.get(name) ?? {
@@ -393,6 +412,12 @@ export class UsageLedger {
             right.premiumRequests - left.premiumRequests
             || right.requests - left.requests
             || left.client.localeCompare(right.client),
+        ),
+      apps: [...apps]
+        .map(([app, value]) => ({ app, ...value.value() }))
+        .sort(
+          (left, right) =>
+            right.requests - left.requests || left.app.localeCompare(right.app),
         ),
       daily: [...daily].map(([date, value]) => ({ date, ...value.value() })),
       series: {

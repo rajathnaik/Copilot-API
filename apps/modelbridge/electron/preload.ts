@@ -48,5 +48,27 @@ const api: ModelBridgeAPI = {
   applyCodex: (id) => ipcRenderer.invoke('modelbridge:codex-apply', id),
   reconcileCodex: () => ipcRenderer.invoke('modelbridge:codex-reconcile'),
   openLogin: (url) => ipcRenderer.invoke('modelbridge:open-login', url),
+  playgroundSend: (request) =>
+    ipcRenderer.invoke('modelbridge:playground-send', request),
+  playgroundCancel: (id) =>
+    ipcRenderer.invoke('modelbridge:playground-cancel', id),
+  onPlaygroundChunk: (listener) => {
+    const receive = (_event: unknown, chunk: { id: string; text: string }) =>
+      listener(chunk)
+    ipcRenderer.on('modelbridge:playground-chunk', receive)
+    return () => {
+      ipcRenderer.removeListener('modelbridge:playground-chunk', receive)
+    }
+  },
+  copyText: (text) => ipcRenderer.invoke('modelbridge:copy-text', text),
+  copyKey: (remote) => ipcRenderer.invoke('modelbridge:copy-key', remote),
+  appConfigStatus: (app) =>
+    ipcRenderer.invoke('modelbridge:app-config-status', app),
+  previewAppConfig: (app, modelId) =>
+    ipcRenderer.invoke('modelbridge:app-config-preview', { app, modelId }),
+  previewAppRestore: (app) =>
+    ipcRenderer.invoke('modelbridge:app-config-restore', app),
+  applyAppConfig: (id) =>
+    ipcRenderer.invoke('modelbridge:app-config-apply', id),
 }
 contextBridge.exposeInMainWorld('modelbridge', api)

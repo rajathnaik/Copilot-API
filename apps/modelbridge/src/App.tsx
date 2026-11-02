@@ -2,31 +2,41 @@ import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import type { Role } from '@modelbridge/runtime/contracts'
 import type { AppStatus } from './types'
 import icon from '../assets/icon.svg'
-import { CodexPanel } from './CodexPanel'
+import { AppsPanel, type TryPreset } from './AppsPanel'
 import { ConnectPanel } from './ConnectPanel'
 import { Dashboard } from './Dashboard'
 import { failure } from './format'
 import { HostSetup } from './HostSetup'
 import type { Revealed } from './KeyReveal'
 import { ModelsPanel } from './ModelsPanel'
+import { Playground, type PlaygroundPreset } from './Playground'
 import { SettingsPanel } from './SettingsPanel'
 import type { Run } from './shared'
 
-type Tab = 'dashboard' | 'host' | 'connect' | 'sources' | 'codex' | 'settings'
+type Tab =
+  | 'dashboard'
+  | 'host'
+  | 'connect'
+  | 'sources'
+  | 'apps'
+  | 'playground'
+  | 'settings'
 
 const roleTabs: Record<Role, Array<{ id: Tab; label: string }>> = {
   host: [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'host', label: 'Host setup' },
     { id: 'sources', label: 'Models' },
-    { id: 'codex', label: 'Codex' },
+    { id: 'apps', label: 'Apps' },
+    { id: 'playground', label: 'Playground' },
     { id: 'settings', label: 'Settings' },
   ],
   client: [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'connect', label: 'Hosts' },
     { id: 'sources', label: 'Models' },
-    { id: 'codex', label: 'Codex' },
+    { id: 'apps', label: 'Apps' },
+    { id: 'playground', label: 'Playground' },
     { id: 'settings', label: 'Settings' },
   ],
 }
@@ -78,7 +88,7 @@ function Welcome({
           <h2>Use Copilot from another machine</h2>
           <p className="muted">
             Paste the host&apos;s URL and access key. ModelBridge discovers the
-            models and configures Codex for you.
+            models and sets up Codex, Claude Code and other tools for you.
           </p>
           <button
             className="primary"
@@ -100,6 +110,7 @@ export default function App() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [revealed, setRevealed] = useState<Revealed | null>(null)
+  const [preset, setPreset] = useState<PlaygroundPreset | null>(null)
   const tabRefs = useRef<Partial<Record<Tab, HTMLButtonElement | null>>>({})
   useEffect(() => {
     let active = true
@@ -294,7 +305,7 @@ export default function App() {
             <Dashboard
               role={role}
               active={tab === 'dashboard'}
-              onConfigureCodex={() => select('codex')}
+              onSetUpApp={() => select('apps')}
             />
           </div>
 
@@ -329,8 +340,23 @@ export default function App() {
             />
           </div>
 
-          <div {...panel('codex')}>
-            <CodexPanel models={status.models} />
+          <div {...panel('apps')}>
+            <AppsPanel
+              status={status}
+              role={role}
+              onTry={(next: TryPreset) => {
+                setPreset({ ...next, nonce: Date.now() })
+                select('playground')
+              }}
+            />
+          </div>
+
+          <div {...panel('playground')}>
+            <Playground
+              models={status.models}
+              localUrl={status.localUrl}
+              preset={preset}
+            />
           </div>
 
           <div {...panel('settings')}>

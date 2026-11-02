@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { CopilotProvider } from '../src/providers/copilot'
 import { SourceService } from '../src/sources/source-service'
-import { createGateway } from '../src/routing/gateway'
+import { createGateway, detectApp } from '../src/routing/gateway'
 import type { Credentials } from '../src/contracts'
 import {
   meterResponse,
@@ -808,4 +808,29 @@ test('Copilot quota is parsed, cached for a minute and refreshed on demand', asy
   fail = true
   await expect(provider.quota(id)).rejects.toThrow()
   expect(checks).toBe(3)
+})
+
+test('requests are attributed to the calling app and summarized per app', async () => {
+  expect(detectApp('Hermes', undefined, undefined)).toBe('hermes')
+  expect(
+    detectApp(undefined, 'codex_cli_rs/0.50.0 (Windows 10.0)', undefined),
+  ).toBe('codex')
+  expect(detectApp(undefined, undefined, 'codex_chatgpt_desktop')).toBe('codex')
+  expect(
+    detectApp(undefined, 'claude-cli/2.1.0 (external, cli)', undefined),
+  ).toBe('claude-code')
+  expect(detectApp(undefined, 'OpenAI/JS 5.0.0', undefined)).toBe('other')
+  expect(detectApp('unknown-tool', 'openclaw/1.0', undefined)).toBe('openclaw')
+
+  const ledger = await UsageLedger.open(temporary())
+  ledger.record(entry({ app: 'codex' }))
+  ledger.record(entry({ app: 'codex' }))
+  ledger.record(entry({ app: 'hermes' }))
+  ledger.record(entry())
+  const apps = ledger.summary('today').apps
+  expect(apps.map(({ app, requests }) => [app, requests])).toEqual([
+    ['codex', 2],
+    ['hermes', 1],
+    ['unknown', 1],
+  ])
 })

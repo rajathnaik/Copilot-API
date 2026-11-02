@@ -179,7 +179,8 @@ test('Copilot attributes prompts, agent follow-ups and premium requests', async 
     0,
     undefined,
   ])
-  expect(sources.models()[0]).not.toHaveProperty('premiumMultiplier')
+  // Advertised so client machines can show what each model costs.
+  expect(sources.models()[0]).toHaveProperty('premiumMultiplier', 1.5)
   const records: UsageEntry[] = []
   const gateway = createGateway(sources, 'local', false, {
     record: (value) => records.push(value),

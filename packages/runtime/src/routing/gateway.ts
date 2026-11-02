@@ -36,7 +36,12 @@ import {
 } from '../sources/source-service'
 import { meteredFetch, type UpstreamUsage } from '../usage/usage-meter'
 import { stabilizeResponseItemIds } from './stable-item-ids'
-import { unnamedClientLabel, type UsageEntry } from '../usage/usage-ledger'
+import {
+  unnamedClientLabel,
+  usageApps,
+  type UsageApp,
+  type UsageEntry,
+} from '../usage/usage-ledger'
 
 export interface UsageRecorder {
   record(entry: UsageEntry): void
@@ -48,6 +53,25 @@ export interface GatewayOptions {
 }
 
 export const clientHeader = 'x-modelbridge-client'
+export const appHeader = 'x-modelbridge-app'
+
+// Names the coding tool behind a request: ModelBridge's own header first
+// (the playground and client gateways set it), then the tool's user agent.
+export function detectApp(
+  declared: string | undefined,
+  userAgent: string | undefined,
+  originator: string | undefined,
+): UsageApp {
+  const named = usageApps.find((app) => app === declared?.trim().toLowerCase())
+  if (named) return named
+  const agent = `${userAgent ?? ''} ${originator ?? ''}`.toLowerCase()
+  if (agent.includes('codex')) return 'codex'
+  if (agent.includes('claude-cli') || agent.includes('claude-code'))
+    return 'claude-code'
+  if (agent.includes('hermes')) return 'hermes'
+  if (agent.includes('openclaw')) return 'openclaw'
+  return 'other'
+}
 
 // Client names are self-reported labels, not identities; they are cleaned so
 // the host's dashboard and limits stay readable.
@@ -152,6 +176,9 @@ export function createGateway(
         modelbridge: {
           protocol: model.protocol,
           protocols: model.protocols,
+          ...(model.premiumMultiplier !== undefined && {
+            premiumMultiplier: model.premiumMultiplier,
+          }),
           source: model.sourceLabel,
           ...modelCapabilities(model),
         },
@@ -239,6 +266,11 @@ export function createGateway(
         )
       const client =
         sharedOnly ? cleanClientName(context.req.header(clientHeader)) : null
+      const app = detectApp(
+        context.req.header(appHeader),
+        context.req.header('user-agent'),
+        context.req.header('originator'),
+      )
       const report =
         usage
         && ((entry: UpstreamUsage) =>
@@ -249,6 +281,7 @@ export function createGateway(
             kind: source.kind,
             access: sharedOnly ? 'remote' : 'local',
             ...(client && { client }),
+            app,
           }))
       const upstreamProtocol: Protocol = mode === 'hub' ? 'responses' : protocol
       let response: Response
@@ -292,6 +325,7 @@ export function createGateway(
           if (source.kind === 'remote') {
             const name = options.clientName?.()
             if (name) headersForSource.set(clientHeader, cleanClientName(name))
+            headersForSource.set(appHeader, app)
           }
           response = await meteredFetch(
             sources.fetcher,

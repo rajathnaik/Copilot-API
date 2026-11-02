@@ -121,6 +121,7 @@ test.skipIf(
           kind: 'copilot',
         },
       ],
+      apps: [{ ...summaryTotals, app: 'codex' }],
       access: {
         local: totals({ requests: 2, totalTokens: 43_200 }),
         remote: totals({ requests: 1, totalTokens: 43_200 }),
@@ -308,7 +309,7 @@ test.skipIf(
         await click('Set up as host')
         await wait('document.querySelector("#tab-dashboard")?.getAttribute("aria-selected") === "true"')
         const hostTabs = JSON.stringify(await tabs())
-        if (hostTabs !== JSON.stringify(['Dashboard','Host setup','Models','Codex','Settings'])) throw new Error('Host tabs: ' + hostTabs)
+        if (hostTabs !== JSON.stringify(['Dashboard','Host setup','Models','Apps','Playground','Settings'])) throw new Error('Host tabs: ' + hostTabs)
 
         await wait('document.querySelectorAll("#panel-dashboard .metric").length === 6')
         const metrics = await text('#panel-dashboard .metrics')
@@ -358,7 +359,7 @@ test.skipIf(
 
         const before = quotaRequests
         await click('Client')
-        await wait('JSON.stringify([...document.querySelectorAll("[role=tab]")].map(t => t.id)) === JSON.stringify(["tab-dashboard","tab-connect","tab-sources","tab-codex","tab-settings"])')
+        await wait('JSON.stringify([...document.querySelectorAll("[role=tab]")].map(t => t.id)) === JSON.stringify(["tab-dashboard","tab-connect","tab-sources","tab-apps","tab-playground","tab-settings"])')
         if (await read('!!document.querySelector("#panel-dashboard .quota")')) throw new Error('Quota shown to a client')
         if (await read('!!document.querySelector("#panel-host")')) throw new Error('Host setup shown to a client')
         await new Promise(resolve => setTimeout(resolve, 200))

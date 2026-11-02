@@ -16,6 +16,7 @@ export const reasoningEffortSchema = z.enum([
   'xhigh',
   'max',
 ])
+export type ReasoningEffort = z.infer<typeof reasoningEffortSchema>
 
 const tokenLimitSchema = z.number().int().positive().max(2_000_000)
 export const modelCapabilitiesSchema = z.object({
@@ -153,6 +154,8 @@ export interface AvailableModel extends ModelCapabilities {
   protocol: Protocol
   // Protocols the gateway serves for this model, directly or translated.
   protocols: Protocol[]
+  // Copilot premium-request multiplier, when the source reports one.
+  premiumMultiplier?: number
 }
 
 export function webSearchCandidates(source: Pick<Source, 'models'>) {

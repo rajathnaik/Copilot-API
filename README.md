@@ -75,6 +75,40 @@ $env:ANTHROPIC_MODEL = '<source-id>/claude-sonnet-5.5'
 Model IDs are the source-qualified IDs from `/v1/models`. On the host
 machine itself, use `http://127.0.0.1:4321` with the local access key.
 
+### Apps tab, Playground and per-app usage
+
+The Codex tab is now an **Apps** tab with a dropdown of coding tools. On the
+client, apps always talk to the local gateway (`http://127.0.0.1:4321`), which
+forwards to your hosts, so the tunnel URL is never written into any tool.
+
+- **Connection details.** The base URL, access key and every model ID have copy
+  buttons. Host setup and Settings also have Copy URL / Copy key buttons.
+- **One-click setup** for Codex, Claude Code (`~/.claude/settings.json`, `env`
+  block), Hermes Agent (`config.yaml`, a `modelbridge` provider) and OpenClaw
+  (`~/.openclaw/openclaw.json`, a `modelbridge` provider). ModelBridge previews
+  a redacted diff first and changes only its own keys. It keeps the original
+  values, so **Restore** puts back exactly what was there, removing the file
+  if ModelBridge created it. Comments are kept in JSON and YAML. An OpenClaw
+  JSON5 file that is not plain JSON loses its comments, and the preview warns
+  about this first. Edits made outside ModelBridge are detected, and Apply
+  refuses if the file changed after the preview. Other tools get copy-ready
+  steps plus curl and Python examples.
+- **Test connection** checks the gateway, the model list, each host (on
+  clients), whether the app is set up, and a real one-line request through the
+  app's API. The cheapest model is preselected.
+- **Model sweep** (opt-in) sends one tiny request to each model you select.
+  Models are listed with their premium multiplier and an estimated premium
+  total, and you can stop the sweep after the current model.
+- **Playground** tab: chat with any model through Chat Completions, Messages
+  or Responses (the same APIs as Hermes, Claude Code and Codex). Choose the
+  reasoning effort, output limit, streaming and a system prompt. Each reply
+  shows its latency, tokens and the raw response, and any request can be copied
+  as curl or Python.
+- **Usage by app.** Requests are attributed to Codex, Claude Code, Hermes,
+  OpenClaw, Playground or Other from the User-Agent or the
+  `x-modelbridge-app` header, which the generated configs set. The Dashboard
+  shows a per-app breakdown.
+
 ## What's new in 0.1.1
 
 - **No more duplicated replies in the Codex desktop app.** Copilot gives a

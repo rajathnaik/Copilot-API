@@ -1,6 +1,7 @@
 import {
   app,
   BrowserWindow,
+  clipboard,
   dialog,
   ipcMain,
   Menu,
@@ -14,7 +15,12 @@ import { execFile } from 'node:child_process'
 import fs from 'node:fs'
 import { promisify } from 'node:util'
 import { z } from 'zod'
-import { createGateway, serve, SourceService } from '@modelbridge/runtime'
+import {
+  appHeader,
+  createGateway,
+  serve,
+  SourceService,
+} from '@modelbridge/runtime'
 import {
   sharingInputSchema,
   sourceInputSchema,
@@ -25,6 +31,10 @@ import {
 } from '@modelbridge/runtime/contracts'
 import type { CopilotLogin } from '@modelbridge/runtime/copilot'
 import { CodexConfigurations } from '@modelbridge/runtime/codex'
+import {
+  AppConfigurations,
+  configurableAppSchema,
+} from '@modelbridge/runtime/apps'
 import { DevTunnels } from '@modelbridge/runtime/dev-tunnels'
 import { CredentialStore } from '@modelbridge/runtime/credentials'
 import { UsageLedger, usageRanges } from '@modelbridge/runtime/usage'
@@ -99,10 +109,31 @@ const channels = [
   'modelbridge:premium-limits',
   'modelbridge:usage-clear',
   'modelbridge:copilot-quota',
+  'modelbridge:playground-send',
+  'modelbridge:playground-cancel',
+  'modelbridge:copy-text',
+  'modelbridge:copy-key',
+  'modelbridge:app-config-status',
+  'modelbridge:app-config-preview',
+  'modelbridge:app-config-restore',
+  'modelbridge:app-config-apply',
 ] as const
 type Channel = (typeof channels)[number]
 const operations = new Map<Channel, (value: unknown) => unknown>()
 let runtimeReady: Promise<void> = new Promise(() => undefined)
+const playgroundRequestSchema = z
+  .object({
+    id: z.string().uuid(),
+    path: z.enum([
+      '/health',
+      '/v1/models',
+      '/v1/responses',
+      '/v1/chat/completions',
+      '/v1/messages',
+    ]),
+    body: z.record(z.string(), z.unknown()).optional(),
+  })
+  .strict()
 
 function registerIpc(): void {
   for (const channel of channels)
@@ -228,6 +259,7 @@ async function initialize(): Promise<void> {
     state.vault,
     helper,
   )
+  const appConfigurations = new AppConfigurations(state.vault)
   let codexVerified = false
   let sharingBusy = false
   const sourceHealth = new Map<string, SourceHealth>()
@@ -576,6 +608,118 @@ async function initialize(): Promise<void> {
         }),
     )
   })
+  const playgroundRequests = new Map<string, AbortController>()
+  handle('modelbridge:playground-send', async (input) => {
+    const value = playgroundRequestSchema.parse(input)
+    if (playgroundRequests.has(value.id))
+      throw new Error('This playground request is already running.')
+    const controller = new AbortController()
+    playgroundRequests.set(value.id, controller)
+    const started = performance.now()
+    const elapsed = () => Math.round(performance.now() - started)
+    try {
+      // Requests take the same local gateway path as real coding tools.
+      const response = await fetch(
+        `http://127.0.0.1:${local.port}${value.path}`,
+        {
+          method: value.body === undefined ? 'GET' : 'POST',
+          headers: {
+            authorization: `Bearer ${state.vault.get('local-access')}`,
+            'content-type': 'application/json',
+            [appHeader]: 'playground',
+          },
+          ...(value.body !== undefined && { body: JSON.stringify(value.body) }),
+          signal: AbortSignal.any([
+            controller.signal,
+            AbortSignal.timeout(300_000),
+          ]),
+        },
+      )
+      let firstChunkMs: number | null = null
+      let received = 0
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+      while (reader) {
+        const { done, value: chunk } = await reader.read()
+        if (done) break
+        firstChunkMs ??= elapsed()
+        received += chunk.byteLength
+        if (received > 16 * 1024 * 1024) {
+          await reader.cancel()
+          throw new Error(
+            'The playground reply exceeded 16 MB and was stopped.',
+          )
+        }
+        window?.webContents.send('modelbridge:playground-chunk', {
+          id: value.id,
+          text: decoder.decode(chunk, { stream: true }),
+        })
+      }
+      const tail = decoder.decode()
+      if (tail)
+        window?.webContents.send('modelbridge:playground-chunk', {
+          id: value.id,
+          text: tail,
+        })
+      return {
+        status: response.status,
+        contentType: response.headers.get('content-type') ?? '',
+        durationMs: elapsed(),
+        firstChunkMs,
+        cancelled: false,
+      }
+    } catch (error) {
+      if (controller.signal.aborted)
+        return {
+          status: 0,
+          contentType: '',
+          durationMs: elapsed(),
+          firstChunkMs: null,
+          cancelled: true,
+        }
+      throw error
+    } finally {
+      playgroundRequests.delete(value.id)
+    }
+  })
+  handle('modelbridge:playground-cancel', (input) => {
+    playgroundRequests.get(z.string().uuid().parse(input))?.abort()
+  })
+  handle('modelbridge:copy-text', (input) => {
+    clipboard.writeText(z.string().min(1).max(200_000).parse(input))
+  })
+  // Keys go straight to the clipboard without passing through the window.
+  handle('modelbridge:copy-key', (input) => {
+    clipboard.writeText(
+      state.vault.get(
+        z.boolean().parse(input) ? 'remote-access' : 'local-access',
+      ),
+    )
+  })
+  handle('modelbridge:app-config-status', (input) =>
+    appConfigurations.status(
+      configurableAppSchema.parse(input),
+      sources.models(),
+    ),
+  )
+  handle('modelbridge:app-config-preview', (input) => {
+    const { app: target, modelId } = z
+      .object({ app: configurableAppSchema, modelId: z.string().min(1) })
+      .strict()
+      .parse(input)
+    return appConfigurations.preview(target, {
+      modelId,
+      models: sources.models(),
+      origin: `http://127.0.0.1:${local.port}`,
+      key: state.vault.get('local-access'),
+    })
+  })
+  handle('modelbridge:app-config-restore', (input) =>
+    appConfigurations.restore(configurableAppSchema.parse(input)),
+  )
+  handle('modelbridge:app-config-apply', (input) =>
+    appConfigurations.apply(z.string().uuid().parse(input)),
+  )
   const missing = channels.filter((channel) => !operations.has(channel))
   if (missing.length)
     throw new Error(`ModelBridge actions are missing: ${missing.join(', ')}`)

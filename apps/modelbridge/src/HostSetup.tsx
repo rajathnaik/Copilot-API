@@ -1,5 +1,6 @@
 import type { AppStatus } from './types'
 import { failure, plural } from './format'
+import { CopyButton, copyText } from './gateway-client'
 import { KeyReveal, type Revealed } from './KeyReveal'
 import { sharedModelIds, type Run } from './shared'
 import { SourceSharing } from './SourceSharing'
@@ -317,12 +318,22 @@ export function HostSetup({
             <dt>Host URL</dt>
             <dd>
               <code>{status.remoteUrl ?? 'Waiting for the tunnel…'}</code>
+              {status.remoteUrl && (
+                <CopyButton
+                  label="Copy URL"
+                  copy={copyText(status.remoteUrl)}
+                />
+              )}
             </dd>
             <dt>Access key</dt>
             <dd>
               <button disabled={busy} onClick={() => onReveal(true)}>
                 Show host access key
               </button>
+              <CopyButton
+                label="Copy key"
+                copy={() => window.modelbridge.copyKey(true)}
+              />
             </dd>
           </dl>
           <KeyReveal revealed={revealed} remote onHide={onHide} />

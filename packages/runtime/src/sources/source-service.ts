@@ -66,6 +66,7 @@ const discoverySchema = z.object({
           .object({
             protocol: protocolSchema,
             protocols: z.array(protocolSchema).min(1).max(3).optional(),
+            premiumMultiplier: z.number().nonnegative().max(1000).optional(),
             ...modelCapabilitiesSchema.shape,
           })
           .optional(),
@@ -208,6 +209,9 @@ export class SourceService {
         protocol: model.protocol,
         protocols: servedProtocols(source, model),
         ...modelCapabilities(model),
+        ...(model.premiumMultiplier !== undefined && {
+          premiumMultiplier: model.premiumMultiplier,
+        }),
       })),
     )
   }
@@ -400,6 +404,10 @@ export class SourceService {
         ...(kind === 'remote'
           && model.modelbridge?.protocols && {
             nativeProtocols: [...new Set(model.modelbridge.protocols)],
+          }),
+        ...(kind === 'remote'
+          && model.modelbridge?.premiumMultiplier !== undefined && {
+            premiumMultiplier: model.modelbridge.premiumMultiplier,
           }),
       }
     })

@@ -8,6 +8,7 @@ import type {
   UsageTotals,
 } from '@modelbridge/runtime/usage'
 import type { CopilotQuotaStatus, UsageReport } from './types'
+import { usageAppLabels } from './apps'
 import { ClientUsage } from './ClientUsage'
 import {
   failure,
@@ -242,6 +243,27 @@ function AccessSplit({ summary }: { summary: UsageSummary }) {
   )
 }
 
+function AppSplit({ summary }: { summary: UsageSummary }) {
+  return (
+    <section>
+      <h2>By app</h2>
+      <dl className="pairs">
+        {summary.apps.map((row) => (
+          <div className="pair" key={row.app}>
+            <dt>{usageAppLabels[row.app]}</dt>
+            <dd className="numeric">
+              {plural(row.requests, 'request')} ·{' '}
+              {formatTokens(row.totalTokens)} tokens · {cost(row)}
+              {row.premiumRequests > 0
+                && ` · ${formatPremium(row.premiumRequests)} premium`}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  )
+}
+
 function RecentTable({ summary }: { summary: UsageSummary }) {
   return (
     <section>
@@ -269,6 +291,7 @@ function RecentTable({ summary }: { summary: UsageSummary }) {
                   <span className="muted">
                     {' '}
                     · {record.source}
+                    {record.app && ` · ${usageAppLabels[record.app]}`}
                     {record.access === 'remote' ?
                       ` · remote${record.client ? ` · ${record.client}` : ''}`
                     : ''}
@@ -310,11 +333,11 @@ function RecentTable({ summary }: { summary: UsageSummary }) {
 export function Dashboard({
   role,
   active,
-  onConfigureCodex,
+  onSetUpApp,
 }: {
   role: Role
   active: boolean
-  onConfigureCodex: () => void
+  onSetUpApp: () => void
 }) {
   const [range, setRange] = useState<UsageRange>('7d')
   const [report, setReport] = useState<UsageReport | null>(null)
@@ -468,13 +491,14 @@ export function Dashboard({
                 Usage appears here as soon as Codex or another coding tool sends
                 a request through ModelBridge.
               </p>
-              <button className="primary" onClick={onConfigureCodex}>
-                Configure Codex
+              <button className="primary" onClick={onSetUpApp}>
+                Set up an app
               </button>
             </section>
           : <>
               <UsageChart summary={summary} host={role === 'host'} />
               <ModelTable summary={summary} />
+              <AppSplit summary={summary} />
               {role === 'host' && <AccessSplit summary={summary} />}
             </>
           }

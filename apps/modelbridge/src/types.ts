@@ -12,6 +12,11 @@ import type {
 } from '@modelbridge/runtime/codex'
 import type { UsageRange, UsageSummary } from '@modelbridge/runtime/usage'
 import type {
+  AppConfigurationPreview,
+  AppConfigurationStatus,
+  ConfigurableApp,
+} from '@modelbridge/runtime/apps'
+import type {
   ClientLimitStatus,
   PremiumLimits,
 } from '@modelbridge/runtime/limits'
@@ -63,6 +68,27 @@ export interface UsageReport {
   clients: ClientLimitStatus[]
 }
 
+export interface PlaygroundRequest {
+  id: string
+  path:
+    | '/health'
+    | '/v1/models'
+    | '/v1/responses'
+    | '/v1/chat/completions'
+    | '/v1/messages'
+  // Sent as a POST when present.
+  body?: Record<string, unknown>
+}
+
+export interface PlaygroundResult {
+  status: number
+  contentType: string
+  durationMs: number
+  // Time until the first bytes of the reply arrived.
+  firstChunkMs: number | null
+  cancelled: boolean
+}
+
 export interface ModelBridgeAPI {
   status(): Promise<Result<AppStatus>>
   setRole(role: Role): Promise<Result<AppStatus>>
@@ -103,6 +129,23 @@ export interface ModelBridgeAPI {
   applyCodex(id: string): Promise<Result<CodexConfigurationStatus>>
   reconcileCodex(): Promise<Result<CodexConfigurationStatus>>
   openLogin(url: string): Promise<Result<void>>
+  // Reply text arrives through onPlaygroundChunk while this is pending.
+  playgroundSend(request: PlaygroundRequest): Promise<Result<PlaygroundResult>>
+  playgroundCancel(id: string): Promise<Result<void>>
+  onPlaygroundChunk(
+    listener: (chunk: { id: string; text: string }) => void,
+  ): () => void
+  copyText(text: string): Promise<Result<void>>
+  copyKey(remote: boolean): Promise<Result<void>>
+  appConfigStatus(app: ConfigurableApp): Promise<Result<AppConfigurationStatus>>
+  previewAppConfig(
+    app: ConfigurableApp,
+    modelId: string,
+  ): Promise<Result<AppConfigurationPreview>>
+  previewAppRestore(
+    app: ConfigurableApp,
+  ): Promise<Result<AppConfigurationPreview>>
+  applyAppConfig(id: string): Promise<Result<AppConfigurationStatus>>
 }
 
 declare global {

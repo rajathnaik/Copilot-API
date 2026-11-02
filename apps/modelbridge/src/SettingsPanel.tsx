@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { Role } from '@modelbridge/runtime/contracts'
 import type { AppStatus } from './types'
 import { failure, plural } from './format'
+import { CopyButton, copyText } from './gateway-client'
 import { KeyReveal, type Revealed } from './KeyReveal'
 import type { Run } from './shared'
 
@@ -101,9 +102,14 @@ export function SettingsPanel({
         </p>
         <code>{status.localUrl}</code>
         <div className="actions">
+          <CopyButton label="Copy URL" copy={copyText(status.localUrl)} />
           <button disabled={busy} onClick={() => onReveal(false)}>
             Show local key
           </button>
+          <CopyButton
+            label="Copy key"
+            copy={() => window.modelbridge.copyKey(false)}
+          />
           <span>{plural(status.models.length, 'model')} available</span>
         </div>
         <KeyReveal revealed={revealed} remote={false} onHide={onHide} />
