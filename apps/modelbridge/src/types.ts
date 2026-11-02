@@ -1,17 +1,20 @@
 import type {
   AvailableModel,
+  Role,
   Source,
   SourceInput,
 } from '@modelbridge/runtime/contracts'
-import type { CopilotLogin } from '@modelbridge/runtime/copilot'
+import type { CopilotLogin, CopilotQuota } from '@modelbridge/runtime/copilot'
 import type {
   CodexConfigurationStatus,
   CodexPreview,
 } from '@modelbridge/runtime/codex'
+import type { UsageRange, UsageSummary } from '@modelbridge/runtime/usage'
 import type { CodexInstallation } from '../electron/codex-discovery'
 
 export interface AppStatus {
   version: string
+  role: Role | null
   localUrl: string
   sources: Source[]
   models: AvailableModel[]
@@ -29,8 +32,24 @@ export interface AppStatus {
 
 export type Result<T> = { ok: true; value: T } | { ok: false; error: string }
 
+export interface CopilotQuotaStatus {
+  sourceId: string
+  label: string
+  quota: CopilotQuota | null
+  error: string | null
+}
+
+export interface UsageReport {
+  summary: UsageSummary
+  error: string | null
+}
+
 export interface ModelBridgeAPI {
   status(): Promise<Result<AppStatus>>
+  setRole(role: Role): Promise<Result<AppStatus>>
+  usage(range: UsageRange): Promise<Result<UsageReport>>
+  clearUsage(): Promise<Result<UsageSummary>>
+  copilotQuota(refresh: boolean): Promise<Result<CopilotQuotaStatus[]>>
   addSource(input: SourceInput): Promise<Result<AppStatus>>
   shareSource(
     sourceId: string,

@@ -9,7 +9,8 @@
     "./credentials": "./src/credentials/vault.ts",
     "./dev-tunnels": "./src/remote-access/dev-tunnels.ts",
     "./copilot": "./src/providers/copilot.ts",
-    "./codex": "./src/harnesses/codex-configurations.ts"
+    "./codex": "./src/harnesses/codex-configurations.ts",
+    "./usage": "./src/usage/usage-ledger.ts"
   },
   "scripts": {
     "lint": "eslint --cache .",

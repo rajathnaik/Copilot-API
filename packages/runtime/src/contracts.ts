@@ -154,10 +154,14 @@ export interface Credentials {
   remove(id: string): void | Promise<void>
 }
 
+export const roleSchema = z.enum(['host', 'client'])
+export type Role = z.infer<typeof roleSchema>
+
 export const stateSchema = z
   .object({
     version: z.literal(1),
     tunnelId: z.string().regex(/^modelbridge-[a-f0-9]{32}$/u),
+    role: roleSchema.optional(),
     sources: z.array(sourceSchema),
   })
   .strict()

@@ -3,6 +3,11 @@ import type { ModelBridgeAPI } from '../src/types'
 
 const api: ModelBridgeAPI = {
   status: () => ipcRenderer.invoke('modelbridge:status'),
+  setRole: (role) => ipcRenderer.invoke('modelbridge:set-role', role),
+  usage: (range) => ipcRenderer.invoke('modelbridge:usage', range),
+  clearUsage: () => ipcRenderer.invoke('modelbridge:usage-clear'),
+  copilotQuota: (refresh) =>
+    ipcRenderer.invoke('modelbridge:copilot-quota', refresh),
   addSource: (input) => ipcRenderer.invoke('modelbridge:add-source', input),
   shareSource: (sourceId, shared, sharedModelIds) =>
     ipcRenderer.invoke('modelbridge:share-source', {

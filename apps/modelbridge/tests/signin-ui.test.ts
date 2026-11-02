@@ -20,6 +20,7 @@ test.skipIf(
     )
     const status: AppStatus = {
       version: 'test',
+      role: 'host',
       localUrl: 'http://127.0.0.1:4321/v1',
       sources: [],
       models: [],

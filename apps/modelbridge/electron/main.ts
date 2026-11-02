@@ -18,13 +18,15 @@ import {
   sharingInputSchema,
   sourceInputSchema,
   copilotInputSchema,
+  roleSchema,
   stateSchema,
 } from '@modelbridge/runtime/contracts'
 import type { CopilotLogin } from '@modelbridge/runtime/copilot'
 import { CodexConfigurations } from '@modelbridge/runtime/codex'
 import { DevTunnels } from '@modelbridge/runtime/dev-tunnels'
 import { CredentialStore } from '@modelbridge/runtime/credentials'
-import type { AppStatus, Result } from '../src/types'
+import { UsageLedger, usageRanges } from '@modelbridge/runtime/usage'
+import type { AppStatus, CopilotQuotaStatus, Result } from '../src/types'
 import { AppState, credentialsFile } from './state'
 import { TunnelProcess } from './devtunnel-process'
 import { codexConfigPath, discoverCodex, inspectCodex } from './codex-discovery'
@@ -46,6 +48,7 @@ let tray: Tray | null = null
 let quitting = false
 let localServer: ReturnType<typeof serve> | null = null
 let remoteServer: ReturnType<typeof serve> | null = null
+let usageLedger: UsageLedger | null = null
 const transport = new TunnelProcess()
 let copilotController: AbortController | null = null
 const credentialMode = process.argv.includes('--modelbridge-credential')
@@ -76,6 +79,10 @@ const channels = [
   'modelbridge:tunnel-check-login',
   'modelbridge:sharing-start',
   'modelbridge:sharing-stop',
+  'modelbridge:set-role',
+  'modelbridge:usage',
+  'modelbridge:usage-clear',
+  'modelbridge:copilot-quota',
 ] as const
 type Channel = (typeof channels)[number]
 const operations = new Map<Channel, (value: unknown) => unknown>()
@@ -146,6 +153,11 @@ async function initialize(): Promise<void> {
   const sources = new SourceService(state.value.sources, state.vault, (next) =>
     state.save({ ...state.value, sources: next }),
   )
+  const usage = await UsageLedger.open(
+    path.join(app.getPath('userData'), 'usage'),
+  )
+  usageLedger = usage
+  log('usage history loaded')
   const requestedPort = Number(process.env.MODELBRIDGE_PORT ?? 4321)
   if (
     !Number.isInteger(requestedPort)
@@ -154,7 +166,7 @@ async function initialize(): Promise<void> {
   )
     throw new Error('MODELBRIDGE_PORT must be a valid local port.')
   const local = await listen(
-    createGateway(sources, state.vault.get('local-access')),
+    createGateway(sources, state.vault.get('local-access'), false, usage),
     requestedPort,
   )
   localServer = local.server
@@ -203,6 +215,7 @@ async function initialize(): Promise<void> {
   }
   const snapshot = (): AppStatus => ({
     version: app.getVersion(),
+    role: state.value.role ?? null,
     localUrl: `http://127.0.0.1:${local.port}/v1`,
     sources: sources.list(),
     models: sources.models(),
@@ -383,7 +396,7 @@ async function initialize(): Promise<void> {
     sharingBusy = true
     try {
       const remote = await listen(
-        createGateway(sources, state.vault.get('remote-access'), true),
+        createGateway(sources, state.vault.get('remote-access'), true, usage),
         4322,
       )
       remoteServer = remote.server
@@ -419,6 +432,47 @@ async function initialize(): Promise<void> {
     remoteServer = null
     remoteUrl = null
     return snapshot()
+  })
+  handle('modelbridge:set-role', (input) => {
+    state.save({ ...state.value, role: roleSchema.parse(input) })
+    return snapshot()
+  })
+  handle('modelbridge:usage', (input) => ({
+    summary: usage.summary(z.enum(usageRanges).parse(input)),
+    error: usage.lastError,
+  }))
+  handle('modelbridge:usage-clear', async () => {
+    await usage.clear()
+    return usage.summary('today')
+  })
+  handle('modelbridge:copilot-quota', async (input) => {
+    const refresh = z.boolean().parse(input)
+    return Promise.all(
+      sources
+        .list()
+        .filter((source) => source.kind === 'copilot')
+        .map(async (source): Promise<CopilotQuotaStatus> => {
+          try {
+            return {
+              sourceId: source.id,
+              label: source.label,
+              quota: await sources.copilot.quota(source.id, refresh),
+              error: null,
+            }
+          } catch (error) {
+            log('copilot quota check failed', describeError(error))
+            return {
+              sourceId: source.id,
+              label: source.label,
+              quota: null,
+              error:
+                error instanceof Error ?
+                  error.message
+                : 'Copilot quota could not be read.',
+            }
+          }
+        }),
+    )
   })
   const missing = channels.filter((channel) => !operations.has(channel))
   if (missing.length)
@@ -500,6 +554,7 @@ app.on('before-quit', (event) => {
     .then(() =>
       Promise.all([closeServer(localServer), closeServer(remoteServer)]),
     )
+    .then(() => usageLedger?.flush())
     .then(() => app.quit())
     .catch((error: unknown) => {
       console.error(

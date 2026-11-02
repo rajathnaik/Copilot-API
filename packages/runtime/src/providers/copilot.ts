@@ -33,6 +33,11 @@ import {
   decodeChatResponse,
 } from './copilot-compatibility/chat-bridge'
 import { readBoundedText, type SourceFetch } from '../sources/source-service'
+import {
+  meteredFetch,
+  type UpstreamPurpose,
+  type UsageReporter,
+} from '../usage/usage-meter'
 
 // Direct protocol retained from the inherited Copilot API integration.
 const clientId = 'Iv1.b507a08c87ecfe98'
@@ -106,6 +111,64 @@ type CopilotToken = z.infer<typeof tokenSchema> & {
   refreshAt: number
   api: string
 }
+const quotaDetailSchema = z
+  .object({
+    entitlement: z.number().optional(),
+    remaining: z.number().optional(),
+    percent_remaining: z.number().optional(),
+    unlimited: z.boolean().optional(),
+    overage_count: z.number().optional(),
+    overage_permitted: z.boolean().optional(),
+  })
+  .passthrough()
+const quotaSchema = z
+  .object({
+    login: z.string().optional(),
+    copilot_plan: z.string().optional(),
+    quota_reset_date: z.string().optional(),
+    quota_snapshots: z
+      .object({
+        premium_interactions: quotaDetailSchema.optional(),
+        chat: quotaDetailSchema.optional(),
+        completions: quotaDetailSchema.optional(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough()
+
+export interface CopilotQuotaDetail {
+  entitlement: number | null
+  remaining: number | null
+  percentRemaining: number | null
+  unlimited: boolean
+  overageCount: number
+  overagePermitted: boolean
+}
+
+export interface CopilotQuota {
+  login: string | null
+  plan: string | null
+  resetDate: string | null
+  checkedAt: number
+  premium: CopilotQuotaDetail | null
+  chat: CopilotQuotaDetail | null
+  completions: CopilotQuotaDetail | null
+}
+
+function quotaDetail(
+  value: z.infer<typeof quotaDetailSchema> | undefined,
+): CopilotQuotaDetail | null {
+  if (!value) return null
+  return {
+    entitlement: value.entitlement ?? null,
+    remaining: value.remaining ?? null,
+    percentRemaining: value.percent_remaining ?? null,
+    unlimited: value.unlimited ?? false,
+    overageCount: value.overage_count ?? 0,
+    overagePermitted: value.overage_permitted ?? false,
+  }
+}
 
 export interface CopilotLogin {
   url: string
@@ -142,6 +205,7 @@ export class CopilotProvider {
   private readonly deviceId = randomUUID()
   private readonly sessionId = randomUUID()
   private readonly searchResults: WebSearchResultCache
+  private readonly quotas = new Map<string, CopilotQuota>()
 
   constructor(
     private readonly credentials: Credentials,
@@ -390,14 +454,48 @@ export class CopilotProvider {
     return this.catalog(await this.token(id))
   }
 
+  // Reads the subscription's premium-request allowance and reset date.
+  // Results are cached for a minute unless a refresh is requested.
+  async quota(id: string, refresh = false): Promise<CopilotQuota> {
+    const cached = this.quotas.get(id)
+    if (cached && !refresh && this.now() - cached.checkedAt < 60_000)
+      return cached
+    const value = quotaSchema.parse(
+      await this.json('https://api.github.com/copilot_internal/user', {
+        headers: {
+          Accept: 'application/json',
+          authorization: `token ${this.credentials.get(id)}`,
+          'editor-version': `vscode/${editorVersion}`,
+          'editor-plugin-version': 'copilot-chat/0.67.0',
+          'user-agent': userAgent,
+          'x-github-api-version': '2025-04-01',
+          'x-vscode-user-agent-library-version': 'electron-fetch',
+        },
+      }),
+    )
+    const quota: CopilotQuota = {
+      login: value.login ?? null,
+      plan: value.copilot_plan ?? null,
+      resetDate: value.quota_reset_date ?? null,
+      checkedAt: this.now(),
+      premium: quotaDetail(value.quota_snapshots?.premium_interactions),
+      chat: quotaDetail(value.quota_snapshots?.chat),
+      completions: quotaDetail(value.quota_snapshots?.completions),
+    }
+    this.quotas.set(id, quota)
+    return quota
+  }
+
   // `signal` is the client's connection; each upstream request adds its own
-  // deadline so multi-request web-search turns are not cut short.
+  // deadline so multi-request web-search turns are not cut short. `report`
+  // receives the usage of every upstream request, including searches.
   async forward(
     source: Source,
     protocol: Protocol,
     body: Record<string, unknown>,
     signal: AbortSignal,
     conversation?: string,
+    report?: UsageReporter,
   ): Promise<Response> {
     const token = await this.token(source.id)
     const payload = { ...body }
@@ -431,17 +529,29 @@ export class CopilotProvider {
       : protocol === 'chat-completions' ? '/chat/completions'
       : '/responses'
     const vision = JSON.stringify(payload).includes('"input_image"')
-    const send = (upstream: unknown, agent: boolean) => {
+    const modelId = typeof body.model === 'string' ? body.model : 'unknown'
+    const send = (
+      upstream: unknown,
+      agent: boolean,
+      purpose: UpstreamPurpose = 'request',
+    ) => {
       const headers = this.headers(token, false, conversation)
       headers.set('x-initiator', agent ? 'agent' : 'user')
       if (vision) headers.set('copilot-vision-request', 'true')
-      return this.fetcher(`${token.api}${endpoint}`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(upstream),
-        redirect: 'error',
-        signal: this.deadline(signal),
-      })
+      return meteredFetch(
+        this.fetcher,
+        `${token.api}${endpoint}`,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(upstream),
+          redirect: 'error',
+          signal: this.deadline(signal),
+        },
+        report,
+        { model: modelId, purpose, client: signal },
+        this.now,
+      )
     }
     if (protocol === 'responses') {
       const response = await send(payload, initiator)
@@ -486,6 +596,7 @@ export class CopilotProvider {
         initiator,
         translate,
         send,
+        report,
       })
     const { translation, chat } = first
     const response = await send(chat ?? translation.messagesPayload, initiator)
@@ -547,7 +658,12 @@ export class CopilotProvider {
         translation: ResponsesToMessagesTranslation
         chat: Record<string, unknown> | null
       }
-      send: (body: unknown, agent: boolean) => Promise<Response>
+      send: (
+        body: unknown,
+        agent: boolean,
+        purpose?: UpstreamPurpose,
+      ) => Promise<Response>
+      report?: UsageReporter
     },
   ): Promise<Response> {
     const input: Array<ResponseInputItem> =
@@ -556,7 +672,11 @@ export class CopilotProvider {
       : Array.isArray(payload.input) ?
         (payload.input as Array<ResponseInputItem>)
       : []
-    const round = async (items: Array<ResponseInputItem>, agent: boolean) => {
+    const round = async (
+      items: Array<ResponseInputItem>,
+      agent: boolean,
+      purpose: UpstreamPurpose,
+    ) => {
       const { translation, chat } = upstream.translate({
         ...payload,
         input: items,
@@ -565,6 +685,7 @@ export class CopilotProvider {
       const response = await upstream.send(
         chat ?? translation.messagesPayload,
         agent,
+        purpose,
       )
       return { response, translation, chat }
     }
@@ -579,13 +700,13 @@ export class CopilotProvider {
       ),
       registry: translation.registry,
     })
-    const first = await round(input, upstream.initiator)
+    const first = await round(input, upstream.initiator, 'request')
     if (!first.response.ok)
       return this.failure(source.id, token, first.response)
     const stream = proxyWebSearch(rounds(first), {
       input,
       next: async (items) => {
-        const next = await round(items, true)
+        const next = await round(items, true, 'continuation')
         if (next.response.ok) return rounds(next)
         if (next.response.status === 401) this.tokens.delete(source.id)
         await next.response.body?.cancel()
@@ -593,7 +714,8 @@ export class CopilotProvider {
           `Copilot returned HTTP ${next.response.status} while continuing after web search.`,
         )
       },
-      search: (query) => this.webSearch(source, token, query, signal),
+      search: (query) =>
+        this.webSearch(source, token, query, signal, upstream.report),
       remember: (id, text) => this.searchResults.set(id, text),
     })
     if (payload.stream) return eventStream(stream)
@@ -617,6 +739,7 @@ export class CopilotProvider {
     token: CopilotToken,
     query: string,
     signal: AbortSignal,
+    report?: UsageReporter,
   ): Promise<WebSearchOutcome> {
     const failed = (text: string): WebSearchOutcome => ({
       failed: true,
@@ -636,23 +759,30 @@ export class CopilotProvider {
     headers.set('x-initiator', 'agent')
     const deadline = this.deadline(signal)
     try {
-      const response = await this.fetcher(`${token.api}/responses`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          model: model.id,
-          instructions:
-            'Search the web for the query and answer concisely with the facts found. Cite every source you used.',
-          input: query,
-          tools: [{ type: 'web_search', search_context_size: 'low' }],
-          include: ['web_search_call.action.sources'],
-          stream: true,
-          store: false,
-          ...(effort && { reasoning: { effort } }),
-        }),
-        redirect: 'error',
-        signal: deadline,
-      })
+      const response = await meteredFetch(
+        this.fetcher,
+        `${token.api}/responses`,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            model: model.id,
+            instructions:
+              'Search the web for the query and answer concisely with the facts found. Cite every source you used.',
+            input: query,
+            tools: [{ type: 'web_search', search_context_size: 'low' }],
+            include: ['web_search_call.action.sources'],
+            stream: true,
+            store: false,
+            ...(effort && { reasoning: { effort } }),
+          }),
+          redirect: 'error',
+          signal: deadline,
+        },
+        report,
+        { model: model.id, purpose: 'web-search', client: signal },
+        this.now,
+      )
       if (!response.ok) {
         if (response.status === 401) this.tokens.delete(source.id)
         await response.body?.cancel()

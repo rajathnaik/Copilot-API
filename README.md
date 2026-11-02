@@ -36,10 +36,11 @@ them yet.
   This addresses the reported HTTP 466 requirement for `1.109.2+`. The value
   belongs to ModelBridge's outgoing requests: updating locally installed VS Code
   does not change it. Live subscription inference still requires verification.
-- **Sources & models** lets you share all models or only selected models from
-  each source. Expand **Model access** to choose a mode, select all current
-  models, clear the selection, filter, or toggle individual models. The Host
-  tab shows the shared-model count and links to these controls.
+- **Models** (formerly Sources & models) lets you share all models or only
+  selected models from each source. Expand **Model access** to choose a mode,
+  select all current models, clear the selection, filter, or toggle individual
+  models. The Host setup tab shows the shared-model count and links to these
+  controls.
 
 The policy applies to **all clients using the existing host key**. It restricts
 both model catalogs and direct inference routes, so knowing a hidden model's ID
@@ -76,7 +77,7 @@ Web search now works for every Copilot model, not only GPT models:
   `web_search_call` rather than ending the turn; a failure while continuing
   after a search fails the response explicitly. The reported token usage is the
   final request's, which matches the conversation's real context size.
-- **Sources & models** shows a **Web search model** for each Copilot source.
+- **Models** shows a **Web search model** for each Copilot source.
   **Auto** uses the newest full-size GPT model available (mini, nano and codex
   variants only when nothing else exists); you can pin a specific model instead.
   Searches run on the host, so the search model does not need to be shared with
@@ -94,15 +95,44 @@ images larger than the model's advertised limit with a short note.
 Live verification against a real subscription is still pending for the proxied
 search path.
 
-### Next phase: restore Gateway visibility
+### Usage dashboard and host/client roles
 
-The unified app must keep the original Gateway's operational value, not just
-connection setup. The next phase will adapt its token-usage collection,
-persistence, history, model breakdowns, pricing provenance and Copilot quota
-displays to the current runtime, then provide focused Host operations and Client
-configuration views in the same application. Usage/cost dashboards are **not
-restored in this phase**. Estimated costs, provider-reported costs and subscription
-quota must remain distinct; unavailable usage must not be presented as zero.
+The original Gateway's visibility is back, in the same app:
+
+- **Roles.** On first start ModelBridge asks how this machine is used:
+  **Host** (shares a Copilot subscription) or **Client** (uses another host).
+  Existing installations pick their role from what is already set up. Switch at
+  any time from the header or **Settings**; switching only changes the layout,
+  never sign-ins, sources or sharing.
+- **Focused tabs.** Host: Dashboard, Host setup, Models, Codex, Settings.
+  Client: Dashboard, Connect, Models, Codex, Settings. Sharing controls appear
+  only for hosts. The local gateway URL and key moved to **Settings**.
+- **Dashboard.** Requests, failures, web searches, input/cached/output/reasoning
+  tokens, estimated cost and average time for today, 7, 30 or 90 days, plus a
+  tokens-per-day chart, a per-model breakdown, recent requests and, on hosts, a
+  split between this machine and remote clients.
+- **Copilot quota (hosts).** Premium-request, chat and completion allowances,
+  remaining amounts, plan, account and reset date from GitHub's Copilot account
+  endpoint, refreshed every minute while the dashboard is open or on demand.
+
+Accounting is per upstream request, so a web search or a tool-continuation round
+that ModelBridge sends on your behalf is counted exactly once with its own
+tokens, rather than hidden inside the client's turn. Requests whose provider
+reported no token counts are shown as such, never as zero-cost usage.
+**Estimated cost** uses the AI units Copilot reports with each response
+(`copilot_usage.total_nano_aiu`), converted at the original Gateway's rate of
+100 AI units per US dollar; requests without reported AI units are not priced
+and the dashboard shows how many were. It is an estimate, separate from your
+subscription's quota and from GitHub billing. A client records the usage of its
+own requests; it shows cost only when its host passes Copilot's AI units
+through.
+
+Usage history holds metadata only (time, source, model, token counts, status,
+duration and reported AI units, never prompts or responses). It is kept in
+monthly files under `%APPDATA%\ModelBridge\usage`, retained for about 13
+months, and can be deleted from **Settings**. The live Copilot quota response
+and the presence of AI units in live responses still need verification against
+a real subscription.
 
 ## Current implementation
 
@@ -134,8 +164,8 @@ quota must remain distinct; unavailable usage must not be presented as zero.
   the tunnel ID (and therefore the URL) is kept, but you must sign in to Copilot
   again and re-apply the Codex configuration.
 - The window opens immediately and shows a startup state while the runtime
-  starts. Sections are split into Overview, Host, Connect, Sources & models and
-  Codex tabs.
+  starts. It is organized into role-specific tabs (see "Usage dashboard and
+  host/client roles").
 - Codex installation discovery, redacted configuration previews, named
   revisions, reactivation, native configuration restoration, external-edit
   detection and recovery of interrupted configuration writes.

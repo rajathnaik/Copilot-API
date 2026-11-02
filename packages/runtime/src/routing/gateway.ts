@@ -11,6 +11,12 @@ import {
   sourceHeaders,
   readBoundedText,
 } from '../sources/source-service'
+import { meteredFetch, type UpstreamUsage } from '../usage/usage-meter'
+import type { UsageEntry } from '../usage/usage-ledger'
+
+export interface UsageRecorder {
+  record(entry: UsageEntry): void
+}
 
 function matchesKey(received: string | undefined, key: string): boolean {
   if (!received) return false
@@ -29,6 +35,7 @@ export function createGateway(
   sources: SourceService,
   key: string,
   sharedOnly = false,
+  usage?: UsageRecorder,
 ) {
   if (!key.trim()) throw new Error('A gateway access key is required.')
   const app = new Hono()
@@ -141,6 +148,17 @@ export function createGateway(
         )
       const headersForSource = sourceHeaders(route.source, protocol, sourceKey)
       if (conversation) headersForSource.set('session_id', conversation)
+      const source = route.source
+      const report =
+        usage
+        && ((entry: UpstreamUsage) =>
+          usage.record({
+            ...entry,
+            sourceId: source.id,
+            source: source.label,
+            kind: source.kind,
+            access: sharedOnly ? 'remote' : 'local',
+          }))
       let response: Response
       try {
         const signal = AbortSignal.any([
@@ -157,8 +175,10 @@ export function createGateway(
               { ...body, model: route.model.id },
               context.req.raw.signal,
               conversation,
+              report,
             )
-          : await sources.fetcher(
+          : await meteredFetch(
+              sources.fetcher,
               `${route.source.baseUrl}/${endpoints[protocol]}`,
               {
                 method: 'POST',
@@ -166,6 +186,12 @@ export function createGateway(
                 body: JSON.stringify({ ...body, model: route.model.id }),
                 redirect: 'error',
                 signal,
+              },
+              report,
+              {
+                model: route.model.id,
+                purpose: 'request',
+                client: context.req.raw.signal,
               },
             )
       } catch (error) {
