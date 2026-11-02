@@ -12,10 +12,29 @@ import {
   readBoundedText,
 } from '../sources/source-service'
 import { meteredFetch, type UpstreamUsage } from '../usage/usage-meter'
-import type { UsageEntry } from '../usage/usage-ledger'
+import { unnamedClientLabel, type UsageEntry } from '../usage/usage-ledger'
 
 export interface UsageRecorder {
   record(entry: UsageEntry): void
+}
+
+export interface GatewayOptions {
+  // Name this machine reports to remote ModelBridge hosts.
+  clientName?: () => string | undefined
+}
+
+export const clientHeader = 'x-modelbridge-client'
+
+// Client names are self-reported labels, not identities; they are cleaned so
+// the host's dashboard and limits stay readable.
+export function cleanClientName(value: string | null | undefined): string {
+  const name = (value ?? '')
+    .replace(/[\p{Cc}\p{Cf}]/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim()
+    .slice(0, 64)
+    .trim()
+  return name || unnamedClientLabel
 }
 
 function matchesKey(received: string | undefined, key: string): boolean {
@@ -36,6 +55,7 @@ export function createGateway(
   key: string,
   sharedOnly = false,
   usage?: UsageRecorder,
+  options: GatewayOptions = {},
 ) {
   if (!key.trim()) throw new Error('A gateway access key is required.')
   const app = new Hono()
@@ -148,6 +168,12 @@ export function createGateway(
         )
       const headersForSource = sourceHeaders(route.source, protocol, sourceKey)
       if (conversation) headersForSource.set('session_id', conversation)
+      if (route.source.kind === 'remote') {
+        const name = options.clientName?.()
+        if (name) headersForSource.set(clientHeader, cleanClientName(name))
+      }
+      const client =
+        sharedOnly ? cleanClientName(context.req.header(clientHeader)) : null
       const source = route.source
       const report =
         usage
@@ -158,6 +184,7 @@ export function createGateway(
             source: source.label,
             kind: source.kind,
             access: sharedOnly ? 'remote' : 'local',
+            ...(client && { client }),
           }))
       let response: Response
       try {

@@ -11,6 +11,8 @@ import type { AppStatus, CopilotQuotaStatus } from '../src/types'
 
 const totals = (overrides: Partial<UsageTotals> = {}): UsageTotals => ({
   requests: 0,
+  prompts: 0,
+  followUps: 0,
   failed: 0,
   cancelled: 0,
   webSearches: 0,
@@ -21,6 +23,7 @@ const totals = (overrides: Partial<UsageTotals> = {}): UsageTotals => ({
   outputTokens: 0,
   reasoningTokens: 0,
   totalTokens: 0,
+  premiumRequests: 0,
   costedRequests: 0,
   costUsd: null,
   averageDurationMs: null,
@@ -44,6 +47,8 @@ test.skipIf(
     const status: AppStatus = {
       version: 'test',
       role: null,
+      clientName: 'test-host',
+      defaultClientName: 'test-host',
       localUrl: 'http://127.0.0.1:4321/v1',
       sources: [],
       models: [],
@@ -88,6 +93,9 @@ test.skipIf(
     })
     const summaryTotals = totals({
       requests: 3,
+      prompts: 2,
+      followUps: 1,
+      premiumRequests: 3,
       failed: 1,
       webSearches: 1,
       inputTokens: 84_000,
@@ -123,8 +131,40 @@ test.skipIf(
           ...(index % 2 ? summaryTotals : totals()),
         }
       }),
+      clients: [
+        {
+          ...totals({ requests: 1, totalTokens: 43_200 }),
+          client: 'laptop',
+          lastSeen: now,
+        },
+      ],
+      series: {
+        models: [
+          {
+            name: 'gpt-5.4',
+            tokens: [0, 86_400, 0, 86_400, 0, 86_400, 0].slice(
+              range === 'today' ? 6 : 0,
+            ),
+            requests: [0, 3, 0, 3, 0, 3, 0].slice(range === 'today' ? 6 : 0),
+            premium: [0, 3, 0, 3, 0, 3, 0].slice(range === 'today' ? 6 : 0),
+          },
+        ],
+        clients: [
+          {
+            name: 'laptop',
+            tokens: [0, 43_200, 0, 0, 0, 0, 0].slice(range === 'today' ? 6 : 0),
+            requests: [0, 1, 0, 0, 0, 0, 0].slice(range === 'today' ? 6 : 0),
+            premium: [0, 1, 0, 0, 0, 0, 0].slice(range === 'today' ? 6 : 0),
+          },
+        ],
+      },
       recent: [
-        record({ access: 'remote', purpose: 'web-search' }),
+        record({
+          access: 'remote',
+          purpose: 'web-search',
+          client: 'laptop',
+        }),
+        record({ initiator: 'agent', premium: 0 }),
         record({
           outcome: 'failed',
           status: 500,
@@ -132,7 +172,7 @@ test.skipIf(
           outputTokens: 0,
           nanoAiu: null,
         }),
-        record({}),
+        record({ initiator: 'user', premium: 1 }),
       ],
     })
     const empty = (range: string): UsageSummary => ({
@@ -141,6 +181,8 @@ test.skipIf(
       models: [],
       daily: [],
       recent: [],
+      clients: [],
+      series: { models: [], clients: [] },
       access: { local: totals(), remote: totals() },
     })
     const quotas: CopilotQuotaStatus[] = [
@@ -199,6 +241,8 @@ test.skipIf(
       )}
       let status = initial
       let cleared = false
+      let limits = {defaultMonthly:null,models:{},clients:{}}
+      const savedLimits = []
       const ranges = [], roles = []
       let quotaRequests = 0, refreshes = 0
       const success = value => ({ ok: true, value })
@@ -210,7 +254,16 @@ test.skipIf(
       })
       ipcMain.handle('modelbridge:usage', (_event, range) => {
         ranges.push(range)
-        return success({ summary: (cleared ? empties : summaries)[range], error: null })
+        const used = cleared ? 0 : 3
+        return success({ summary: (cleared ? empties : summaries)[range], error: null, limits,
+          clients: [{client:'laptop',requests:used,premium:used,lastSeen:Date.now(),limit:limits.defaultMonthly,
+            state:limits.defaultMonthly === null ? 'none' : used > limits.defaultMonthly ? 'over' : 'ok',
+            models:[{model:'gpt-5.4',premium:used,limit:null,state:'none'}]}] })
+      })
+      ipcMain.handle('modelbridge:premium-limits', (_event, next) => {
+        limits = next
+        savedLimits.push(next)
+        return success(limits)
       })
       ipcMain.handle('modelbridge:usage-clear', () => { cleared = true; return success(empties.today) })
       ipcMain.handle('modelbridge:copilot-quota', (_event, refresh) => {
@@ -256,23 +309,41 @@ test.skipIf(
         const hostTabs = JSON.stringify(await tabs())
         if (hostTabs !== JSON.stringify(['Dashboard','Host setup','Models','Codex','Settings'])) throw new Error('Host tabs: ' + hostTabs)
 
-        await wait('document.querySelectorAll("#panel-dashboard .metric").length === 5')
+        await wait('document.querySelectorAll("#panel-dashboard .metric").length === 6')
         const metrics = await text('#panel-dashboard .metrics')
-        for (const expected of ['REQUESTS', '3', '1 failed', '1 web search', '84K', '71% from cache', '$0.0800', '2 of 3 priced', '1.8 s'])
+        for (const expected of ['REQUESTS', '3', '1 failed', '1 web search', 'PREMIUM REQUESTS', '2 prompts', '1 follow-up', '84K', '71% from cache', '$0.0800', '2 of 3 priced', '1.8 s'])
           if (!metrics.toUpperCase().includes(expected.toUpperCase())) throw new Error('Metric missing ' + expected + ': ' + metrics)
         await wait('(document.querySelector("#panel-dashboard .quota")?.innerText ?? "").includes("120 of 300 left")')
         const quota = await text('#panel-dashboard .quota')
         for (const expected of ['individual_pro', 'octocat', 'Unlimited', 'Resets'])
           if (!quota.includes(expected)) throw new Error('Quota missing ' + expected + ': ' + quota)
-        if (await read('document.querySelectorAll("#panel-dashboard .chart .bar").length') !== 7) throw new Error('Expected seven daily bars')
+        await wait('document.querySelector("#panel-dashboard .chart svg")?.dataset.days === "7"')
+        if (await read('document.querySelectorAll("#panel-dashboard .chart .point").length') !== 7) throw new Error('Expected seven daily points')
+        await click('By model')
+        await wait('(document.querySelector("#panel-dashboard .legend")?.innerText ?? "").includes("gpt-5.4")')
+        await click('By client')
+        await wait('(document.querySelector("#panel-dashboard .legend")?.innerText ?? "").includes("laptop")')
+        await click('Total')
         const recent = await text('#panel-dashboard section:last-of-type')
-        for (const expected of ['Web search', 'remote', 'Failed (500)'])
+        for (const expected of ['Web search', 'remote', 'laptop', 'Prompt', 'Follow-up', '1 premium', 'Failed (500)'])
           if (!recent.includes(expected)) throw new Error('Recent missing ' + expected + ': ' + recent)
         if (!(await text('#panel-dashboard')).includes('Remote clients')) throw new Error('Access split missing')
+        const clientsText = await text('#panel-dashboard .clients')
+        for (const expected of ['laptop', 'No limit'])
+          if (!clientsText.includes(expected)) throw new Error('Clients missing ' + expected + ': ' + clientsText)
+        await read('document.querySelector("#panel-dashboard .limits-editor").open = true')
+        await read('(() => { const input = document.querySelector("#panel-dashboard input[name=defaultMonthly]"); const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set; set.call(input, "2"); input.dispatchEvent(new Event("input", {bubbles:true})) })()')
+        await click('Save default')
+        await wait('(document.querySelector("#panel-dashboard .clients")?.innerText ?? "").includes("Over limit")')
+        if (JSON.stringify(savedLimits) !== JSON.stringify([{defaultMonthly:2,models:{},clients:{}}])) throw new Error('Limits: ' + JSON.stringify(savedLimits))
         await screenshot('dashboard-host')
+        await read('document.querySelector("#panel-dashboard .usage-chart").scrollIntoView({block:"start"})')
+        await screenshot('dashboard-chart')
+        await read('document.querySelector("#panel-dashboard .clients").scrollIntoView({block:"start"})')
+        await screenshot('dashboard-clients')
 
         await click('Today')
-        await wait('document.querySelectorAll("#panel-dashboard .chart .bar").length === 1')
+        await wait('document.querySelector("#panel-dashboard .chart svg")?.dataset.days === "1"')
         if (!(await read('JSON.stringify(' + button('Today') + '.getAttribute("aria-pressed"))')).includes('true')) throw new Error('Range not pressed')
         await click('Refresh quota')
         await wait('(' + button('Refresh quota') + ')?.disabled === false')

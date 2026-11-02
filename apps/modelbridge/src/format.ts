@@ -56,5 +56,8 @@ export function formatDuration(ms: number | null) {
     : `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(ms / 1000)} s`
 }
 
+const premium = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 })
+export const formatPremium = (value: number) => premium.format(value)
+
 export const plural = (count: number, word: string) =>
   `${integer.format(count)} ${word}${count === 1 ? '' : 's'}`

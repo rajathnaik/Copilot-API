@@ -219,6 +219,8 @@ async function harness(
         })
       if (url.endsWith('/models'))
         return Response.json(options.catalog ?? fullCatalog)
+      if (url === 'https://api.github.com/user')
+        return new Response('not found', { status: 404 })
       const call = {
         url,
         headers: new Headers(init?.headers),

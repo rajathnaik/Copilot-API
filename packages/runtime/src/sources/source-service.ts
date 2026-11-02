@@ -293,13 +293,42 @@ export class SourceService {
     shared: boolean,
     signal?: AbortSignal,
   ): Promise<Source> {
-    const catalog = await this.copilot.discover(githubToken, signal)
+    const [catalog, account] = await Promise.all([
+      this.copilot.discover(githubToken, signal),
+      this.copilot.account(githubToken, signal),
+    ])
     signal?.throwIfAborted()
+    const existing =
+      account ?
+        this.sources.find(
+          (source) => source.kind === 'copilot' && source.account === account,
+        )
+      : undefined
+    if (existing) {
+      // Signing in again with the same GitHub account renews the existing
+      // source, keeping its sharing choices instead of adding a duplicate.
+      const updated = sourceSchema.parse({ ...existing, ...catalog })
+      const previous = this.credentials.get(existing.id)
+      await this.credentials.set(existing.id, githubToken)
+      const next = this.sources.map((source) =>
+        source.id === existing.id ? updated : source,
+      )
+      try {
+        this.persist(next)
+      } catch (error) {
+        await this.credentials.set(existing.id, previous)
+        throw error
+      }
+      this.sources = next
+      this.copilot.forget(existing.id)
+      return structuredClone(updated)
+    }
     const source = sourceSchema.parse({
       id: randomUUID(),
       kind: 'copilot',
       label,
       shared,
+      ...(account && { account }),
       ...catalog,
     })
     await this.credentials.set(source.id, githubToken)
@@ -311,6 +340,59 @@ export class SourceService {
     }
     this.sources.push(source)
     return structuredClone(source)
+  }
+
+  // Labels saved Copilot sources with their GitHub account and folds sources
+  // for the same account into one, keeping the shared (or oldest) source and
+  // its sharing choices. Sources whose account cannot be read are left alone.
+  async mergeCopilotAccounts(): Promise<number> {
+    const accounts = new Map<string, string>()
+    for (const source of this.sources) {
+      if (source.kind !== 'copilot') continue
+      let account: string | null | undefined = source.account
+      if (!account) {
+        let token: string
+        try {
+          token = this.credentials.get(source.id)
+        } catch {
+          continue
+        }
+        account = await this.copilot.account(token)
+      }
+      if (account) accounts.set(source.id, account)
+    }
+    const keepers = new Map<string, Source>()
+    for (const source of this.sources) {
+      const account = accounts.get(source.id)
+      if (!account) continue
+      const keeper = keepers.get(account)
+      if (!keeper || (source.shared && !keeper.shared))
+        keepers.set(account, source)
+    }
+    const removed = this.sources.filter((source) => {
+      const account = accounts.get(source.id)
+      return account !== undefined && keepers.get(account)?.id !== source.id
+    })
+    const next = this.sources
+      .filter((source) => !removed.includes(source))
+      .map((source) => {
+        const account = accounts.get(source.id)
+        return account && source.account !== account ?
+            { ...source, account }
+          : source
+      })
+    if (
+      !removed.length
+      && next.every((source, index) => source === this.sources[index])
+    )
+      return 0
+    this.persist(next)
+    this.sources = next
+    for (const source of removed) {
+      this.copilot.forget(source.id)
+      await this.credentials.remove(source.id)
+    }
+    return removed.length
   }
 
   async refresh(id: string): Promise<void> {

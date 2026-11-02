@@ -16,6 +16,7 @@ export interface MeteredUsage {
 
 export type UsageOutcome = 'completed' | 'failed' | 'cancelled'
 export type UpstreamPurpose = 'request' | 'continuation' | 'web-search'
+export type UsageInitiator = 'user' | 'agent'
 
 export interface UpstreamUsage extends UsageTokens {
   model: string
@@ -24,6 +25,12 @@ export interface UpstreamUsage extends UsageTokens {
   outcome: UsageOutcome
   durationMs: number
   nanoAiu: number | null
+  // Who started the request: the person typing a prompt, or the agent
+  // continuing after tool output. Null when the source does not say.
+  initiator: UsageInitiator | null
+  // Estimated Copilot premium requests; null when the model's multiplier is
+  // unknown or the source is not Copilot.
+  premium: number | null
 }
 
 export type UsageReporter = (usage: UpstreamUsage) => void
@@ -244,7 +251,13 @@ export async function meteredFetch(
   url: string,
   init: RequestInit,
   report: UsageReporter | undefined,
-  request: { model: string; purpose: UpstreamPurpose; client: AbortSignal },
+  request: {
+    model: string
+    purpose: UpstreamPurpose
+    client: AbortSignal
+    initiator?: UsageInitiator | null
+    premium?: number | null
+  },
   now: () => number = Date.now,
 ): Promise<Response> {
   if (!report) return fetcher(url, init)
@@ -265,6 +278,12 @@ export async function meteredFetch(
     durationMs: Math.max(0, now() - started),
     ...usage.tokens,
     nanoAiu: usage.nanoAiu,
+    initiator: request.initiator ?? null,
+    // Copilot bills only requests it accepted.
+    premium:
+      request.premium === undefined || request.premium === null ? null
+      : status >= 200 && status < 300 ? request.premium
+      : 0,
   })
   let response: Response
   try {

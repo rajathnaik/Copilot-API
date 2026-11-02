@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 
 import { compactTextOnlyGuard, requestContext } from './context'
+import { toMessagesInputSchema } from './tool-schema'
 import type {
   AnthropicAssistantContentBlock,
   AnthropicAssistantMessage,
@@ -555,7 +556,7 @@ function registerMessagesTool(
     input_schema:
       registration.kind === 'custom' ?
         CUSTOM_TOOL_INPUT_SCHEMA
-      : (registration.parameters ?? { type: 'object', properties: {} }),
+      : toMessagesInputSchema(registration.parameters),
     ...(registration.kind === 'custom' ? { strict: true } : {}),
   })
   return descriptor

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { premiumLimitsSchema } from './usage/premium-limits'
 
 export const protocolSchema = z.enum([
   'responses',
@@ -52,6 +53,8 @@ export const modelSchema = z
     name: z.string().min(1),
     protocol: protocolSchema,
     ...modelCapabilitiesSchema.shape,
+    // Copilot premium-request multiplier; kept out of advertised capabilities.
+    premiumMultiplier: z.number().nonnegative().max(1000).optional(),
   })
   .strict()
 
@@ -71,6 +74,7 @@ export const sourceSchema = z
     shared: z.boolean(),
     sharedModelIds: sharedModelIdsSchema.optional(),
     webSearchModelId: z.string().trim().min(1).max(512).optional(),
+    account: z.string().trim().min(1).max(100).optional(),
     models: z.array(modelSchema).min(1),
   })
   .strict()
@@ -162,6 +166,9 @@ export const stateSchema = z
     version: z.literal(1),
     tunnelId: z.string().regex(/^modelbridge-[a-f0-9]{32}$/u),
     role: roleSchema.optional(),
+    // Name this machine reports to remote hosts; defaults to the hostname.
+    clientName: z.string().trim().min(1).max(64).optional(),
+    premiumLimits: premiumLimitsSchema.optional(),
     sources: z.array(sourceSchema),
   })
   .strict()

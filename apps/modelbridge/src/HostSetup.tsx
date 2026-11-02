@@ -1,7 +1,8 @@
 import type { AppStatus } from './types'
-import { failure } from './format'
+import { failure, plural } from './format'
 import { KeyReveal, type Revealed } from './KeyReveal'
 import { sharedModelIds, type Run } from './shared'
+import { SourceSharing } from './SourceSharing'
 
 const label = 'My Copilot subscription'
 
@@ -132,8 +133,10 @@ export function HostSetup({
           separately installed Dev Tunnels CLI.
         </p>
         <div className="actions">
-          <span>{shared.size} models available to remote clients</span>
-          <button onClick={onReviewModels}>Review shared models</button>
+          <span>
+            {plural(shared.size, 'model')} available to remote clients
+          </span>
+          <button onClick={onReviewModels}>Review all sources</button>
         </div>
         <p role="status">
           {status.tunnelSigningIn ?
@@ -263,9 +266,53 @@ export function HostSetup({
           </div>
         )}
       </section>
+      {copilotSources.length > 0 && (
+        <section className="model-access">
+          <h2>3. Choose the models clients can use</h2>
+          <p className="muted">
+            Client machines can discover and call only the models allowed here,
+            even if they know another model&apos;s ID. Choose &quot;Only
+            selected models&quot; to pick them individually.
+          </p>
+          {copilotSources.map((source) => (
+            <div className="source" key={source.id}>
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  disabled={busy}
+                  checked={source.shared}
+                  onChange={(event) =>
+                    void run(() =>
+                      window.modelbridge.shareSource(
+                        source.id,
+                        event.target.checked,
+                      ),
+                    )
+                  }
+                />
+                Share {source.label} with client machines
+              </label>
+              <SourceSharing
+                source={source}
+                busy={busy}
+                open
+                onChange={(modelIds) =>
+                  void run(() =>
+                    window.modelbridge.shareSource(
+                      source.id,
+                      source.shared,
+                      modelIds,
+                    ),
+                  )
+                }
+              />
+            </div>
+          ))}
+        </section>
+      )}
       {status.sharing && (
         <section>
-          <h2>3. Give these to your client machine</h2>
+          <h2>4. Give these to your client machine</h2>
           <dl className="pairs">
             <dt>Host URL</dt>
             <dd>

@@ -18,7 +18,7 @@ export function WebSearchModel({
   const current = webSearchModel(source)
   return (
     <label className="web-search-model">
-      Web search model for {source.label}
+      Web search helper for Claude and other non-GPT models ({source.label})
       <select
         disabled={busy || !candidates.length}
         value={source.webSearchModelId ?? ''}
@@ -35,7 +35,7 @@ export function WebSearchModel({
       </select>
       <span className="muted">
         {current ?
-          `Claude and other non-GPT models use ${current.name} to run web searches on this host, even if it is not shared with clients.`
+          `This is not a default model. When Claude or another non-GPT model asks for a web search, ModelBridge runs the search with ${current.name} and hands the results back. It is used even if it is not shared with clients.`
         : 'Web search is unavailable for non-GPT models until a GPT Responses model is discovered.'
         }
       </span>

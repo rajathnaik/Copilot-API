@@ -654,6 +654,7 @@ test('Copilot records each upstream request, including web searches and continua
               name: 'Claude',
               supported_endpoints: ['/v1/messages'],
               capabilities: { supports: { tool_calls: true } },
+              billing: { is_premium: true, multiplier: 3 },
             },
           ],
         }),
@@ -681,6 +682,8 @@ test('Copilot records each upstream request, including web searches and continua
           },
         ]),
       )
+    if (url === 'https://api.github.com/user')
+      return Promise.resolve(new Response('not found', { status: 404 }))
     const next = rounds.shift()
     if (!next) throw new Error('Unexpected upstream round.')
     return Promise.resolve(next())
@@ -713,17 +716,23 @@ test('Copilot records each upstream request, including web searches and continua
     outcome: 'completed',
     inputTokens: 10,
     outputTokens: 5,
+    initiator: 'user',
+    premium: 3,
   })
   expect(byPurpose['web-search']).toMatchObject({
     model: 'gpt-5.4',
     inputTokens: 50,
     outputTokens: 20,
     nanoAiu: 1_000_000_000,
+    initiator: 'agent',
+    premium: 0,
   })
   expect(byPurpose.continuation).toMatchObject({
     model: 'claude',
     inputTokens: 30,
     outputTokens: 7,
+    initiator: 'agent',
+    premium: 0,
   })
 })
 

@@ -10,11 +10,18 @@ import type {
   CodexPreview,
 } from '@modelbridge/runtime/codex'
 import type { UsageRange, UsageSummary } from '@modelbridge/runtime/usage'
+import type {
+  ClientLimitStatus,
+  PremiumLimits,
+} from '@modelbridge/runtime/limits'
 import type { CodexInstallation } from '../electron/codex-discovery'
 
 export interface AppStatus {
   version: string
   role: Role | null
+  // Name reported to remote hosts; defaults to this computer's name.
+  clientName: string
+  defaultClientName: string
   localUrl: string
   sources: Source[]
   models: AvailableModel[]
@@ -42,12 +49,17 @@ export interface CopilotQuotaStatus {
 export interface UsageReport {
   summary: UsageSummary
   error: string | null
+  limits: PremiumLimits
+  // This month's premium use and limit state for each remote client.
+  clients: ClientLimitStatus[]
 }
 
 export interface ModelBridgeAPI {
   status(): Promise<Result<AppStatus>>
   setRole(role: Role): Promise<Result<AppStatus>>
+  setClientName(name: string | null): Promise<Result<AppStatus>>
   usage(range: UsageRange): Promise<Result<UsageReport>>
+  setPremiumLimits(limits: PremiumLimits): Promise<Result<PremiumLimits>>
   clearUsage(): Promise<Result<UsageSummary>>
   copilotQuota(refresh: boolean): Promise<Result<CopilotQuotaStatus[]>>
   addSource(input: SourceInput): Promise<Result<AppStatus>>

@@ -1,6 +1,6 @@
 {
   "name": "@modelbridge/runtime",
-  "version": "0.1.0-dev.6",
+  "version": "0.1.0-dev.7",
   "private": true,
   "type": "module",
   "exports": {
@@ -10,7 +10,8 @@
     "./dev-tunnels": "./src/remote-access/dev-tunnels.ts",
     "./copilot": "./src/providers/copilot.ts",
     "./codex": "./src/harnesses/codex-configurations.ts",
-    "./usage": "./src/usage/usage-ledger.ts"
+    "./usage": "./src/usage/usage-ledger.ts",
+    "./limits": "./src/usage/premium-limits.ts"
   },
   "scripts": {
     "lint": "eslint --cache .",

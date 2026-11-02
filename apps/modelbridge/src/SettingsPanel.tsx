@@ -5,6 +5,59 @@ import { failure, plural } from './format'
 import { KeyReveal, type Revealed } from './KeyReveal'
 import type { Run } from './shared'
 
+function ClientName({
+  status,
+  busy,
+  run,
+}: {
+  status: AppStatus
+  busy: boolean
+  run: Run
+}) {
+  const [name, setName] = useState(status.clientName)
+  const trimmed = name.trim()
+  return (
+    <section>
+      <h2>Client machine name</h2>
+      <p className="muted">
+        Hosts show this name on their dashboard so they can see each
+        machine&apos;s usage. It is not secret and is not used for sign-in.
+      </p>
+      <form
+        className="inline-form"
+        onSubmit={(event) => {
+          event.preventDefault()
+          void run(() =>
+            window.modelbridge.setClientName(
+              trimmed && trimmed !== status.defaultClientName ? trimmed : null,
+            ),
+          )
+        }}
+      >
+        <label>
+          Name
+          <input
+            name="clientName"
+            maxLength={64}
+            autoComplete="off"
+            placeholder={status.defaultClientName}
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
+        </label>
+        <button
+          disabled={
+            busy || (trimmed || status.defaultClientName) === status.clientName
+          }
+          type="submit"
+        >
+          Save name
+        </button>
+      </form>
+    </section>
+  )
+}
+
 export function SettingsPanel({
   status,
   role,
@@ -55,6 +108,9 @@ export function SettingsPanel({
         </div>
         <KeyReveal revealed={revealed} remote={false} onHide={onHide} />
       </section>
+      {role === 'client' && (
+        <ClientName status={status} busy={busy} run={run} />
+      )}
       <section>
         <h2>Role</h2>
         <p className="muted">

@@ -4,7 +4,11 @@ import type { ModelBridgeAPI } from '../src/types'
 const api: ModelBridgeAPI = {
   status: () => ipcRenderer.invoke('modelbridge:status'),
   setRole: (role) => ipcRenderer.invoke('modelbridge:set-role', role),
+  setClientName: (name) =>
+    ipcRenderer.invoke('modelbridge:set-client-name', name),
   usage: (range) => ipcRenderer.invoke('modelbridge:usage', range),
+  setPremiumLimits: (limits) =>
+    ipcRenderer.invoke('modelbridge:premium-limits', limits),
   clearUsage: () => ipcRenderer.invoke('modelbridge:usage-clear'),
   copilotQuota: (refresh) =>
     ipcRenderer.invoke('modelbridge:copilot-quota', refresh),

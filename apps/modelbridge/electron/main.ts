@@ -9,6 +9,7 @@ import {
   shell,
 } from 'electron'
 import path from 'node:path'
+import os from 'node:os'
 import { execFile } from 'node:child_process'
 import fs from 'node:fs'
 import { promisify } from 'node:util'
@@ -26,6 +27,11 @@ import { CodexConfigurations } from '@modelbridge/runtime/codex'
 import { DevTunnels } from '@modelbridge/runtime/dev-tunnels'
 import { CredentialStore } from '@modelbridge/runtime/credentials'
 import { UsageLedger, usageRanges } from '@modelbridge/runtime/usage'
+import {
+  noPremiumLimits,
+  premiumLimitStatus,
+  premiumLimitsSchema,
+} from '@modelbridge/runtime/limits'
 import type { AppStatus, CopilotQuotaStatus, Result } from '../src/types'
 import { AppState, credentialsFile } from './state'
 import { TunnelProcess } from './devtunnel-process'
@@ -80,7 +86,9 @@ const channels = [
   'modelbridge:sharing-start',
   'modelbridge:sharing-stop',
   'modelbridge:set-role',
+  'modelbridge:set-client-name',
   'modelbridge:usage',
+  'modelbridge:premium-limits',
   'modelbridge:usage-clear',
   'modelbridge:copilot-quota',
 ] as const
@@ -158,6 +166,25 @@ async function initialize(): Promise<void> {
   )
   usageLedger = usage
   log('usage history loaded')
+  void sources
+    .mergeCopilotAccounts()
+    .then(async (merged) => {
+      if (merged) log('merged duplicate Copilot sources', `${merged} removed`)
+      // Sources saved before dev.7 lack premium multipliers.
+      for (const source of sources.list())
+        if (
+          source.kind === 'copilot'
+          && source.models.every(
+            (model) => model.premiumMultiplier === undefined,
+          )
+        )
+          await sources.refresh(source.id).catch((error: unknown) => {
+            log('Copilot catalog refresh failed', describeError(error))
+          })
+    })
+    .catch((error: unknown) => {
+      log('Copilot account check failed', describeError(error))
+    })
   const requestedPort = Number(process.env.MODELBRIDGE_PORT ?? 4321)
   if (
     !Number.isInteger(requestedPort)
@@ -165,8 +192,13 @@ async function initialize(): Promise<void> {
     || requestedPort > 65535
   )
     throw new Error('MODELBRIDGE_PORT must be a valid local port.')
+  const defaultClientName =
+    os.hostname().trim().slice(0, 64) || 'ModelBridge client'
+  const clientName = () => state.value.clientName ?? defaultClientName
   const local = await listen(
-    createGateway(sources, state.vault.get('local-access'), false, usage),
+    createGateway(sources, state.vault.get('local-access'), false, usage, {
+      clientName,
+    }),
     requestedPort,
   )
   localServer = local.server
@@ -216,6 +248,8 @@ async function initialize(): Promise<void> {
   const snapshot = (): AppStatus => ({
     version: app.getVersion(),
     role: state.value.role ?? null,
+    clientName: clientName(),
+    defaultClientName,
     localUrl: `http://127.0.0.1:${local.port}/v1`,
     sources: sources.list(),
     models: sources.models(),
@@ -437,10 +471,28 @@ async function initialize(): Promise<void> {
     state.save({ ...state.value, role: roleSchema.parse(input) })
     return snapshot()
   })
+  handle('modelbridge:set-client-name', (input) => {
+    const name = z.string().trim().max(64).nullable().parse(input)
+    const next = { ...state.value }
+    if (name) next.clientName = name
+    else delete next.clientName
+    state.save(next)
+    return snapshot()
+  })
+  const premiumLimits = () => state.value.premiumLimits ?? noPremiumLimits
   handle('modelbridge:usage', (input) => ({
     summary: usage.summary(z.enum(usageRanges).parse(input)),
     error: usage.lastError,
+    limits: premiumLimits(),
+    clients: premiumLimitStatus(usage.month(), premiumLimits()),
   }))
+  handle('modelbridge:premium-limits', (input) => {
+    state.save({
+      ...state.value,
+      premiumLimits: premiumLimitsSchema.parse(input),
+    })
+    return premiumLimits()
+  })
   handle('modelbridge:usage-clear', async () => {
     await usage.clear()
     return usage.summary('today')

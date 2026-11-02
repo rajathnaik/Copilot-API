@@ -7,24 +7,62 @@ The new desktop structure retains the original Copilot API's direct
 authentication, token exchange, forwarding and protocol translations.
 **There is no Copilot SDK integration.**
 
-**Development pre-release: 0.1.0-dev.6.**
+**Development pre-release: 0.1.0-dev.7.**
 
 Download the unsigned Windows installer from the
-[ModelBridge development release](https://github.com/rajathnaik/Copilot-API/releases/tag/modelbridge-v0.1.0-dev.6):
+[ModelBridge development release](https://github.com/rajathnaik/Copilot-API/releases/tag/modelbridge-v0.1.0-dev.7):
 
-- [Windows installer](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.0-dev.6/ModelBridge.Setup.0.1.0-dev.6.exe)
-- [SHA256 checksum](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.0-dev.6/ModelBridge.Setup.0.1.0-dev.6.exe.sha256)
+- [Windows installer](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.0-dev.7/ModelBridge.Setup.0.1.0-dev.7.exe)
+- [SHA256 checksum](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.0-dev.7/ModelBridge.Setup.0.1.0-dev.7.exe.sha256)
 
-Compare `Get-FileHash .\ModelBridge.Setup.0.1.0-dev.6.exe -Algorithm SHA256`
+Compare `Get-FileHash .\ModelBridge.Setup.0.1.0-dev.7.exe -Algorithm SHA256`
 with the downloaded checksum before running the installer. Windows may warn
 about an unknown publisher because this development build is not code-signed.
 Use the same installer on the host and client machines.
 
 To build the unsigned Windows development installer locally, run
 `bun run --cwd apps/modelbridge package:win`. Its output is
-`apps/modelbridge/release/ModelBridge.Setup.0.1.0-dev.6.exe`. This is a test
+`apps/modelbridge/release/ModelBridge.Setup.0.1.0-dev.7.exe`. This is a test
 candidate, not a verified production release; installation/upgrade/uninstall
 and the real two-machine acceptance test are still pending.
+
+## What's new in dev.7
+
+These changes ship in the dev.7 installer linked above.
+
+- **Claude tool-schema fix.** Anthropic models rejected Codex tools whose input
+  schema uses `oneOf`, `anyOf` or `allOf` at the top level
+  (`input_schema does not support oneOf, allOf, or anyOf at the top level`).
+  ModelBridge now flattens such schemas into a single object schema (merging
+  properties and noting the alternatives in the description) before forwarding
+  them to Messages and chat-only models.
+- **One source per Copilot account.** Signing in to Copilot again with the same
+  GitHub account now renews the existing source instead of adding a second one,
+  keeping its label, sharing and web-search choices. On startup, existing
+  duplicate sources for the same account are merged automatically, so the model
+  list no longer shows every model twice.
+- **Prompts and follow-ups.** Each request is tagged as a **Prompt** (you sent
+  it) or a **Follow-up** (the agent continued after tool output), together with
+  the Copilot premium requests it used, based on each model's billing
+  multiplier. Only prompts use premium requests; follow-ups and web searches do
+  not. The dashboard shows both counts, which makes it possible to tell real
+  duplicate requests from normal agent continuations.
+- **Named client machines.** Each client reports a name (by default its computer
+  name; change it under **Settings → Client machine name**). The name is
+  informational only; it is not secret and grants no access.
+- **Clients and premium-request limits (hosts).** **Client machines this
+  month** lists each client's last activity, requests and premium requests.
+  Under **Premium request limits** you can set a default monthly limit per
+  client, per-client overrides (or exempt a client) and per-model limits. Limits
+  only warn: clients near (80%) or over a limit are flagged, but requests are
+  never blocked.
+- **Tokens-per-day line chart** with token and date axes, switchable between
+  **Total**, **By model** and, on hosts, **By client**.
+- **Host setup** has a dedicated **Choose the models clients can use** step with
+  the full model-access controls.
+- The **Web search helper** (formerly Web search model) is now labelled as what
+  it is: the GPT model that runs web searches for Claude and other non-GPT
+  models. It is not a default model.
 
 ## What's new in dev.6
 
@@ -76,7 +114,7 @@ Web search now works for every Copilot model, not only GPT models:
   `web_search_call` rather than ending the turn; a failure while continuing
   after a search fails the response explicitly. The reported token usage is the
   final request's, which matches the conversation's real context size.
-- **Models** shows a **Web search model** for each Copilot source.
+- **Models** shows a **Web search helper** for each Copilot source.
   **Auto** uses the newest full-size GPT model available (mini, nano and codex
   variants only when nothing else exists); you can pin a specific model instead.
   Searches run on the host, so the search model does not need to be shared with

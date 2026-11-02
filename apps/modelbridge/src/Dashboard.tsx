@@ -8,6 +8,7 @@ import type {
   UsageTotals,
 } from '@modelbridge/runtime/usage'
 import type { CopilotQuotaStatus, UsageReport } from './types'
+import { ClientUsage } from './ClientUsage'
 import {
   failure,
   formatDateTime,
@@ -15,11 +16,13 @@ import {
   formatDuration,
   formatInteger,
   formatPercent,
+  formatPremium,
   formatTime,
   formatTokens,
   formatUsd,
   plural,
 } from './format'
+import { UsageChart } from './UsageChart'
 
 const ranges: Array<{ id: UsageRange; label: string }> = [
   { id: 'today', label: 'Today' },
@@ -32,6 +35,14 @@ const purposes: Record<UsageRecord['purpose'], string> = {
   request: 'Request',
   continuation: 'Tool round',
   'web-search': 'Web search',
+}
+
+// Prompts are billed as premium requests; follow-ups the agent sends after
+// tool output are not.
+function requestType(record: UsageRecord) {
+  if (record.purpose !== 'request' || !record.initiator)
+    return purposes[record.purpose]
+  return record.initiator === 'user' ? 'Prompt' : 'Follow-up'
 }
 
 const cost = (totals: UsageTotals) =>
@@ -163,47 +174,6 @@ function QuotaCard({
   )
 }
 
-function DailyChart({ summary }: { summary: UsageSummary }) {
-  const peak = Math.max(1, ...summary.daily.map((day) => day.totalTokens))
-  const busiest = summary.daily.reduce(
-    (best, day) => (day.totalTokens > best.totalTokens ? day : best),
-    summary.daily[0] ?? { date: '', totalTokens: 0 },
-  )
-  return (
-    <section>
-      <h2>Tokens per day</h2>
-      <div
-        className="chart"
-        role="img"
-        aria-label={
-          busiest.totalTokens ?
-            `Daily tokens. Busiest day ${formatDay(busiest.date)} with ${formatTokens(busiest.totalTokens)} tokens.`
-          : 'No tokens recorded in this range.'
-        }
-      >
-        {summary.daily.map((day) => (
-          <div
-            key={day.date}
-            className="bar"
-            title={`${formatDay(day.date)}: ${formatInteger(day.totalTokens)} tokens, ${plural(day.requests, 'request')}`}
-          >
-            <span
-              style={{ height: `${(day.totalTokens / peak) * 100}%` }}
-              className={day.failed ? 'has-failures' : undefined}
-            />
-          </div>
-        ))}
-      </div>
-      <div className="chart-axis muted">
-        <span>{formatDay(summary.daily[0]?.date ?? '')}</span>
-        <span>
-          {formatDay(summary.daily[summary.daily.length - 1]?.date ?? '')}
-        </span>
-      </div>
-    </section>
-  )
-}
-
 function ModelTable({ summary }: { summary: UsageSummary }) {
   return (
     <section>
@@ -299,10 +269,20 @@ function RecentTable({ summary }: { summary: UsageSummary }) {
                   <span className="muted">
                     {' '}
                     · {record.source}
-                    {record.access === 'remote' ? ' · remote' : ''}
+                    {record.access === 'remote' ?
+                      ` · remote${record.client ? ` · ${record.client}` : ''}`
+                    : ''}
                   </span>
                 </td>
-                <td>{purposes[record.purpose]}</td>
+                <td>
+                  {requestType(record)}
+                  {!!record.premium && (
+                    <span className="muted">
+                      {' '}
+                      · {formatPremium(record.premium)} premium
+                    </span>
+                  )}
+                </td>
                 <td className={`outcome ${record.outcome}`}>
                   {record.outcome === 'completed' ?
                     'Completed'
@@ -441,6 +421,11 @@ export function Dashboard({
               detail={`${formatInteger(totals.failed)} failed · ${plural(totals.webSearches, 'web search')}`}
             />
             <Metric
+              label="Premium requests"
+              value={formatPremium(totals.premiumRequests)}
+              detail={`${plural(totals.prompts, 'prompt')} · ${plural(totals.followUps, 'follow-up')}`}
+            />
+            <Metric
               label="Input tokens"
               value={formatTokens(totals.inputTokens)}
               detail={`${formatPercent(cachedShare(totals))} from cache`}
@@ -488,12 +473,22 @@ export function Dashboard({
               </button>
             </section>
           : <>
-              <DailyChart summary={summary} />
+              <UsageChart summary={summary} host={role === 'host'} />
               <ModelTable summary={summary} />
               {role === 'host' && <AccessSplit summary={summary} />}
-              <RecentTable summary={summary} />
             </>
           }
+          {role === 'host' && report && (
+            <ClientUsage
+              clients={report.clients}
+              limits={report.limits}
+              models={[...new Set(summary.models.map((row) => row.model))]}
+              onLimitsSaved={(limits) =>
+                setReport((current) => current && { ...current, limits })
+              }
+            />
+          )}
+          {totals.requests > 0 && <RecentTable summary={summary} />}
           <p className="muted footnote">
             Estimated cost uses the AI units Copilot reports with each response,
             converted at 100 AI units per US dollar (the original gateway&apos;s

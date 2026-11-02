@@ -4,10 +4,12 @@ import type { Source } from '@modelbridge/runtime/contracts'
 export function SourceSharing({
   source,
   busy,
+  open = false,
   onChange,
 }: {
   source: Source
   busy: boolean
+  open?: boolean
   onChange: (modelIds: string[] | null) => void
 }) {
   const [filter, setFilter] = useState('')
@@ -22,7 +24,7 @@ export function SourceSharing({
     `${model.name} ${model.id}`.toLowerCase().includes(filter.toLowerCase()),
   )
   return (
-    <details className="model-sharing">
+    <details className="model-sharing" open={open}>
       <summary>
         Model access: {source.shared ? selected.length : 0} of{' '}
         {source.models.length} shared

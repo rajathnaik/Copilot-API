@@ -64,6 +64,13 @@ const catalogSchema = z.object({
         name: z.string().optional(),
         supported_endpoints: z.array(z.string()).optional(),
         policy: z.object({ state: z.string() }).optional(),
+        billing: z
+          .object({
+            is_premium: z.boolean().optional(),
+            multiplier: z.number().nonnegative().max(1000).optional(),
+          })
+          .passthrough()
+          .optional(),
         capabilities: z
           .object({
             type: z.string().optional(),
@@ -434,6 +441,9 @@ export class CopilotProvider {
         maxOutputTokens: model.capabilities?.limits?.max_output_tokens,
         maxImageBytes:
           model.capabilities?.limits?.vision?.max_prompt_image_size,
+        premiumMultiplier:
+          model.billing?.multiplier
+          ?? (model.billing?.is_premium === false ? 0 : undefined),
       })
     }
     if (!models.length)
@@ -447,6 +457,34 @@ export class CopilotProvider {
 
   async discover(githubToken: string, signal?: AbortSignal) {
     return this.catalog(await this.exchange(githubToken, signal), signal)
+  }
+
+  // Identifies the GitHub account behind a sign-in so one subscription maps
+  // to one source. Returns null when GitHub cannot be reached.
+  async account(githubToken: string, signal?: AbortSignal) {
+    try {
+      const value = z
+        .object({ login: z.string().trim().min(1).max(100) })
+        .parse(
+          await this.json('https://api.github.com/user', {
+            signal,
+            headers: {
+              Accept: 'application/json',
+              authorization: `token ${githubToken}`,
+              'user-agent': userAgent,
+            },
+          }),
+        )
+      return value.login.toLowerCase()
+    } catch {
+      signal?.throwIfAborted()
+      return null
+    }
+  }
+
+  forget(id: string) {
+    this.tokens.delete(id)
+    this.quotas.delete(id)
   }
 
   async refresh(id: string) {
@@ -549,7 +587,17 @@ export class CopilotProvider {
           signal: this.deadline(signal),
         },
         report,
-        { model: modelId, purpose, client: signal },
+        {
+          model: modelId,
+          purpose,
+          client: signal,
+          initiator: agent ? 'agent' : 'user',
+          // Copilot charges premium requests only for user-initiated turns.
+          premium:
+            agent || purpose !== 'request' ?
+              0
+            : (model?.premiumMultiplier ?? null),
+        },
         this.now,
       )
     }
@@ -780,7 +828,13 @@ export class CopilotProvider {
           signal: deadline,
         },
         report,
-        { model: model.id, purpose: 'web-search', client: signal },
+        {
+          model: model.id,
+          purpose: 'web-search',
+          client: signal,
+          initiator: 'agent',
+          premium: 0,
+        },
         this.now,
       )
       if (!response.ok) {

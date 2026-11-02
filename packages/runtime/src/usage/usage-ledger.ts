@@ -35,6 +35,10 @@ export const usageRecordSchema = z
     outputTokens: tokens,
     reasoningTokens: tokens,
     nanoAiu: tokens.nullable(),
+    // Added in dev.7; older records omit them.
+    initiator: z.enum(['user', 'agent']).nullable().optional(),
+    premium: z.number().nonnegative().max(10_000).nullable().optional(),
+    client: z.string().min(1).max(64).optional(),
   })
   .strict()
 export type UsageRecord = z.infer<typeof usageRecordSchema>
@@ -42,6 +46,10 @@ export type UsageEntry = Omit<UsageRecord, 'at'>
 
 export interface UsageTotals {
   requests: number
+  // Requests a person started, and requests the agent sent on its own
+  // after tool output. Older records without an initiator count in neither.
+  prompts: number
+  followUps: number
   failed: number
   cancelled: number
   webSearches: number
@@ -52,9 +60,17 @@ export interface UsageTotals {
   outputTokens: number
   reasoningTokens: number
   totalTokens: number
+  premiumRequests: number
   costedRequests: number
   costUsd: number | null
   averageDurationMs: number | null
+}
+
+export interface UsageSeries {
+  name: string
+  tokens: number[]
+  requests: number[]
+  premium: number[]
 }
 
 export interface UsageSummary {
@@ -70,9 +86,23 @@ export interface UsageSummary {
     }
   >
   access: Record<UsageRecord['access'], UsageTotals>
+  // Remote access grouped by the name each client machine reports.
+  clients: Array<UsageTotals & { client: string; lastSeen: number }>
   daily: Array<{ date: string } & UsageTotals>
+  // Daily values aligned with `daily`, per model and per remote client.
+  series: { models: UsageSeries[]; clients: UsageSeries[] }
   recent: UsageRecord[]
 }
+
+export interface MonthlyClientUsage {
+  client: string
+  requests: number
+  premium: number
+  lastSeen: number
+  models: Record<string, number>
+}
+
+export const unnamedClientLabel = 'Unnamed client'
 
 const filePattern = /^usage-(\d{4})-(\d{2})\.jsonl$/u
 
@@ -86,8 +116,24 @@ function localDay(at: number) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
+function rankSeries(lines: Map<string, UsageSeries>): UsageSeries[] {
+  const total = (line: UsageSeries) =>
+    line.tokens.reduce((sum, value) => sum + value, 0)
+  return [...lines.values()]
+    .map((line) => ({
+      ...line,
+      premium: line.premium.map((value) => Math.round(value * 100) / 100),
+    }))
+    .sort(
+      (left, right) =>
+        total(right) - total(left) || left.name.localeCompare(right.name),
+    )
+}
+
 class Totals {
   private requests = 0
+  private prompts = 0
+  private followUps = 0
   private failed = 0
   private cancelled = 0
   private webSearches = 0
@@ -97,6 +143,7 @@ class Totals {
   private cacheWriteTokens = 0
   private outputTokens = 0
   private reasoningTokens = 0
+  private premium = 0
   private costedRequests = 0
   private nanoAiu = 0
   private timed = 0
@@ -104,6 +151,11 @@ class Totals {
 
   add(record: UsageRecord) {
     this.requests++
+    if (record.purpose === 'request' && record.initiator === 'user')
+      this.prompts++
+    if (record.purpose === 'request' && record.initiator === 'agent')
+      this.followUps++
+    this.premium += record.premium ?? 0
     if (record.outcome === 'failed') this.failed++
     if (record.outcome === 'cancelled') this.cancelled++
     if (record.purpose === 'web-search') this.webSearches++
@@ -131,6 +183,8 @@ class Totals {
   value(): UsageTotals {
     return {
       requests: this.requests,
+      prompts: this.prompts,
+      followUps: this.followUps,
       failed: this.failed,
       cancelled: this.cancelled,
       webSearches: this.webSearches,
@@ -141,6 +195,7 @@ class Totals {
       outputTokens: this.outputTokens,
       reasoningTokens: this.reasoningTokens,
       totalTokens: this.inputTokens + this.outputTokens,
+      premiumRequests: Math.round(this.premium * 100) / 100,
       costedRequests: this.costedRequests,
       costUsd: this.costedRequests ? this.nanoAiu / nanoAiuPerUsd : null,
       averageDurationMs:
@@ -249,17 +304,54 @@ export class UsageLedger {
       }
     >()
     const access = { local: new Totals(), remote: new Totals() }
+    const clients = new Map<string, { totals: Totals; lastSeen: number }>()
+    const dayIndex = new Map<string, number>()
     const daily = new Map<string, Totals>()
     for (
       const day = new Date(from);
       day.getTime() <= to;
       day.setDate(day.getDate() + 1)
-    )
+    ) {
+      dayIndex.set(localDay(day.getTime()), dayIndex.size)
       daily.set(localDay(day.getTime()), new Totals())
+    }
+    const series = {
+      models: new Map<string, UsageSeries>(),
+      clients: new Map<string, UsageSeries>(),
+    }
+    const plot = (
+      target: Map<string, UsageSeries>,
+      name: string,
+      record: UsageRecord,
+    ) => {
+      const index = dayIndex.get(localDay(record.at))
+      if (index === undefined) return
+      let line = target.get(name)
+      if (!line) {
+        const zeros = () => Array.from({ length: dayIndex.size }, () => 0)
+        line = { name, tokens: zeros(), requests: zeros(), premium: zeros() }
+        target.set(name, line)
+      }
+      line.tokens[index] += record.inputTokens + record.outputTokens
+      line.requests[index]++
+      line.premium[index] += record.premium ?? 0
+    }
     for (const record of selected) {
       totals.add(record)
       access[record.access].add(record)
       daily.get(localDay(record.at))?.add(record)
+      plot(series.models, record.model, record)
+      if (record.access === 'remote') {
+        const name = record.client ?? unnamedClientLabel
+        const client = clients.get(name) ?? {
+          totals: new Totals(),
+          lastSeen: 0,
+        }
+        client.totals.add(record)
+        client.lastSeen = Math.max(client.lastSeen, record.at)
+        clients.set(name, client)
+        plot(series.clients, name, record)
+      }
       const key = `${record.sourceId}\u0000${record.model}`
       const group = models.get(key) ?? {
         model: record.model,
@@ -290,9 +382,55 @@ export class UsageLedger {
             || left.model.localeCompare(right.model),
         ),
       access: { local: access.local.value(), remote: access.remote.value() },
+      clients: [...clients]
+        .map(([client, value]) => ({
+          client,
+          lastSeen: value.lastSeen,
+          ...value.totals.value(),
+        }))
+        .sort(
+          (left, right) =>
+            right.premiumRequests - left.premiumRequests
+            || right.requests - left.requests
+            || left.client.localeCompare(right.client),
+        ),
       daily: [...daily].map(([date, value]) => ({ date, ...value.value() })),
+      series: {
+        models: rankSeries(series.models),
+        clients: rankSeries(series.clients),
+      },
       recent: selected.slice(-25).reverse(),
     }
+  }
+
+  // Premium requests each remote client used in the current calendar month,
+  // for the host's warn-only limits.
+  month(): MonthlyClientUsage[] {
+    const start = new Date(this.now())
+    start.setHours(0, 0, 0, 0)
+    start.setDate(1)
+    const clients = new Map<string, MonthlyClientUsage>()
+    for (const record of this.records) {
+      if (record.access !== 'remote' || record.at < start.getTime()) continue
+      const name = record.client ?? unnamedClientLabel
+      const client = clients.get(name) ?? {
+        client: name,
+        requests: 0,
+        premium: 0,
+        lastSeen: 0,
+        models: {},
+      }
+      const premium = record.premium ?? 0
+      client.requests++
+      client.premium += premium
+      client.lastSeen = Math.max(client.lastSeen, record.at)
+      client.models[record.model] = (client.models[record.model] ?? 0) + premium
+      clients.set(name, client)
+    }
+    return [...clients.values()].map((client) => ({
+      ...client,
+      premium: Math.round(client.premium * 100) / 100,
+    }))
   }
 
   private cutoff() {

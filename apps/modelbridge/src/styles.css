@@ -63,7 +63,9 @@ li { line-height: 1.6; } details { margin-top: 16px; } summary { cursor: pointer
 .steps li { color: #526178; } .steps li.done { color: #1f6b3d; font-weight: 600; }
 .dashboard-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; margin-top: 18px; }
 .dashboard-head h2 { margin: 0; } .dashboard-head p { margin: 4px 0 0; }
-.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-top: 14px; }
+.metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+@media (min-width: 1200px) { .metrics { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .metric { display: grid; gap: 4px; padding: 16px; background: white; border: 1px solid #dbe3ef; border-radius: 12px; min-width: 0; }
 .metric-label { color: #526178; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
 .metric-value { font-size: 24px; color: #183c70; }
@@ -72,12 +74,30 @@ li { line-height: 1.6; } details { margin-top: 16px; } summary { cursor: pointer
 .quota-source + .quota-source { margin-top: 12px; padding-top: 12px; border-top: 1px solid #edf2f8; }
 .quota-row { display: grid; grid-template-columns: 150px minmax(80px, 1fr) max-content; gap: 14px; align-items: center; padding: 6px 0; }
 .quota-row meter { width: 100%; height: 12px; }
-.chart { display: flex; align-items: flex-end; gap: 2px; height: 140px; padding-top: 6px; border-bottom: 1px solid #c9d5e5; }
-.chart .bar { flex: 1 1 0; height: 100%; display: flex; align-items: flex-end; min-width: 2px; }
-.chart .bar span { width: 100%; min-height: 1px; background: #3a6db0; border-radius: 3px 3px 0 0; }
-.chart .bar span.has-failures { background: linear-gradient(#c24a4a 0 4px, #3a6db0 4px); }
-.chart .bar:hover span { background: #183c70; }
-.chart-axis { display: flex; justify-content: space-between; font-size: 12px; margin-top: 6px; }
+.usage-chart .section-head { margin-bottom: 10px; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart text { font-size: 11px; fill: #526178; }
+.chart .y-tick line { stroke: #e3e9f2; }
+.chart .axis { stroke: #a7b6ca; }
+.chart .point:hover { r: 5; }
+.legend { list-style: none; display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 10px 0 0; padding: 0; font-size: 13px; }
+.legend li { display: inline-flex; align-items: center; gap: 6px; }
+.swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; background: #e3e9f2; color: #526178; }
+.badge.ok { background: #dcf3e6; color: #1d6b3f; }
+.badge.near { background: #fff3d6; color: #6b4a00; }
+.badge.over { background: #fbe0e0; color: #a32626; }
+.client-models summary { cursor: pointer; font-size: 12px; color: #526178; }
+.client-models ul { margin: 6px 0 0; padding-left: 18px; white-space: normal; }
+.inline-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-top: 12px; }
+.inline-form label { flex: 0 1 240px; }
+.limits-editor { margin-top: 16px; padding: 12px; background: #f6f9fd; border-radius: 8px; }
+.limits-editor summary { cursor: pointer; font-weight: 600; }
+.limits-editor h3 { margin: 18px 0 4px; font-size: 14px; }
+.limit-list { list-style: none; margin: 8px 0 0; padding: 0; }
+.limit-list li { display: flex; align-items: center; gap: 14px; padding: 6px 0; border-bottom: 1px solid #edf2f8; }
+.limit-list li > :first-child { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.model-access .source { border-bottom: 0; padding-bottom: 0; } .model-access .source > .checkbox { margin-left: 0; gap: 8px; font-weight: 600; }
 .numeric-table td, .numeric-table th { white-space: nowrap; }
 .outcome.failed { color: #a32626; } .outcome.cancelled { color: #6b4a00; }
 .pair { display: contents; }
@@ -87,4 +107,3 @@ li { line-height: 1.6; } details { margin-top: 16px; } summary { cursor: pointer
 .source-list li > div { display: grid; gap: 2px; min-width: 0; flex: 1 1 260px; }
 .source-list li > button { margin-left: auto; }
 @media (max-width: 800px) { .quota-row { grid-template-columns: 1fr; gap: 4px; } }
-@media (prefers-reduced-motion: no-preference) { .chart .bar span { transition: height .2s ease; } }
