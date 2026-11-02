@@ -39,7 +39,7 @@
 
 ## Product scope and releases
 
-- `0.1.0-dev.2` is a development foundation, not a shipped universal product.
+- `0.1.0-dev.3` is a development foundation, not a shipped universal product.
   Direct Copilot hosting and revision-safe Codex configuration are implemented
   with synthetic/native isolated checks. Do not claim real subscription,
   tunnel or two-machine acceptance before live verification. Other harnesses
@@ -72,3 +72,8 @@
   timeout and hung a client installer at "Install". Keep the
   `customCheckAppRunning` override (nsProcess) in `installer/prerequisites.nsh`
   outside the `BUILD_UNINSTALLER` guard so both installer and uninstaller use it.
+- NSIS `WordFind "+1}"` returns the whole input when no delimiter remains, so
+  a PATH loop using it never ends if the user PATH lacks a trailing `;`. That
+  froze the wizard on entering the prerequisite page on a client machine. Keep
+  `MBSearchPathList`'s explicit last-entry/no-progress exit and its regression
+  test.

@@ -234,6 +234,87 @@ SectionEnd
   120_000,
 )
 
+test.skipIf(process.platform !== 'win32' || !process.env.MODELBRIDGE_TEST_NSIS)(
+  'PATH scanning terminates when the last entry has no trailing semicolon and still finds a CLI there',
+  async () => {
+    const compiler = process.env.MODELBRIDGE_TEST_NSIS
+    if (!compiler) throw new Error('Set MODELBRIDGE_TEST_NSIS to makensis.exe.')
+    const directory = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'modelbridge-nsis-path-'),
+    )
+    try {
+      const cliDirectory = path.join(directory, 'CLI with spaces')
+      fs.mkdirSync(cliDirectory)
+      fs.writeFileSync(path.join(cliDirectory, 'devtunnel.exe'), 'fixture')
+      const executable = path.join(directory, 'scan.exe')
+      const result = path.join(directory, 'result')
+      const cases = [
+        `C:\\missing-a;C:\\missing-b;${cliDirectory}`,
+        `C:\\missing-a;"${cliDirectory}"`,
+        `;C:\\missing-a;;${cliDirectory}`,
+        cliDirectory,
+        ';;;',
+      ]
+      const script = path.join(directory, 'scan.nsi')
+      fs.writeFileSync(
+        script,
+        `
+Unicode true
+Name "PATH scan fixture"
+OutFile "${executable}"
+RequestExecutionLevel user
+SilentInstall silent
+!include "MUI2.nsh"
+!include "${include}"
+!insertmacro MUI_PAGE_INSTFILES
+!insertmacro MUI_LANGUAGE "English"
+Section
+  FileOpen $9 "${result}" w
+${cases
+  .map(
+    (value) => `  StrCpy $MBCli ""
+  StrCpy $MBPaths '${value}'
+  Call MBSearchPathList
+  FileWrite $9 "[$MBCli]$\\r$\\n"`,
+  )
+  .join('\n')}
+  FileClose $9
+SectionEnd
+`,
+      )
+      const compilation = Bun.spawn([compiler, '/V2', script], {
+        stdout: 'pipe',
+        stderr: 'pipe',
+      })
+      const output = await new Response(compilation.stdout).text()
+      expect(await compilation.exited, output).toBe(0)
+      const child = Bun.spawn([executable], {
+        stdout: 'ignore',
+        stderr: 'ignore',
+      })
+      const deadline = Date.now() + 20_000
+      while (child.exitCode === null && Date.now() < deadline)
+        await Bun.sleep(100)
+      if (child.exitCode === null) {
+        child.kill()
+        await child.exited
+        throw new Error('PATH scanning did not terminate.')
+      }
+      const found = `[${path.join(cliDirectory, 'devtunnel.exe')}]`
+      expect(fs.readFileSync(result, 'utf8').trim().split(/\r?\n/u)).toEqual([
+        found,
+        found,
+        found,
+        found,
+        '[]',
+      ])
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true })
+    }
+  },
+  60_000,
+)
+
 test.skipIf(
   process.platform !== 'win32' || !process.env.MODELBRIDGE_TEST_INSTALLER_EXE,
 )(

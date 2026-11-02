@@ -152,10 +152,11 @@ test.skipIf(
         await child.exited
       }
       await upstream.stop(true)
+      // Electron helper processes can hold profile files briefly after exit.
       await fs.promises.rm(directory, {
         recursive: true,
         force: true,
-        maxRetries: 5,
+        maxRetries: 30,
         retryDelay: 500,
       })
     }

@@ -85,6 +85,33 @@ Var MBEntry
     FindClose $MBFind
   FunctionEnd
 
+  ; Consumes $MBPaths one entry at a time. WordFind returns the whole input when
+  ; no delimiter remains, so the last entry is handled explicitly; otherwise a
+  ; PATH without a trailing ";" loops forever and freezes the wizard.
+  Function MBSearchPathList
+    ${DoWhile} $MBPaths != ""
+      ClearErrors
+      ${WordFind} "$MBPaths" ";" "E+1}" $1
+      ${If} ${Errors}
+      ${OrIf} $1 == $MBPaths
+        StrCpy $0 $MBPaths
+        StrCpy $MBPaths ""
+      ${Else}
+        ${WordFind} "$MBPaths" ";" "+1" $0
+        StrCpy $MBPaths $1
+      ${EndIf}
+      ExpandEnvStrings $0 $0
+      StrCpy $1 $0 1
+      ${If} $1 == '$\"'
+        StrCpy $0 $0 -1 1
+      ${EndIf}
+      ${If} $0 != ""
+        StrCpy $MBCandidate "$0\devtunnel.exe"
+        Call MBConsiderCandidate
+      ${EndIf}
+    ${Loop}
+  FunctionEnd
+
   Function MBDetectDevTunnel
     StrCpy $MBReady "0"
     StrCpy $MBCli ""
@@ -100,19 +127,7 @@ Var MBEntry
       StrCpy $MBDescription "Could not refresh this installer's PATH. Restart the installer after installing the CLI."
       Return
     ${EndIf}
-    ${DoWhile} $MBPaths != ""
-      ${WordFind} "$MBPaths" ";" "+1" $0
-      ${WordFind} "$MBPaths" ";" "+1}" $MBPaths
-      ExpandEnvStrings $0 $0
-      StrCpy $1 $0 1
-      ${If} $1 == '$\"'
-        StrCpy $0 $0 -1 1
-      ${EndIf}
-      ${If} $0 != ""
-        StrCpy $MBCandidate "$0\devtunnel.exe"
-        Call MBConsiderCandidate
-      ${EndIf}
-    ${Loop}
+    Call MBSearchPathList
     ReadEnvStr $MBRoot "LOCALAPPDATA"
     ${If} $MBRoot != ""
       StrCpy $MBCandidate "$MBRoot\Microsoft\WinGet\Links\devtunnel.exe"

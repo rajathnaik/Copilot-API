@@ -7,22 +7,22 @@ The new desktop structure retains the original Copilot API's direct
 authentication, token exchange, forwarding and protocol translations.
 **There is no Copilot SDK integration.**
 
-**Development pre-release: 0.1.0-dev.2.**
+**Development pre-release: 0.1.0-dev.3.**
 
 Download the unsigned Windows installer from the
-[ModelBridge development release](https://github.com/rajathnaik/Copilot-API/releases/tag/modelbridge-v0.1.0-dev.2):
+[ModelBridge development release](https://github.com/rajathnaik/Copilot-API/releases/tag/modelbridge-v0.1.0-dev.3):
 
-- [Windows installer](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.0-dev.2/ModelBridge.Setup.0.1.0-dev.2.exe)
-- [SHA256 checksum](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.0-dev.2/ModelBridge.Setup.0.1.0-dev.2.exe.sha256)
+- [Windows installer](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.0-dev.3/ModelBridge.Setup.0.1.0-dev.3.exe)
+- [SHA256 checksum](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.0-dev.3/ModelBridge.Setup.0.1.0-dev.3.exe.sha256)
 
-Compare `Get-FileHash .\ModelBridge.Setup.0.1.0-dev.2.exe -Algorithm SHA256`
+Compare `Get-FileHash .\ModelBridge.Setup.0.1.0-dev.3.exe -Algorithm SHA256`
 with the downloaded checksum before running the installer. Windows may warn
 about an unknown publisher because this development build is not code-signed.
 Use the same installer on the host and client machines.
 
 To build the unsigned Windows development installer locally, run
 `bun run --cwd apps/modelbridge package:win`. Its output is
-`apps/modelbridge/release/ModelBridge.Setup.0.1.0-dev.2.exe`. This is a test
+`apps/modelbridge/release/ModelBridge.Setup.0.1.0-dev.3.exe`. This is a test
 candidate, not a verified production release; installation/upgrade/uninstall
 and the real two-machine acceptance test are still pending.
 
@@ -107,6 +107,15 @@ sources forward their advertised protocol; Copilot has its own inherited
 cross-protocol adapters. Some provider APIs require dedicated discovery
 adapters or pagination; the generic source integration does not claim support
 for every provider.
+
+## Troubleshooting installation
+
+The installer cannot write a log file: electron-builder ships NSIS without
+logging support. If the wizard freezes, note the last page shown and check
+Task Manager for a `ModelBridge.Setup…` process at constant CPU (a script loop)
+versus child processes such as `powershell.exe` or `devtunnel.exe` (a waiting
+external command). Builds before 0.1.0-dev.3 froze on entering the
+prerequisite page when the user PATH did not end with `;`.
 
 ## Troubleshooting startup
 
