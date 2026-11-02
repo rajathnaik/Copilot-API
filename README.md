@@ -26,6 +26,27 @@ To build the unsigned Windows development installer locally, run
 candidate, not a verified production release; installation/upgrade/uninstall
 and the real two-machine acceptance test are still pending.
 
+## Unreleased
+
+These changes are on `master` but not yet in a published installer.
+
+- **Manage hosts on clients.** The client **Connect** tab is now **Hosts**. Each
+  connected host has a card with its URL, model count, connection status and
+  last check, plus **Check connection**, **Edit** and **Remove…**.
+- **Edit keeps Codex working.** Rename a host or change its URL or access key in
+  place. A new URL or key is verified with the host before it is saved, and the
+  connection keeps its identity, so Codex's `model = "<source>/<model>"` route
+  stays valid.
+- **No more duplicate hosts.** Adding a host URL that is already connected
+  reconnects that host (new key, refreshed models) instead of adding a second
+  copy. Existing duplicates are flagged with a **Duplicate** badge; keep the one
+  marked **Used by Codex** and remove the other.
+- **Safe removal.** **Remove…** asks for confirmation, deletes the saved key and
+  warns when Codex currently uses a model from that host.
+- **Codex model list check.** The Codex tab notes when ModelBridge's models no
+  longer match the applied Codex model list (offering **Preview Codex update**)
+  or when Codex's default model is no longer available.
+
 ## What's new in dev.7
 
 These changes ship in the dev.7 installer linked above.
@@ -295,7 +316,8 @@ configuration is modified only after approving an explicit preview.
 
 ## What changes in Codex
 
-On the client, add the host URL and host access key in ModelBridge. It discovers
+On the client, add the host URL and host access key in ModelBridge (**Hosts**
+tab). It discovers
 the host's shared models and exposes them through its own local gateway.
 Discover the installed Codex, choose a model and configuration name, and use
 **Preview exact Codex changes** before applying.

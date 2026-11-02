@@ -35,6 +35,7 @@ export function CodexPanel({ models }: { models: AvailableModel[] }) {
       setBusy(false)
     }
   }
+  const modelKey = models.map((item) => item.id).join('\n')
   useEffect(() => {
     void window.modelbridge
       .codexStatus()
@@ -49,7 +50,7 @@ export function CodexPanel({ models }: { models: AvailableModel[] }) {
           : 'Could not inspect Codex settings.',
         ),
       )
-  }, [])
+  }, [modelKey])
   const selected =
     responses.some((item) => item.id === model) ? model : (
       (responses[0]?.id ?? '')
@@ -67,6 +68,34 @@ export function CodexPanel({ models }: { models: AvailableModel[] }) {
           {error}
         </div>
       )}
+      {status?.missingModel ?
+        <div className="notice warn codex-update" role="status">
+          Codex is set to <code>{status.effective.model}</code>, which is no
+          longer available because its source was removed or changed. Choose
+          another default model below, then preview and apply the change.
+        </div>
+      : status?.catalogStale && status.active ?
+        <div className="notice warn codex-update" role="status">
+          Your hosts or models changed since Codex was configured, so
+          Codex&apos;s model list is out of date.
+          <div className="actions">
+            <button
+              className="primary"
+              disabled={busy}
+              onClick={() => {
+                const active = status.active
+                if (active)
+                  void run(
+                    () => window.modelbridge.previewCodexRevision(active),
+                    setPreview,
+                  )
+              }}
+            >
+              Preview Codex update
+            </button>
+          </div>
+        </div>
+      : null}
       <div className="actions">
         <button
           disabled={busy}

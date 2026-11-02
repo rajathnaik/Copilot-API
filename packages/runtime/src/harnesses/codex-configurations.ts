@@ -51,6 +51,10 @@ export interface CodexConfigurationStatus {
   effective: { provider: string; model: string }
   active: string | null
   externalManagedEdit: boolean
+  // The active configuration's model list no longer matches the sources.
+  catalogStale: boolean
+  // The active configuration's default model is no longer available.
+  missingModel: boolean
   revisions: Array<{
     id: string
     label: string
@@ -137,9 +141,13 @@ export class CodexConfigurations {
     this.saved = next
   }
 
-  status(): CodexConfigurationStatus {
+  status(models?: AvailableModel[]): CodexConfigurationStatus {
     const current = readOptional(this.configPath) ?? ''
     const value = configValue(current)
+    const active = this.saved?.revisions.find(
+      (revision) =>
+        revision.id === this.saved?.active && revision.action === 'configure',
+    )
     return {
       configPath: this.configPath,
       effective: {
@@ -152,6 +160,17 @@ export class CodexConfigurations {
       active: this.saved?.active ?? null,
       externalManagedEdit:
         !!this.saved && managedFingerprint(current) !== this.saved.fingerprint,
+      catalogStale:
+        !!active
+        && !!models
+        && active.catalog !== JSON.stringify(createCodexCatalog(models)),
+      missingModel:
+        !!active
+        && !!models
+        && !models.some(
+          (model) =>
+            model.id === active.model && model.protocol === 'responses',
+        ),
       revisions: (this.saved?.revisions ?? []).map(
         ({ id, label, model, createdAt, action }) => ({
           id,

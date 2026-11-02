@@ -3,6 +3,7 @@ import type {
   Role,
   Source,
   SourceInput,
+  SourceUpdate,
 } from '@modelbridge/runtime/contracts'
 import type { CopilotLogin, CopilotQuota } from '@modelbridge/runtime/copilot'
 import type {
@@ -24,6 +25,8 @@ export interface AppStatus {
   defaultClientName: string
   localUrl: string
   sources: Source[]
+  // Result of the last connection check for each source, by source ID.
+  sourceHealth: Record<string, SourceHealth>
   models: AvailableModel[]
   sharing: boolean
   remoteUrl: string | null
@@ -38,6 +41,12 @@ export interface AppStatus {
 }
 
 export type Result<T> = { ok: true; value: T } | { ok: false; error: string }
+
+export interface SourceHealth {
+  ok: boolean
+  checkedAt: string
+  message: string | null
+}
 
 export interface CopilotQuotaStatus {
   sourceId: string
@@ -63,6 +72,8 @@ export interface ModelBridgeAPI {
   clearUsage(): Promise<Result<UsageSummary>>
   copilotQuota(refresh: boolean): Promise<Result<CopilotQuotaStatus[]>>
   addSource(input: SourceInput): Promise<Result<AppStatus>>
+  updateSource(input: SourceUpdate): Promise<Result<AppStatus>>
+  removeSource(sourceId: string): Promise<Result<AppStatus>>
   shareSource(
     sourceId: string,
     shared: boolean,

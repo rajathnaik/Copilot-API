@@ -91,6 +91,17 @@ export const sourceInputSchema = z
   })
   .strict()
 export type SourceInput = z.infer<typeof sourceInputSchema>
+// Edits keep the source ID so harness configurations that reference its
+// models stay valid. A new URL or key is verified before it is saved.
+export const sourceUpdateSchema = z
+  .object({
+    sourceId: z.string().uuid(),
+    label: sourceSchema.shape.label,
+    baseUrl: z.string().url().optional(),
+    apiKey: sourceInputSchema.shape.apiKey.optional(),
+  })
+  .strict()
+export type SourceUpdate = z.infer<typeof sourceUpdateSchema>
 export const sharingInputSchema = z
   .object({
     sourceId: z.string().uuid(),

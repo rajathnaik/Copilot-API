@@ -51,6 +51,7 @@ test.skipIf(
       defaultClientName: 'test-host',
       localUrl: 'http://127.0.0.1:4321/v1',
       sources: [],
+      sourceHealth: {},
       models: [],
       sharing: false,
       remoteUrl: null,

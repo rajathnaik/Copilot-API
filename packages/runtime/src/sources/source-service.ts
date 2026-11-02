@@ -4,6 +4,7 @@ import { CopilotProvider } from '../providers/copilot'
 import {
   sourceInputSchema,
   sourceSchema,
+  sourceUpdateSchema,
   protocolSchema,
   modelCapabilities,
   modelCapabilitiesSchema,
@@ -13,6 +14,7 @@ import {
   type Credentials,
   type Source,
   type SourceInput,
+  type SourceUpdate,
 } from '../contracts'
 
 export type SourceFetch = (url: string, init?: RequestInit) => Promise<Response>
@@ -220,10 +222,134 @@ export class SourceService {
   async add(value: SourceInput): Promise<Source> {
     const input = sourceInputSchema.parse(value)
     const baseUrl = normalizeBaseUrl(input.baseUrl, input.kind)
+    const models = await this.discover(
+      input.kind,
+      baseUrl,
+      input.protocol,
+      input.apiKey,
+    )
+    // Adding a host URL that is already connected reconnects that source in
+    // place, so a new key never leaves a duplicate host behind.
+    const existing =
+      input.kind === 'remote' ?
+        this.sources.find(
+          (source) => source.kind === 'remote' && source.baseUrl === baseUrl,
+        )
+      : undefined
+    if (existing) return this.replace({ ...existing, models }, input.apiKey)
+    const source: Source = {
+      id: randomUUID(),
+      label: input.label,
+      kind: input.kind,
+      baseUrl,
+      shared: input.shared,
+      models,
+    }
+    await this.credentials.set(source.id, input.apiKey)
+    const next = [...this.sources, source]
+    try {
+      this.persist(next)
+    } catch (error) {
+      await this.credentials.remove(source.id)
+      throw error
+    }
+    this.sources = next
+    return structuredClone(source)
+  }
+
+  async update(value: SourceUpdate): Promise<Source> {
+    const input = sourceUpdateSchema.parse(value)
+    const existing = this.sources.find((source) => source.id === input.sourceId)
+    if (!existing) throw new Error('The selected source does not exist.')
+    if (existing.kind === 'copilot') {
+      if (
+        input.apiKey !== undefined
+        || (input.baseUrl !== undefined && input.baseUrl !== existing.baseUrl)
+      )
+        throw new Error(
+          'Copilot sources can only be renamed. Sign in again to renew their access.',
+        )
+      return this.replace({ ...existing, label: input.label })
+    }
+    const baseUrl = normalizeBaseUrl(
+      input.baseUrl ?? existing.baseUrl,
+      existing.kind,
+    )
+    if (
+      existing.kind === 'remote'
+      && this.sources.some(
+        (source) =>
+          source.id !== existing.id
+          && source.kind === 'remote'
+          && source.baseUrl === baseUrl,
+      )
+    )
+      throw new Error(
+        'Another connected host already uses this URL. Remove one of them instead.',
+      )
+    if (baseUrl === existing.baseUrl && input.apiKey === undefined)
+      return this.replace({ ...existing, label: input.label })
+    const models = await this.discover(
+      existing.kind,
+      baseUrl,
+      existing.models[0].protocol,
+      input.apiKey ?? this.credentials.get(existing.id),
+    )
+    return this.replace(
+      { ...existing, label: input.label, baseUrl, models },
+      input.apiKey,
+    )
+  }
+
+  async remove(id: string): Promise<void> {
+    const next = this.sources.filter((source) => source.id !== id)
+    if (next.length === this.sources.length)
+      throw new Error('The selected source does not exist.')
+    this.persist(next)
+    this.sources = next
+    this.copilot.forget(id)
+    await this.credentials.remove(id)
+  }
+
+  // Saves a changed source, and its new key when given, restoring the old key
+  // if the source list cannot be saved.
+  private async replace(updated: Source, key?: string): Promise<Source> {
+    const source = sourceSchema.parse(updated)
+    let previous: string | undefined
+    if (key !== undefined) {
+      try {
+        previous = this.credentials.get(source.id)
+      } catch {
+        previous = undefined
+      }
+      await this.credentials.set(source.id, key)
+    }
+    const next = this.sources.map((item) =>
+      item.id === source.id ? source : item,
+    )
+    try {
+      this.persist(next)
+    } catch (error) {
+      if (key !== undefined) {
+        if (previous === undefined) await this.credentials.remove(source.id)
+        else await this.credentials.set(source.id, previous)
+      }
+      throw error
+    }
+    this.sources = next
+    return structuredClone(source)
+  }
+
+  private async discover(
+    kind: SourceInput['kind'],
+    baseUrl: string,
+    protocol: SourceInput['protocol'],
+    apiKey: string,
+  ): Promise<Source['models']> {
     let response: Response
     try {
       response = await this.fetcher(`${baseUrl}/models`, {
-        headers: sourceHeaders(input, input.protocol, input.apiKey),
+        headers: sourceHeaders({ kind }, protocol, apiKey),
         redirect: 'error',
         signal: AbortSignal.timeout(30_000),
       })
@@ -256,35 +382,18 @@ export class SourceService {
       !== catalog.data.length
     )
       throw new Error('Source discovery returned duplicate model identities.')
-    const source: Source = {
-      id: randomUUID(),
-      label: input.label,
-      kind: input.kind,
-      baseUrl,
-      shared: input.shared,
-      models: catalog.data.map((model) => {
-        if (input.kind === 'remote' && !model.modelbridge)
-          throw new Error(
-            'The remote endpoint does not advertise ModelBridge capabilities.',
-          )
-        return {
-          id: model.id,
-          name: model.name || model.id,
-          protocol: model.modelbridge?.protocol ?? input.protocol,
-          ...(model.modelbridge && modelCapabilities(model.modelbridge)),
-        }
-      }),
-    }
-    await this.credentials.set(source.id, input.apiKey)
-    const next = [...this.sources, source]
-    try {
-      this.persist(next)
-    } catch (error) {
-      await this.credentials.remove(source.id)
-      throw error
-    }
-    this.sources = next
-    return structuredClone(source)
+    return catalog.data.map((model) => {
+      if (kind === 'remote' && !model.modelbridge)
+        throw new Error(
+          'The remote endpoint does not advertise ModelBridge capabilities.',
+        )
+      return {
+        id: model.id,
+        name: model.name || model.id,
+        protocol: model.modelbridge?.protocol ?? protocol,
+        ...(model.modelbridge && modelCapabilities(model.modelbridge)),
+      }
+    })
   }
 
   async addCopilot(
@@ -405,30 +514,15 @@ export class SourceService {
         ...(await this.copilot.refresh(id)),
       })
     } else {
-      let discovered: Source | undefined
-      const temporary = new SourceService(
-        [],
-        {
-          get: () => this.credentials.get(id),
-          set: () => {},
-          remove: () => {},
-        },
-        (next) => {
-          discovered = next[0]
-        },
-        this.fetcher,
-      )
-      await temporary.add({
-        label: existing.label,
-        shared: existing.shared,
-        baseUrl: existing.baseUrl,
-        kind: existing.kind,
-        protocol: existing.models[0].protocol,
-        apiKey: this.credentials.get(id),
-      })
-      if (!discovered)
-        throw new Error('Source refresh did not return a catalog.')
-      replacement = { ...discovered, id }
+      replacement = {
+        ...existing,
+        models: await this.discover(
+          existing.kind,
+          existing.baseUrl,
+          existing.models[0].protocol,
+          this.credentials.get(id),
+        ),
+      }
     }
     const next = this.sources.map((source) =>
       source.id === id ?

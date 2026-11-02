@@ -2,14 +2,9 @@ import type { Role } from '@modelbridge/runtime/contracts'
 import type { AppStatus } from './types'
 import { plural } from './format'
 import { sharedModelIds, type Run } from './shared'
+import { SourceCard, useCodexModel } from './SourceCard'
 import { SourceSharing } from './SourceSharing'
 import { WebSearchModel } from './WebSearchModel'
-
-const kinds = {
-  copilot: 'Copilot subscription',
-  remote: 'ModelBridge host',
-  api: 'Provider API',
-}
 
 export function ModelsPanel({
   status,
@@ -26,6 +21,7 @@ export function ModelsPanel({
 }) {
   const shared = sharedModelIds(status)
   const host = role === 'host'
+  const codexModel = useCodexModel(status)
   return (
     <>
       <section>
@@ -33,77 +29,79 @@ export function ModelsPanel({
         <p className="muted">
           {host ?
             "Choose all models or a specific selection for each shared source. Clients can discover and call only the models allowed here, even if they know another model's ID."
-          : 'Models discovered from your connected hosts. Refresh a source after the host changes which models it shares.'
+          : `Models discovered from ${plural(status.sources.length, 'connected source')}. Check, edit or remove hosts on the Hosts tab.`
           }
         </p>
-        {!status.sources.length && (
+        {!status.sources.length ?
           <div className="actions">
             <span>No sources yet.</span>
             <button className="primary" onClick={onSetUp}>
               {host ? 'Open host setup' : 'Connect a host'}
             </button>
           </div>
-        )}
-        {status.sources.map((source) => (
-          <div className="source" key={source.id}>
-            <strong>{source.label}</strong>
-            <span className="muted">
-              {kinds[source.kind]} · {plural(source.models.length, 'model')}
-            </span>
-            <button
-              disabled={busy}
-              onClick={() =>
-                void run(() => window.modelbridge.refreshSource(source.id))
-              }
-            >
-              Refresh models
-            </button>
-            {host && (
-              <>
-                <label className="checkbox">
-                  <input
-                    type="checkbox"
-                    disabled={busy}
-                    checked={source.shared}
-                    onChange={(event) =>
+        : !host ?
+          <div className="actions">
+            <button onClick={onSetUp}>Manage hosts</button>
+          </div>
+        : <div className="source-cards">
+            {status.sources.map((source) => (
+              <SourceCard
+                key={source.id}
+                source={source}
+                status={status}
+                codexModel={codexModel}
+                busy={busy}
+                run={run}
+              >
+                <div className="source">
+                  <label className="checkbox">
+                    <input
+                      type="checkbox"
+                      disabled={busy}
+                      checked={source.shared}
+                      onChange={(event) =>
+                        void run(() =>
+                          window.modelbridge.shareSource(
+                            source.id,
+                            event.target.checked,
+                          ),
+                        )
+                      }
+                    />
+                    Share remotely
+                  </label>
+                  <SourceSharing
+                    source={source}
+                    busy={busy}
+                    onChange={(modelIds) =>
                       void run(() =>
                         window.modelbridge.shareSource(
                           source.id,
-                          event.target.checked,
+                          source.shared,
+                          modelIds,
                         ),
                       )
                     }
                   />
-                  Share remotely
-                </label>
-                <SourceSharing
-                  source={source}
-                  busy={busy}
-                  onChange={(modelIds) =>
-                    void run(() =>
-                      window.modelbridge.shareSource(
-                        source.id,
-                        source.shared,
-                        modelIds,
-                      ),
-                    )
-                  }
-                />
-              </>
-            )}
-            {source.kind === 'copilot' && (
-              <WebSearchModel
-                source={source}
-                busy={busy}
-                onChange={(modelId) =>
-                  void run(() =>
-                    window.modelbridge.setWebSearchModel(source.id, modelId),
-                  )
-                }
-              />
-            )}
+                  {source.kind === 'copilot' && (
+                    <WebSearchModel
+                      source={source}
+                      busy={busy}
+                      onChange={(modelId) =>
+                        void run(() =>
+                          window.modelbridge.setWebSearchModel(
+                            source.id,
+                            modelId,
+                          ),
+                        )
+                      }
+                    />
+                  )}
+                </div>
+              </SourceCard>
+            ))}
           </div>
-        ))}
+        }
       </section>
       {!!status.models.length && (
         <section>

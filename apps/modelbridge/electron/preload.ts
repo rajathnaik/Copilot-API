@@ -13,6 +13,10 @@ const api: ModelBridgeAPI = {
   copilotQuota: (refresh) =>
     ipcRenderer.invoke('modelbridge:copilot-quota', refresh),
   addSource: (input) => ipcRenderer.invoke('modelbridge:add-source', input),
+  updateSource: (input) =>
+    ipcRenderer.invoke('modelbridge:update-source', input),
+  removeSource: (sourceId) =>
+    ipcRenderer.invoke('modelbridge:remove-source', sourceId),
   shareSource: (sourceId, shared, sharedModelIds) =>
     ipcRenderer.invoke('modelbridge:share-source', {
       sourceId,

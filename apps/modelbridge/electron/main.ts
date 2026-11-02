@@ -18,6 +18,7 @@ import { createGateway, serve, SourceService } from '@modelbridge/runtime'
 import {
   sharingInputSchema,
   sourceInputSchema,
+  sourceUpdateSchema,
   copilotInputSchema,
   roleSchema,
   stateSchema,
@@ -32,7 +33,12 @@ import {
   premiumLimitStatus,
   premiumLimitsSchema,
 } from '@modelbridge/runtime/limits'
-import type { AppStatus, CopilotQuotaStatus, Result } from '../src/types'
+import type {
+  AppStatus,
+  CopilotQuotaStatus,
+  Result,
+  SourceHealth,
+} from '../src/types'
 import { AppState, credentialsFile } from './state'
 import { TunnelProcess } from './devtunnel-process'
 import { codexConfigPath, discoverCodex, inspectCodex } from './codex-discovery'
@@ -79,6 +85,8 @@ const channels = [
   'modelbridge:codex-apply',
   'modelbridge:codex-reconcile',
   'modelbridge:add-source',
+  'modelbridge:update-source',
+  'modelbridge:remove-source',
   'modelbridge:share-source',
   'modelbridge:web-search-model',
   'modelbridge:tunnel-login',
@@ -222,6 +230,7 @@ async function initialize(): Promise<void> {
   )
   let codexVerified = false
   let sharingBusy = false
+  const sourceHealth = new Map<string, SourceHealth>()
   const refreshTunnelUser = () =>
     transport.refreshUser().catch((error: unknown) => {
       log('tunnel account check failed', describeError(error))
@@ -252,6 +261,7 @@ async function initialize(): Promise<void> {
     defaultClientName,
     localUrl: `http://127.0.0.1:${local.port}/v1`,
     sources: sources.list(),
+    sourceHealth: Object.fromEntries(sourceHealth),
     models: sources.models(),
     sharing: transport.running,
     remoteUrl: transport.running ? remoteUrl : null,
@@ -323,10 +333,30 @@ async function initialize(): Promise<void> {
     await shell.openExternal(url)
   })
   handle('modelbridge:refresh-source', async (input) => {
-    await sources.refresh(z.string().uuid().parse(input))
+    const id = z.string().uuid().parse(input)
+    // A failed check is reported on the source itself rather than as an error.
+    try {
+      await sources.refresh(id)
+      sourceHealth.set(id, {
+        ok: true,
+        checkedAt: new Date().toISOString(),
+        message: null,
+      })
+    } catch (error) {
+      if (!sources.list().some((source) => source.id === id)) throw error
+      log('source check failed', describeError(error))
+      sourceHealth.set(id, {
+        ok: false,
+        checkedAt: new Date().toISOString(),
+        message:
+          error instanceof Error ?
+            error.message
+          : 'The source did not respond.',
+      })
+    }
     return snapshot()
   })
-  handle('modelbridge:codex-status', () => codex.status())
+  handle('modelbridge:codex-status', () => codex.status(sources.models()))
   handle('modelbridge:codex-discover', async () => {
     const found = await discoverCodex()
     codexVerified = found.installations.length > 0
@@ -389,7 +419,27 @@ async function initialize(): Promise<void> {
   })
   handle('modelbridge:codex-reconcile', () => codex.reconcile())
   handle('modelbridge:add-source', async (input) => {
-    await sources.add(sourceInputSchema.parse(input))
+    const added = await sources.add(sourceInputSchema.parse(input))
+    sourceHealth.set(added.id, {
+      ok: true,
+      checkedAt: new Date().toISOString(),
+      message: null,
+    })
+    return snapshot()
+  })
+  handle('modelbridge:update-source', async (input) => {
+    const updated = await sources.update(sourceUpdateSchema.parse(input))
+    sourceHealth.set(updated.id, {
+      ok: true,
+      checkedAt: new Date().toISOString(),
+      message: null,
+    })
+    return snapshot()
+  })
+  handle('modelbridge:remove-source', async (input) => {
+    const id = z.string().uuid().parse(input)
+    await sources.remove(id)
+    sourceHealth.delete(id)
     return snapshot()
   })
   handle('modelbridge:share-source', (input) => {

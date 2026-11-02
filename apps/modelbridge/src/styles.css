@@ -102,8 +102,18 @@ li { line-height: 1.6; } details { margin-top: 16px; } summary { cursor: pointer
 .outcome.failed { color: #a32626; } .outcome.cancelled { color: #6b4a00; }
 .pair { display: contents; }
 .empty { text-align: center; }
-.source-list { list-style: none; margin: 0; padding: 0; }
-.source-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; padding: 12px 0; border-bottom: 1px solid #edf2f8; }
-.source-list li > div { display: grid; gap: 2px; min-width: 0; flex: 1 1 260px; }
-.source-list li > button { margin-left: auto; }
+.badge.info { background: #e0ebfa; color: #183c70; }
+.source-cards { display: grid; gap: 12px; margin-top: 12px; }
+.source-card { padding: 14px 16px; border: 1px solid #dbe3ef; border-radius: 10px; background: #fbfcfe; }
+.source-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
+.source-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.source-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.source-actions button { padding: 7px 12px; }
+.source-meta { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 6px 0 0; font-size: 13px; }
+.source-card .error, .source-card .notice { margin-top: 10px; }
+.source-card .notice p { margin: 0 0 6px; }
+.source-edit { margin-top: 12px; padding: 12px; background: #f2f6fb; border-radius: 8px; }
+.source-edit .actions, .source-edit p { margin: 0; }
+.source-card > .source { border-bottom: 0; padding-bottom: 0; }
+.codex-update .actions { margin-top: 8px; }
 @media (max-width: 800px) { .quota-row { grid-template-columns: 1fr; gap: 4px; } }

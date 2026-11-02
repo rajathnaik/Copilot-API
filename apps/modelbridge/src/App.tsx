@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import type { Role } from '@modelbridge/runtime/contracts'
-import type { AppStatus, Result } from './types'
+import type { AppStatus } from './types'
 import icon from '../assets/icon.svg'
 import { CodexPanel } from './CodexPanel'
 import { ConnectPanel } from './ConnectPanel'
@@ -10,6 +10,7 @@ import { HostSetup } from './HostSetup'
 import type { Revealed } from './KeyReveal'
 import { ModelsPanel } from './ModelsPanel'
 import { SettingsPanel } from './SettingsPanel'
+import type { Run } from './shared'
 
 type Tab = 'dashboard' | 'host' | 'connect' | 'sources' | 'codex' | 'settings'
 
@@ -23,7 +24,7 @@ const roleTabs: Record<Role, Array<{ id: Tab; label: string }>> = {
   ],
   client: [
     { id: 'dashboard', label: 'Dashboard' },
-    { id: 'connect', label: 'Connect' },
+    { id: 'connect', label: 'Hosts' },
     { id: 'sources', label: 'Models' },
     { id: 'codex', label: 'Codex' },
     { id: 'settings', label: 'Settings' },
@@ -133,19 +134,20 @@ export default function App() {
       window.removeEventListener('blur', clearKey)
     }
   }, [])
-  const run = async (operation: () => Promise<Result<AppStatus>>) => {
+  const run: Run = async (operation, onError) => {
     setBusy(true)
     setError('')
     setRevealed(null)
+    const report = onError ?? setError
     try {
       const result = await operation()
       if (result.ok) {
         setStatus(result.value)
         return true
       }
-      setError(result.error)
+      report(result.error)
     } catch (reason) {
-      setError(failure(reason, 'ModelBridge operation failed.'))
+      report(failure(reason, 'ModelBridge operation failed.'))
     } finally {
       setBusy(false)
     }

@@ -152,6 +152,35 @@ test('stale previews and external provider edits cannot overwrite newer settings
   )
   expect(service.status().effective.model).toBe(models[1].id)
 })
+test('status reports when the active Codex model list or default model no longer matches the sources', async () => {
+  const { service } = await fixture()
+  expect(service.status(models)).toMatchObject({
+    catalogStale: false,
+    missingModel: false,
+  })
+  await service.apply(service.preview('GPT', models[0].id, models, url).id)
+  expect(service.status(models)).toMatchObject({
+    catalogStale: false,
+    missingModel: false,
+  })
+  expect(service.status()).toMatchObject({
+    catalogStale: false,
+    missingModel: false,
+  })
+  expect(service.status([models[0]])).toMatchObject({
+    catalogStale: true,
+    missingModel: false,
+  })
+  expect(service.status([models[1]])).toMatchObject({
+    catalogStale: true,
+    missingModel: true,
+  })
+  await service.apply(service.restore().id)
+  expect(service.status([models[1]])).toMatchObject({
+    catalogStale: false,
+    missingModel: false,
+  })
+})
 test('concurrent Codex writes are rejected instead of interleaving', async () => {
   const { service } = await fixture()
   const first = service.preview('First', models[0].id, models, url)

@@ -2,6 +2,8 @@ import type { AppStatus, Result } from './types'
 
 export type Run = (
   operation: () => Promise<Result<AppStatus>>,
+  // Shows the failure next to the control instead of the page-level alert.
+  onError?: (message: string) => void,
 ) => Promise<boolean>
 
 export function sharedModelIds(status: AppStatus) {
