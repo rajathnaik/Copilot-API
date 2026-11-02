@@ -8,7 +8,9 @@ const api: ModelBridgeAPI = {
     ipcRenderer.invoke('modelbridge:share-source', { sourceId, shared }),
   localKey: () => ipcRenderer.invoke('modelbridge:local-key'),
   remoteKey: () => ipcRenderer.invoke('modelbridge:remote-key'),
-  loginTunnel: () => ipcRenderer.invoke('modelbridge:tunnel-login'),
+  loginTunnel: (provider) =>
+    ipcRenderer.invoke('modelbridge:tunnel-login', provider),
+  checkTunnelLogin: () => ipcRenderer.invoke('modelbridge:tunnel-check-login'),
   startSharing: () => ipcRenderer.invoke('modelbridge:sharing-start'),
   stopSharing: () => ipcRenderer.invoke('modelbridge:sharing-stop'),
   loginCopilot: (label, shared) =>

@@ -7,22 +7,22 @@ The new desktop structure retains the original Copilot API's direct
 authentication, token exchange, forwarding and protocol translations.
 **There is no Copilot SDK integration.**
 
-**Development pre-release: 0.1.0-dev.3.**
+**Development pre-release: 0.1.0-dev.4.**
 
 Download the unsigned Windows installer from the
-[ModelBridge development release](https://github.com/rajathnaik/Copilot-API/releases/tag/modelbridge-v0.1.0-dev.3):
+[ModelBridge development release](https://github.com/rajathnaik/Copilot-API/releases/tag/modelbridge-v0.1.0-dev.4):
 
-- [Windows installer](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.0-dev.3/ModelBridge.Setup.0.1.0-dev.3.exe)
-- [SHA256 checksum](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.0-dev.3/ModelBridge.Setup.0.1.0-dev.3.exe.sha256)
+- [Windows installer](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.0-dev.4/ModelBridge.Setup.0.1.0-dev.4.exe)
+- [SHA256 checksum](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.0-dev.4/ModelBridge.Setup.0.1.0-dev.4.exe.sha256)
 
-Compare `Get-FileHash .\ModelBridge.Setup.0.1.0-dev.3.exe -Algorithm SHA256`
+Compare `Get-FileHash .\ModelBridge.Setup.0.1.0-dev.4.exe -Algorithm SHA256`
 with the downloaded checksum before running the installer. Windows may warn
 about an unknown publisher because this development build is not code-signed.
 Use the same installer on the host and client machines.
 
 To build the unsigned Windows development installer locally, run
 `bun run --cwd apps/modelbridge package:win`. Its output is
-`apps/modelbridge/release/ModelBridge.Setup.0.1.0-dev.3.exe`. This is a test
+`apps/modelbridge/release/ModelBridge.Setup.0.1.0-dev.4.exe`. This is a test
 candidate, not a verified production release; installation/upgrade/uninstall
 and the real two-machine acceptance test are still pending.
 
@@ -195,7 +195,52 @@ URL and **ModelBridge host access key**. That does not mean the API is
 unauthenticated. Local-client and remote-host keys are separate, and the
 remote listener exposes only sources explicitly selected for sharing.
 
-The host needs Microsoft's separately installed CLI and a Microsoft sign-in.
+The host needs Microsoft's separately installed CLI and a one-time Dev Tunnels
+sign-in. Dev Tunnels accepts a **GitHub account** (for example, the one you use
+for Copilot; `devtunnel user login -g -d`) or a **Microsoft account**
+(`devtunnel user login -d`). ModelBridge shows the account the CLI is already
+signed in with (`devtunnel user show`), so you only sign in again to switch
+accounts or after the CLI's sign-in expires. This sign-in only lets the host
+own the tunnel; it is separate from the Copilot sign-in, and clients never sign
+in to Dev Tunnels.
+
+The host shows **Waiting for approval...**, **Checking sign-in...**, then a
+disabled **Signed in** button with the account name and provider. The CLI
+reports device-login completion; ModelBridge then runs `devtunnel user show`
+to verify it. No browser callback URL is required. The UI refreshes every two
+seconds. **I've signed in - check status** (or **Check sign-in status**) repeats
+that verification manually, including after signing in outside the app. It
+does not assume success from the button click. A failed check displays the
+error rather than claiming the account is signed out or signed in. Signing in
+does not start sharing: **Enable remote access** remains a separate action.
+Copilot also uses device authorization: ModelBridge polls for approval and
+confirms **Signed in** after saving the connection and discovering models.
+
+```mermaid
+flowchart TD
+  Host[Host: ModelBridge] --> Copilot[Authorize GitHub Copilot]
+  Copilot --> Poll[ModelBridge checks device approval]
+  Poll --> Models[Copilot connection saved and models discovered]
+  Host --> Account{Dev Tunnels account already signed in?}
+  Account -->|Yes| Verified[Verify with devtunnel user show]
+  Account -->|No| Choice[Choose GitHub OR Microsoft, not both]
+  Choice --> Browser[Approve device code in browser]
+  Browser --> CLI[CLI reports login completion]
+  CLI --> Verified
+  Manual[I've signed in - check status] --> Verified
+  Verified -->|Account confirmed| Signed[Show Signed in and account identity]
+  Verified -->|Not signed in or check failed| Retry[Show waiting, signed-out status or error; retry]
+  Models --> Share[Click Enable remote access]
+  Signed --> Share
+  Share --> Tunnel[Reuse this installation's tunnel; start hosting]
+  Tunnel --> Client[Client: paste host URL and access key; configure Codex]
+```
+
+The same GitHub account can perform both authorizations, but they grant access
+to different services and use separate credentials. A Microsoft account is
+optional, not an additional requirement. Signing in to Dev Tunnels alone does
+not grant access to Copilot or confirm that sharing is running.
+
 The installer's host prerequisite page checks the CLI and links to manual
 installation instructions; ModelBridge offers device-code sign-in but does not
 install software automatically. The client does not need this CLI. Both the

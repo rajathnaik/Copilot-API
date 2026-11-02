@@ -286,8 +286,8 @@ export default function App() {
                 forwards requests directly, following the original gateway.
               </p>
               {copilotSources.length > 0 && (
-                <p>
-                  Connected:{' '}
+                <p role="status">
+                  Signed in to Copilot:{' '}
                   {copilotSources
                     .map(
                       (source) =>
@@ -299,7 +299,7 @@ export default function App() {
               <div className="actions">
                 <button
                   className="primary"
-                  disabled={busy || !!copilotLogin}
+                  disabled={busy || !!copilotLogin || copilotSources.length > 0}
                   onClick={() =>
                     void run(() =>
                       window.modelbridge.loginCopilot(
@@ -309,10 +309,27 @@ export default function App() {
                     )
                   }
                 >
-                  {copilotSources.length ?
-                    'Sign in again'
+                  {copilotLogin ?
+                    'Waiting for GitHub approval...'
+                  : copilotSources.length ?
+                    'Signed in'
                   : 'Sign in and discover models'}
                 </button>
+                {copilotSources.length > 0 && (
+                  <button
+                    disabled={busy || !!copilotLogin}
+                    onClick={() =>
+                      void run(() =>
+                        window.modelbridge.loginCopilot(
+                          'My Copilot subscription',
+                          true,
+                        ),
+                      )
+                    }
+                  >
+                    Sign in again
+                  </button>
+                )}
                 {copilotLogin && (
                   <button
                     disabled={busy}
@@ -326,7 +343,7 @@ export default function App() {
               </div>
               {copilotLogin && (
                 <div className="login">
-                  <p>
+                  <p role="status">
                     Enter <strong>{copilotLogin.code}</strong> at{' '}
                     <code>{copilotLogin.url}</code>. Discovery continues
                     automatically.
@@ -353,23 +370,86 @@ export default function App() {
             <section>
               <h2>2. Enable remote access</h2>
               <p className="muted">
-                Microsoft Dev Tunnels provides the HTTPS URL. Only sources
-                marked for sharing are exposed, and clients need the host access
-                key. Hosting requires the separately installed Dev Tunnels CLI;
-                client-only machines do not.
+                Microsoft Dev Tunnels provides the HTTPS URL. Sign in to Dev
+                Tunnels once on this host, with the GitHub account you use for
+                Copilot or a Microsoft account, not both. This authorizes the
+                tunnel, separately from access to your Copilot models. Client
+                machines never sign in; they only need the URL and the host
+                access key. Only sources marked for sharing are exposed. Hosting
+                requires the separately installed Dev Tunnels CLI; client-only
+                machines do not.
               </p>
+              <p role="status">
+                {status.tunnelSigningIn ?
+                  'Dev Tunnels: waiting for browser approval...'
+                : status.tunnelUserChecking ?
+                  'Dev Tunnels: checking sign-in...'
+                : status.tunnelAccountError ?
+                  'Dev Tunnels: sign-in could not be confirmed.'
+                : status.tunnelUser ?
+                  <>
+                    Dev Tunnels: signed in as{' '}
+                    <strong>{status.tunnelUser.name}</strong> using{' '}
+                    {status.tunnelUser.provider}.
+                  </>
+                : 'Dev Tunnels: not signed in.'}
+              </p>
+              {status.tunnelAccountError && (
+                <p role="alert" className="error">
+                  {status.tunnelAccountError}
+                </p>
+              )}
               <div className="actions">
+                {status.tunnelSigningIn || status.tunnelUserChecking ?
+                  <button disabled>
+                    {status.tunnelSigningIn ?
+                      'Waiting for approval...'
+                    : 'Checking sign-in...'}
+                  </button>
+                : status.tunnelUser && !status.tunnelAccountError ?
+                  <button disabled>Signed in</button>
+                : <>
+                    <button
+                      className="primary"
+                      disabled={busy || status.sharing}
+                      onClick={() =>
+                        void run(() => window.modelbridge.loginTunnel('github'))
+                      }
+                    >
+                      Sign in with GitHub
+                    </button>
+                    <button
+                      disabled={busy || status.sharing}
+                      onClick={() =>
+                        void run(() =>
+                          window.modelbridge.loginTunnel('microsoft'),
+                        )
+                      }
+                    >
+                      Sign in with Microsoft
+                    </button>
+                  </>
+                }
                 <button
-                  disabled={busy}
+                  disabled={busy || status.tunnelUserChecking}
                   onClick={() =>
-                    void run(() => window.modelbridge.loginTunnel())
+                    void run(() => window.modelbridge.checkTunnelLogin())
                   }
                 >
-                  Sign in to Dev Tunnels
+                  {status.tunnelSigningIn ?
+                    "I've signed in - check status"
+                  : 'Check sign-in status'}
                 </button>
                 <button
-                  className="primary"
-                  disabled={busy}
+                  className={status.tunnelUser ? 'primary' : undefined}
+                  disabled={
+                    busy
+                    || (!status.sharing
+                      && (status.tunnelSigningIn
+                        || status.tunnelUserChecking
+                        || !status.tunnelUser
+                        || !!status.tunnelAccountError))
+                  }
                   onClick={() =>
                     void run(() =>
                       status.sharing ?
@@ -381,12 +461,70 @@ export default function App() {
                   {status.sharing ? 'Stop sharing' : 'Enable remote access'}
                 </button>
               </div>
+              {status.tunnelUser
+                && !status.tunnelSigningIn
+                && !status.tunnelUserChecking && (
+                  <details>
+                    <summary>Change Dev Tunnels account</summary>
+                    <p className="muted">
+                      Stop sharing before changing accounts. A different account
+                      might not own this installation's tunnel.
+                    </p>
+                    <div className="actions">
+                      <button
+                        disabled={busy || status.sharing}
+                        onClick={() =>
+                          void run(() =>
+                            window.modelbridge.loginTunnel('github'),
+                          )
+                        }
+                      >
+                        Switch to a GitHub account
+                      </button>
+                      <button
+                        disabled={busy || status.sharing}
+                        onClick={() =>
+                          void run(() =>
+                            window.modelbridge.loginTunnel('microsoft'),
+                          )
+                        }
+                      >
+                        Switch to a Microsoft account
+                      </button>
+                    </div>
+                  </details>
+                )}
               {status.login && (
-                <p className="login">
-                  Enter <strong>{status.login.code}</strong> at{' '}
-                  <code>{status.login.url}</code>. Status refreshes
-                  automatically after sign-in.
-                </p>
+                <div className="login">
+                  <p role="status">
+                    Enter <strong>{status.login.code}</strong> at{' '}
+                    <code>{status.login.url}</code>. Status refreshes
+                    automatically after the CLI confirms sign-in. If it has not
+                    updated after browser approval, use "I've signed in - check
+                    status"; this verifies the account with the CLI.
+                  </p>
+                  <button
+                    onClick={() => {
+                      const url = status.login?.url
+                      if (!url) return
+                      void window.modelbridge
+                        .openLogin(url)
+                        .then((result) => {
+                          if (!result.ok) setError(result.error)
+                        })
+                        .catch((failure: unknown) =>
+                          setError(
+                            message(
+                              failure,
+                              'Could not open the sign-in page.',
+                            ),
+                          ),
+                        )
+                    }}
+                  >
+                    Open sign-in page
+                  </button>
+                </div>
               )}
             </section>
             {status.sharing && (

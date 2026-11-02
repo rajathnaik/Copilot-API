@@ -7,6 +7,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { PassThrough } from 'node:stream'
 import {
+  parseTunnelUser,
   refreshRegistryPath,
   resolveDevTunnelExecutable,
   TunnelProcess,
@@ -55,6 +56,7 @@ test('tunnel CLI lifecycle reports device login, readiness, replacement, failure
     }
   > = []
   let commandError: Error | { code: number } | null = null
+  const spawned: string[][] = []
   const transport = new TunnelProcess({
     command: () => {
       if (commandError instanceof Error) return Promise.reject(commandError)
@@ -63,7 +65,8 @@ test('tunnel CLI lifecycle reports device login, readiness, replacement, failure
         output: 'output',
       })
     },
-    spawn: () => {
+    spawn: (args) => {
+      spawned.push(args)
       const stdout = new PassThrough()
       const stderr = new PassThrough()
       const events = new EventEmitter()
@@ -102,6 +105,7 @@ test('tunnel CLI lifecycle reports device login, readiness, replacement, failure
     await expect(transport.command(['show'])).rejects.toThrow('cannot launch')
     commandError = null
     transport.beginLogin()
+    expect(spawned.at(-1)).toEqual(['user', 'login', '-g', '-d'])
     expect(() => transport.beginLogin()).toThrow('already')
     child().stdout.emit(
       'data',
@@ -114,7 +118,8 @@ test('tunnel CLI lifecycle reports device login, readiness, replacement, failure
     expect(transport.login?.code).toBe('ABCD-1234')
     child().emit('close', 0)
     expect(transport.login).toBeNull()
-    transport.beginLogin()
+    transport.beginLogin('microsoft')
+    expect(spawned.at(-1)).toEqual(['user', 'login', '-d'])
     expire()
     expect(transport.error).toBe('Tunnel sign-in timed out.')
     transport.beginLogin()
@@ -131,6 +136,7 @@ test('tunnel CLI lifecycle reports device login, readiness, replacement, failure
     child().stdout.emit('data', Buffer.from('Ready to accept connections\n'))
     await started
     expect(transport.running).toBe(true)
+    expect(() => transport.beginLogin()).toThrow('Stop sharing')
     await transport.stop()
     expect(stopped).toBe(0)
     started = transport.start('owned')
@@ -156,6 +162,142 @@ test('tunnel CLI lifecycle reports device login, readiness, replacement, failure
     await transport.dispose()
     timerSpy.mockRestore()
     for (const timer of timers) clearTimeout(timer)
+  }
+})
+
+test('the signed-in Dev Tunnels account is detected and refreshed after sign-in', async () => {
+  expect(parseTunnelUser('Logged in as octocat using GitHub.')).toEqual({
+    name: 'octocat',
+    provider: 'GitHub',
+  })
+  expect(parseTunnelUser('Not logged in.')).toBeNull()
+  let reply: Error | { code: number; output: string } = {
+    code: 0,
+    output: 'Not logged in.',
+  }
+  const commands: string[][] = []
+  const children: EventEmitter[] = []
+  const transport = new TunnelProcess({
+    command: (args) => {
+      commands.push(args)
+      return reply instanceof Error ?
+          Promise.reject(reply)
+        : Promise.resolve(reply)
+    },
+    spawn: () => {
+      const events = new EventEmitter()
+      children.push(events)
+      return Object.assign(events, {
+        stdout: new PassThrough(),
+        stderr: new PassThrough(),
+        exitCode: null,
+        kill: () => true,
+      })
+    },
+  })
+  try {
+    expect(await transport.refreshUser()).toBeNull()
+    expect(commands.at(-1)).toEqual(['user', 'show'])
+    reply = {
+      code: 0,
+      output: 'Logged in as user@example.com using Microsoft.',
+    }
+    expect(await transport.refreshUser()).toEqual({
+      name: 'user@example.com',
+      provider: 'Microsoft',
+    })
+    reply = new Error('Install the Microsoft Dev Tunnels CLI')
+    await expect(transport.refreshUser()).rejects.toThrow('Install')
+    expect(transport.user).toBeNull()
+    expect(transport.accountError).toContain('Install')
+    expect(transport.checkingUser).toBe(false)
+    reply = { code: 1, output: 'network unavailable' }
+    await expect(transport.refreshUser()).rejects.toThrow('network unavailable')
+    expect(transport.accountError).toContain('network unavailable')
+    reply = { code: 0, output: 'unknown response' }
+    await expect(transport.refreshUser()).rejects.toThrow('unrecognized')
+    expect(transport.accountError).toContain('could not be confirmed')
+    reply = { code: 0, output: 'Logged in as octocat using GitHub.' }
+    transport.beginLogin('github')
+    expect(transport.signingIn).toBe(true)
+    expect(transport.accountError).toBeNull()
+    children.at(-1)?.emit('close', 0)
+    await new Promise(setImmediate)
+    expect(transport.user).toEqual({ name: 'octocat', provider: 'GitHub' })
+    expect(transport.signingIn).toBe(false)
+    expect(transport.checkingUser).toBe(false)
+    reply = { code: 0, output: 'Not logged in.' }
+    transport.beginLogin()
+    children.at(-1)?.emit('close', 0)
+    await new Promise(setImmediate)
+    expect(transport.accountError).toContain('no signed-in account')
+    reply = new Error('status command unavailable')
+    transport.beginLogin()
+    children.at(-1)?.emit('close', 0)
+    await new Promise(setImmediate)
+    expect(transport.accountError).toBe('status command unavailable')
+    reply = { code: 0, output: 'Logged in as octocat using GitHub.' }
+    expect(await transport.refreshUser()).toEqual({
+      name: 'octocat',
+      provider: 'GitHub',
+    })
+    expect(transport.accountError).toBeNull()
+    transport.beginLogin()
+    const before = commands.length
+    children.at(-1)?.emit('close', 1)
+    await new Promise(setImmediate)
+    expect(transport.user).toBeNull()
+    expect(commands).toHaveLength(before)
+    expect(transport.error).toContain('did not complete')
+  } finally {
+    await transport.dispose()
+  }
+})
+
+test('a late account check cannot overwrite a completed login or a newer manual check', async () => {
+  const resolvers: Array<(value: { code: number; output: string }) => void> = []
+  let child = new EventEmitter()
+  const transport = new TunnelProcess({
+    command: () => new Promise((resolve) => resolvers.push(resolve)),
+    spawn: () => {
+      child = new EventEmitter()
+      return Object.assign(child, {
+        stdout: new PassThrough(),
+        stderr: new PassThrough(),
+        exitCode: null,
+        kill: () => true,
+      })
+    },
+  })
+  const resolveCheck = (index: number, output: string) => {
+    const resolve = resolvers[index]
+    if (!resolve) throw new Error('Missing account check.')
+    resolve({ code: 0, output })
+  }
+  try {
+    const startup = transport.refreshUser()
+    expect(transport.checkingUser).toBe(true)
+    transport.beginLogin()
+    expect(transport.checkingUser).toBe(false)
+    child.emit('close', 0)
+    expect(transport.checkingUser).toBe(true)
+    resolveCheck(1, 'Logged in as octocat using GitHub.')
+    await new Promise(setImmediate)
+    resolveCheck(0, 'Not logged in.')
+    await startup
+    expect(transport.user?.name).toBe('octocat')
+    const first = transport.refreshUser()
+    const second = transport.refreshUser()
+    resolveCheck(2, 'Not logged in.')
+    await first
+    expect(transport.checkingUser).toBe(true)
+    expect(transport.user?.name).toBe('octocat')
+    resolveCheck(3, 'Logged in as another-user using Microsoft.')
+    await second
+    expect(transport.user?.name).toBe('another-user')
+    expect(transport.checkingUser).toBe(false)
+  } finally {
+    await transport.dispose()
   }
 })
 

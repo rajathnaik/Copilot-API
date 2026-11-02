@@ -135,16 +135,36 @@ const launcher: TunnelLauncher = {
     spawn(resolveDevTunnelExecutable(), args, { windowsHide: true }),
 }
 
+export type TunnelLoginProvider = 'github' | 'microsoft'
+export interface TunnelUser {
+  name: string
+  provider: string
+}
+
+/** Parses `devtunnel user show`, e.g. "Logged in as octocat using GitHub." */
+export function parseTunnelUser(output: string): TunnelUser | null {
+  const match = /Logged in as (\S+) using (\w+)/iu.exec(output)
+  return match ? { name: match[1], provider: match[2] } : null
+}
+
 export class TunnelProcess {
   private host: TunnelChild | null = null
   private loginProcess: TunnelChild | null = null
   login: { url: string; code: string } | null = null
+  user: TunnelUser | null = null
+  checkingUser = false
+  accountError: string | null = null
+  private accountCheck = 0
   error: string | null = null
   running = false
   private stopping = false
   onUnexpectedStop: (() => void) | null = null
 
   constructor(private readonly processLauncher: TunnelLauncher = launcher) {}
+
+  get signingIn(): boolean {
+    return this.loginProcess !== null
+  }
 
   /** Refreshes CLI discovery off the main thread before a user-initiated tunnel action. */
   async prepare(): Promise<void> {
@@ -155,12 +175,53 @@ export class TunnelProcess {
     return this.processLauncher.command(args)
   }
 
-  beginLogin(): void {
+  async refreshUser(): Promise<TunnelUser | null> {
+    const check = ++this.accountCheck
+    this.checkingUser = true
+    this.accountError = null
+    try {
+      const result = await this.processLauncher.command(['user', 'show'])
+      if (result.code !== 0)
+        throw new Error(
+          `Could not check Dev Tunnels sign-in: ${result.output.trim() || `CLI exited with code ${result.code}.`}`,
+        )
+      const user = parseTunnelUser(result.output)
+      if (!user && !/^\s*Not logged in\.?\s*$/iu.test(result.output))
+        throw new Error(
+          'Dev Tunnels returned an unrecognized account response. Sign-in could not be confirmed.',
+        )
+      if (check === this.accountCheck) this.user = user
+      return user
+    } catch (error) {
+      if (check === this.accountCheck) {
+        this.user = null
+        this.accountError =
+          error instanceof Error ?
+            error.message
+          : 'Could not check Dev Tunnels sign-in.'
+      }
+      throw error
+    } finally {
+      if (check === this.accountCheck) this.checkingUser = false
+    }
+  }
+
+  beginLogin(provider: TunnelLoginProvider = 'github'): void {
     if (this.loginProcess)
       throw new Error('A tunnel sign-in is already in progress.')
+    if (this.host)
+      throw new Error('Stop sharing before changing the Dev Tunnels account.')
     this.error = null
-    const child = this.processLauncher.spawn(['user', 'login', '-d'])
+    const child = this.processLauncher.spawn(
+      provider === 'github' ?
+        ['user', 'login', '-g', '-d']
+      : ['user', 'login', '-d'],
+    )
     this.loginProcess = child
+    this.accountCheck++
+    this.checkingUser = false
+    this.accountError = null
+    this.user = null
     let output = ''
     const timer = setTimeout(() => {
       this.error = 'Tunnel sign-in timed out.'
@@ -183,8 +244,24 @@ export class TunnelProcess {
       clearTimeout(timer)
       this.loginProcess = null
       this.login = null
-      if (code !== 0 && !this.error)
-        this.error = 'Microsoft Dev Tunnels sign-in did not complete.'
+      if (code !== 0 || this.error) {
+        this.error ??= 'Microsoft Dev Tunnels sign-in did not complete.'
+        return
+      }
+      const check = this.accountCheck + 1
+      void this.refreshUser()
+        .then((user) => {
+          if (!user && check === this.accountCheck)
+            this.accountError =
+              'Sign-in finished, but Dev Tunnels reports no signed-in account. Try signing in again, then check sign-in status.'
+        })
+        .catch((error: unknown) => {
+          if (check === this.accountCheck)
+            this.accountError =
+              error instanceof Error ?
+                error.message
+              : 'Could not confirm Dev Tunnels sign-in.'
+        })
     })
   }
 

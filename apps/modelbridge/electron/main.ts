@@ -72,6 +72,7 @@ const channels = [
   'modelbridge:add-source',
   'modelbridge:share-source',
   'modelbridge:tunnel-login',
+  'modelbridge:tunnel-check-login',
   'modelbridge:sharing-start',
   'modelbridge:sharing-stop',
 ] as const
@@ -176,6 +177,11 @@ async function initialize(): Promise<void> {
   )
   let codexVerified = false
   let sharingBusy = false
+  const refreshTunnelUser = () =>
+    transport.refreshUser().catch((error: unknown) => {
+      log('tunnel account check failed', describeError(error))
+    })
+  void refreshTunnelUser()
   transport.onUnexpectedStop = () => {
     const server = remoteServer
     remoteServer = null
@@ -203,6 +209,10 @@ async function initialize(): Promise<void> {
     remoteUrl: transport.running ? remoteUrl : null,
     transportError: transport.error,
     login: transport.login,
+    tunnelUser: transport.user,
+    tunnelUserChecking: transport.checkingUser,
+    tunnelSigningIn: transport.signingIn,
+    tunnelAccountError: transport.accountError,
     copilotLogin,
     copilotError,
   })
@@ -339,9 +349,14 @@ async function initialize(): Promise<void> {
     sources.setShared(value.sourceId, value.shared)
     return snapshot()
   })
-  handle('modelbridge:tunnel-login', async () => {
+  handle('modelbridge:tunnel-login', async (input) => {
+    const provider = z.enum(['github', 'microsoft']).parse(input)
     await transport.prepare()
-    transport.beginLogin()
+    transport.beginLogin(provider)
+    return snapshot()
+  })
+  handle('modelbridge:tunnel-check-login', async () => {
+    await transport.refreshUser()
     return snapshot()
   })
   handle('modelbridge:sharing-start', async () => {
@@ -376,6 +391,7 @@ async function initialize(): Promise<void> {
       await transport.stop()
       await closeServer(remoteServer)
       remoteServer = null
+      void refreshTunnelUser()
       throw error
     } finally {
       sharingBusy = false

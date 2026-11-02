@@ -19,6 +19,10 @@ export interface AppStatus {
   remoteUrl: string | null
   transportError: string | null
   login: { url: string; code: string } | null
+  tunnelUser: { name: string; provider: string } | null
+  tunnelUserChecking: boolean
+  tunnelSigningIn: boolean
+  tunnelAccountError: string | null
   copilotLogin: CopilotLogin | null
   copilotError: string | null
 }
@@ -31,7 +35,8 @@ export interface ModelBridgeAPI {
   shareSource(sourceId: string, shared: boolean): Promise<Result<AppStatus>>
   localKey(): Promise<Result<string>>
   remoteKey(): Promise<Result<string>>
-  loginTunnel(): Promise<Result<AppStatus>>
+  loginTunnel(provider: 'github' | 'microsoft'): Promise<Result<AppStatus>>
+  checkTunnelLogin(): Promise<Result<AppStatus>>
   startSharing(): Promise<Result<AppStatus>>
   stopSharing(): Promise<Result<AppStatus>>
   loginCopilot(label: string, shared: boolean): Promise<Result<AppStatus>>

@@ -66,7 +66,7 @@ export class DevTunnels {
     if (shown.code !== 0) {
       if (!/Tunnel not found/iu.test(shown.output))
         throw new Error(
-          'Cannot inspect the owned tunnel. Sign in or check network access; no new tunnel was created.',
+          'Cannot inspect the owned tunnel. Sign in to Dev Tunnels with GitHub or Microsoft, or check network access; no new tunnel was created.',
         )
       await this.run(['create', this.id, '--allow-anonymous'])
       shown = { code: 0, output: await this.run(['show', this.id, '-j']) }
