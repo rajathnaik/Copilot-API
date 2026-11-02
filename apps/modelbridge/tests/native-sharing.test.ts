@@ -108,7 +108,8 @@ test.skipIf(
         await invoke('window.modelbridge.addSource(' + JSON.stringify(source) + ')')
         await invoke('window.modelbridge.addSource(' + JSON.stringify({...source,label:'Private source',shared:false}) + ')')
         const failure = await window.webContents.executeJavaScript('window.modelbridge.startSharing()')
-        if (failure.ok || !failure.error.includes('invalid Dev Tunnels URL')) throw new Error('Invalid host URL did not fail explicitly')
+        if (failure.ok || !failure.error.includes('invalid Dev Tunnels URL'))
+          throw new Error('Expected invalid host URL rejection, received: ' + JSON.stringify(failure))
         let status = await invoke('window.modelbridge.status()')
         if (status.sharing || status.remoteUrl) throw new Error('Failed host claimed sharing readiness')
         const stopped = await fetch('http://127.0.0.1:4322/v1/models').then(() => false, () => true)
@@ -142,10 +143,12 @@ test.skipIf(
     )
     const env: NodeJS.ProcessEnv = {
       ...process.env,
-      PATH: directory,
       MODELBRIDGE_PORT: '0',
       CODEX_HOME: path.join(directory, 'codex-home'),
     }
+    for (const key of Object.keys(env))
+      if (key.toLowerCase() === 'path') delete env[key]
+    env.PATH = directory
     delete env.ELECTRON_RUN_AS_NODE
     const child = Bun.spawn({
       cmd: [electron, directory, `--user-data-dir=${profile}`],
