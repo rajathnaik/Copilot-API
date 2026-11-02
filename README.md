@@ -26,6 +26,84 @@ To build the unsigned Windows development installer locally, run
 candidate, not a verified production release; installation/upgrade/uninstall
 and the real two-machine acceptance test are still pending.
 
+## Unreleased host improvements
+
+These changes are in source; the dev.5 installer linked above does not include
+them yet.
+
+- Copilot discovery and inference now advertise the original Gateway's
+  `vscode/1.139.1` compatibility version instead of the unsupported `1.109.0`.
+  This addresses the reported HTTP 466 requirement for `1.109.2+`. The value
+  belongs to ModelBridge's outgoing requests: updating locally installed VS Code
+  does not change it. Live subscription inference still requires verification.
+- **Sources & models** lets you share all models or only selected models from
+  each source. Expand **Model access** to choose a mode, select all current
+  models, clear the selection, filter, or toggle individual models. The Host
+  tab shows the shared-model count and links to these controls.
+
+The policy applies to **all clients using the existing host key**. It restricts
+both model catalogs and direct inference routes, so knowing a hidden model's ID
+does not grant access. Local host tools retain access to every discovered model.
+Changes affect new requests immediately; they do not cancel requests already
+forwarded upstream. A client's cached catalog or Codex configuration may still
+show a revoked model, but the host rejects its requests until access is restored
+or another allowed model is chosen.
+
+**All models** includes future discoveries automatically. **Only selected
+models** retains the selection across restarts and refreshes; newly discovered
+models remain private. An empty selection shares no models from that source.
+Pausing **Share remotely** preserves the selection. Existing profiles without a
+selection retain their previous all-model behavior. Each source's summary and
+the model table show the effective remote access.
+
+### Full model capabilities in every harness
+
+Web search now works for every Copilot model, not only GPT models:
+
+- **GPT models** (served by Copilot's Responses API) keep using Copilot's own
+  hosted `web_search` tool unchanged.
+- **Claude and other Messages/chat-only models** cannot use that hosted tool, so
+  ModelBridge offers them an equivalent `web_search` function. When the model
+  calls it, the host runs the query on a GPT model through Copilot's hosted web
+  search, returns the answer with its source list to the model, and continues the
+  turn. Codex sees standard `web_search_call` items with the query and sources.
+  When the model also requests client tools in the same turn, the response ends
+  after the searches so Codex can run those tools; the search results are kept
+  on the host for 24 hours (up to 500) so replayed history stays complete.
+- Each turn allows up to 8 searches. Each search and each continuation request
+  gets its own 120-second limit, so a multi-step search turn is not cut short.
+  A failed or timed-out search is reported to the model as a failed
+  `web_search_call` rather than ending the turn; a failure while continuing
+  after a search fails the response explicitly. The reported token usage is the
+  final request's, which matches the conversation's real context size.
+- **Sources & models** shows a **Web search model** for each Copilot source.
+  **Auto** uses the newest full-size GPT model available (mini, nano and codex
+  variants only when nothing else exists); you can pin a specific model instead.
+  Searches run on the host, so the search model does not need to be shared with
+  clients, and they count against the same Copilot subscription.
+
+Codex catalogs also gained parity with the original Gateway: Codex-native
+instructions (switching to compact instructions for every model, rather than
+dropping models, when the catalog would exceed 1 MiB), discovered image input,
+reasoning summaries, parallel tool calls, maximum output tokens and freeform
+`apply_patch`. These capabilities are preserved across a remote host hop.
+Before forwarding, the host removes tools Copilot rejects (`image_generation`),
+strips client-only metadata, normalizes invalid image detail values and replaces
+images larger than the model's advertised limit with a short note.
+
+Live verification against a real subscription is still pending for the proxied
+search path.
+
+### Next phase: restore Gateway visibility
+
+The unified app must keep the original Gateway's operational value, not just
+connection setup. The next phase will adapt its token-usage collection,
+persistence, history, model breakdowns, pricing provenance and Copilot quota
+displays to the current runtime, then provide focused Host operations and Client
+configuration views in the same application. Usage/cost dashboards are **not
+restored in this phase**. Estimated costs, provider-reported costs and subscription
+quota must remain distinct; unavailable usage must not be presented as zero.
+
 ## Current implementation
 
 - One Electron desktop application with its own Windows identity:
@@ -43,8 +121,8 @@ and the real two-machine acceptance test are still pending.
   OpenAI-style `/v1/models`. It exposes Responses models only, includes the
   required model instructions, preserves explicit tool/context capabilities
   across remote hops, supports ETag refresh, and enforces Codex's 1 MiB limit.
-- Independently selected sources for sharing through a separate authenticated
-  listener on `127.0.0.1:4322`.
+- Independently selected sources and models for sharing through a separate
+  authenticated listener on `127.0.0.1:4322` (model selection is unreleased).
 - Credentials (access keys and the Copilot sign-in token) are stored
   **unencrypted** in `%APPDATA%\ModelBridge\credentials.json`, protected only
   by your Windows user account. This is a deliberate simplification for a

@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto'
 test.skipIf(
   !process.env.MODELBRIDGE_TEST_ELECTRON || process.platform !== 'win32',
 )(
-  'fresh native ModelBridge profile serves authenticated inference and survives a full process restart',
+  'fresh native ModelBridge profile serves authenticated inference and preserves model selections across a full process restart',
   async () => {
     const electron = process.env.MODELBRIDGE_TEST_ELECTRON
     if (!electron) throw new Error('Set MODELBRIDGE_TEST_ELECTRON.')
@@ -97,6 +97,9 @@ test.skipIf(
         if (fresh) status = await invoke('window.modelbridge.addSource(' + JSON.stringify({
           label: 'Synthetic API', kind:'api', baseUrl:endpoint, protocol:'responses', apiKey:sourceKey, shared:false
         }) + ')')
+        if (fresh) status = await invoke('window.modelbridge.shareSource(' + JSON.stringify(status.sources[0].id) + ',false,["synthetic-native-model"])')
+        if (JSON.stringify(status.sources[0].sharedModelIds) !== '["synthetic-native-model"]' || status.sources[0].shared)
+          throw new Error('Model selection or paused sharing did not survive native profile persistence')
         const key = await invoke('window.modelbridge.localKey()')
         const health = await fetch(status.localUrl.replace(/\\/v1$/, '/health'), {headers:{Authorization:'Bearer '+key}})
         const unauthorized = await fetch(status.localUrl + '/models')

@@ -3,6 +3,8 @@ import type { SourceInput } from '@modelbridge/runtime/contracts'
 import type { AppStatus, Result } from './types'
 import icon from '../assets/icon.svg'
 import { CodexPanel } from './CodexPanel'
+import { SourceSharing } from './SourceSharing'
+import { WebSearchModel } from './WebSearchModel'
 
 const initialInput: SourceInput = {
   label: 'Remote Copilot host',
@@ -149,6 +151,19 @@ export default function App() {
     status?.sources.filter((source) => source.kind === 'copilot') ?? []
   const clientSources =
     status?.sources.filter((source) => source.kind !== 'copilot') ?? []
+  const sharedModels = new Set(
+    status?.sources
+      .filter((source) => source.shared)
+      .flatMap((source) =>
+        source.models
+          .filter(
+            (model) =>
+              source.sharedModelIds === undefined
+              || source.sharedModelIds.includes(model.id),
+          )
+          .map((model) => `${source.id}/${model.id}`),
+      ) ?? [],
+  )
   const panel = (id: Tab) => ({
     id: `panel-${id}`,
     role: 'tabpanel',
@@ -379,6 +394,14 @@ export default function App() {
                 requires the separately installed Dev Tunnels CLI; client-only
                 machines do not.
               </p>
+              <div className="actions">
+                <span>
+                  {sharedModels.size} models available to remote clients
+                </span>
+                <button onClick={() => select('sources')}>
+                  Review shared models
+                </button>
+              </div>
               <p role="status">
                 {status.tunnelSigningIn ?
                   'Dev Tunnels: waiting for browser approval...'
@@ -650,6 +673,11 @@ export default function App() {
           <div {...panel('sources')}>
             <section>
               <h2>Sources</h2>
+              <p className="muted">
+                Choose all models or a specific selection for each shared
+                source. Clients can discover and call only the models allowed
+                here, even if they know another model's ID.
+              </p>
               {!status.sources.length && (
                 <p className="muted">
                   No sources yet. Sign in on the Host tab, or connect a host on
@@ -688,6 +716,33 @@ export default function App() {
                     />
                     Share remotely
                   </label>
+                  <SourceSharing
+                    source={source}
+                    busy={busy}
+                    onChange={(modelIds) =>
+                      void run(() =>
+                        window.modelbridge.shareSource(
+                          source.id,
+                          source.shared,
+                          modelIds,
+                        ),
+                      )
+                    }
+                  />
+                  {source.kind === 'copilot' && (
+                    <WebSearchModel
+                      source={source}
+                      busy={busy}
+                      onChange={(modelId) =>
+                        void run(() =>
+                          window.modelbridge.setWebSearchModel(
+                            source.id,
+                            modelId,
+                          ),
+                        )
+                      }
+                    />
+                  )}
                 </div>
               ))}
             </section>
@@ -701,6 +756,7 @@ export default function App() {
                         <th>Model</th>
                         <th>Source</th>
                         <th>Native protocol</th>
+                        <th>Remote client access</th>
                         <th>Qualified model ID</th>
                       </tr>
                     </thead>
@@ -716,6 +772,9 @@ export default function App() {
                             ) ?
                               `${model.protocol} via ${model.upstreamProtocol}`
                             : model.protocol}
+                          </td>
+                          <td>
+                            {sharedModels.has(model.id) ? 'Shared' : 'Private'}
                           </td>
                           <td>
                             <code>{model.id}</code>

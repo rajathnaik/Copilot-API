@@ -478,6 +478,8 @@ function* startContentBlock(
 
   if (block.type === 'tool_use') {
     const descriptor = resolveToolDescriptor(state.context.registry, block.name)
+    if (descriptor.kind === 'web_search')
+      state.context.registry.webSearchCalls.add(block.id)
     const common = {
       call_id: block.id,
       name: descriptor.name,

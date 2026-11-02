@@ -5,7 +5,10 @@ import {
   sourceInputSchema,
   sourceSchema,
   protocolSchema,
-  reasoningEffortSchema,
+  modelCapabilities,
+  modelCapabilitiesSchema,
+  sharingInputSchema,
+  webSearchCandidates,
   type AvailableModel,
   type Credentials,
   type Source,
@@ -59,15 +62,7 @@ const discoverySchema = z.object({
         modelbridge: z
           .object({
             protocol: protocolSchema,
-            upstreamProtocol: protocolSchema.optional(),
-            reasoningEfforts: z.array(reasoningEffortSchema).optional(),
-            supportsTools: z.boolean().optional(),
-            contextWindow: z
-              .number()
-              .int()
-              .positive()
-              .max(2_000_000)
-              .optional(),
+            ...modelCapabilitiesSchema.shape,
           })
           .optional(),
       }),
@@ -136,38 +131,85 @@ export class SourceService {
     return structuredClone(this.sources)
   }
 
-  setShared(id: string, shared: boolean): void {
-    if (!this.sources.some((source) => source.id === id))
-      throw new Error('The selected source does not exist.')
+  setShared(
+    id: string,
+    shared: boolean,
+    sharedModelIds?: string[] | null,
+  ): void {
+    const existing = this.sources.find((source) => source.id === id)
+    if (!existing) throw new Error('The selected source does not exist.')
+    const selection =
+      sharingInputSchema.shape.sharedModelIds.parse(sharedModelIds)
+    if (
+      selection?.some((id) => !existing.models.some((model) => model.id === id))
+    )
+      throw new Error(
+        'Only currently available models from this source may be selected for sharing.',
+      )
     const next = this.sources.map((source) =>
-      source.id === id ? { ...source, shared } : source,
+      source.id === id ?
+        {
+          ...source,
+          shared,
+          ...(selection === undefined ?
+            {}
+          : { sharedModelIds: selection ?? undefined }),
+        }
+      : source,
     )
     this.persist(next)
     this.sources = next
   }
 
-  models(sharedOnly = false): AvailableModel[] {
-    return this.sources
-      .filter((source) => !sharedOnly || source.shared)
-      .flatMap((source) =>
-        source.models.map((model) => ({
-          id: `${source.id}/${model.id}`,
-          name: model.name,
-          sourceId: source.id,
-          sourceLabel: source.label,
-          protocol: model.protocol,
-          upstreamProtocol: model.upstreamProtocol,
-          reasoningEfforts: model.reasoningEfforts,
-          supportsTools: model.supportsTools,
-          contextWindow: model.contextWindow,
-        })),
+  setWebSearchModel(id: string, modelId: string | null): void {
+    const existing = this.sources.find((source) => source.id === id)
+    if (!existing) throw new Error('The selected source does not exist.')
+    if (existing.kind !== 'copilot')
+      throw new Error('Only Copilot sources run proxied web searches.')
+    if (
+      modelId !== null
+      && !webSearchCandidates(existing).some((model) => model.id === modelId)
+    )
+      throw new Error(
+        'Choose a Responses model with tool support from this source for web search.',
       )
+    const next = this.sources.map((source) => {
+      if (source.id !== id) return source
+      const updated = { ...source }
+      if (modelId === null) delete updated.webSearchModelId
+      else updated.webSearchModelId = modelId
+      return updated
+    })
+    this.persist(next)
+    this.sources = next
+  }
+
+  private availableModels(source: Source, sharedOnly: boolean) {
+    if (!sharedOnly) return source.models
+    if (!source.shared) return []
+    return source.models.filter(
+      (model) =>
+        source.sharedModelIds === undefined
+        || source.sharedModelIds.includes(model.id),
+    )
+  }
+
+  models(sharedOnly = false): AvailableModel[] {
+    return this.sources.flatMap((source) =>
+      this.availableModels(source, sharedOnly).map((model) => ({
+        id: `${source.id}/${model.id}`,
+        name: model.name,
+        sourceId: source.id,
+        sourceLabel: source.label,
+        protocol: model.protocol,
+        ...modelCapabilities(model),
+      })),
+    )
   }
 
   resolve(id: string, sharedOnly = false) {
     for (const source of this.sources) {
-      if (sharedOnly && !source.shared) continue
-      const model = source.models.find(
+      const model = this.availableModels(source, sharedOnly).find(
         (candidate) => `${source.id}/${candidate.id}` === id,
       )
       if (model) return { source, model }
@@ -229,10 +271,7 @@ export class SourceService {
           id: model.id,
           name: model.name || model.id,
           protocol: model.modelbridge?.protocol ?? input.protocol,
-          upstreamProtocol: model.modelbridge?.upstreamProtocol,
-          reasoningEfforts: model.modelbridge?.reasoningEfforts,
-          supportsTools: model.modelbridge?.supportsTools,
-          contextWindow: model.modelbridge?.contextWindow,
+          ...(model.modelbridge && modelCapabilities(model.modelbridge)),
         }
       }),
     }

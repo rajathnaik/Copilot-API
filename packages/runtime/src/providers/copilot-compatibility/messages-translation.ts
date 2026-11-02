@@ -119,7 +119,7 @@ export class ResponsesMessagesTranslationError extends Error {
 
 export interface MessagesToolDescriptor {
   alias: string
-  kind: 'custom' | 'function'
+  kind: 'custom' | 'function' | 'web_search'
   name: string
   namespace?: string
 }
@@ -128,6 +128,23 @@ export interface MessagesToolRegistry {
   byAlias: Map<string, MessagesToolDescriptor>
   byOriginal: Map<string, MessagesToolDescriptor>
   tools: Array<AnthropicTool>
+  // Tool-use IDs the model issued against the proxied web search tool.
+  webSearchCalls: Set<string>
+}
+
+// Resolves cached results when Codex replays an earlier web_search_call.
+export type WebSearchResultLookup = (id: string) => string | undefined
+
+const WEB_SEARCH_TOOL_NAME = 'web_search'
+const WEB_SEARCH_TOOL_DESCRIPTION =
+  'Search the public web for current information. Returns a concise answer with source URLs. Use focused queries.'
+const WEB_SEARCH_INPUT_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  properties: {
+    query: { type: 'string', description: 'The web search query.' },
+  },
+  required: ['query'],
+  additionalProperties: false,
 }
 
 export interface ResponsesToMessagesTranslation {
@@ -158,7 +175,12 @@ interface ResponsesInputNormalization {
 
 export function translateResponsesToMessages(
   payload: ResponsesPayload,
-  options: { model: string; publicModel?: string; toolCallTips?: boolean },
+  options: {
+    model: string
+    publicModel?: string
+    toolCallTips?: boolean
+    webSearchResult?: WebSearchResultLookup
+  },
 ): ResponsesToMessagesTranslation {
   const registry = createToolRegistry(payload)
   const normalized = normalizeResponsesInput(payload.input)
@@ -171,6 +193,7 @@ export function translateResponsesToMessages(
     payload.instructions,
     payload.input,
     options.toolCallTips ?? false,
+    options.webSearchResult,
   )
 
   if (normalized.compaction) {
@@ -411,6 +434,7 @@ function createToolRegistry(payload: ResponsesPayload): MessagesToolRegistry {
     byAlias: new Map(),
     byOriginal: new Map(),
     tools: [],
+    webSearchCalls: new Set(),
   }
 
   for (const tool of payload.tools ?? []) {
@@ -456,6 +480,11 @@ function registerTool(
     return
   }
 
+  if (type === 'web_search' || type === 'web_search_preview') {
+    registerWebSearchTool(registry)
+    return
+  }
+
   if (type !== 'function' && type !== 'custom') {
     const suffix = type ? ` '${type}'` : ' without a type'
     throw new ResponsesMessagesTranslationError(
@@ -482,6 +511,28 @@ function registerTool(
         : null,
     },
     registry,
+  )
+}
+
+function registerWebSearchTool(
+  registry: MessagesToolRegistry,
+): MessagesToolDescriptor {
+  return registerMessagesTool(
+    {
+      kind: 'web_search',
+      name: WEB_SEARCH_TOOL_NAME,
+      description: WEB_SEARCH_TOOL_DESCRIPTION,
+      parameters: WEB_SEARCH_INPUT_SCHEMA,
+    },
+    registry,
+  )
+}
+
+export function findWebSearchTool(
+  registry: MessagesToolRegistry,
+): MessagesToolDescriptor | undefined {
+  return registry.byOriginal.get(
+    createOriginalToolKey({ kind: 'web_search', name: WEB_SEARCH_TOOL_NAME }),
   )
 }
 
@@ -534,6 +585,7 @@ function translateInputToAnthropic(
   instructions: string | null | undefined,
   originalInput: ResponsesPayload['input'],
   toolCallTips: boolean,
+  webSearchResult?: WebSearchResultLookup,
 ): {
   messages: Array<AnthropicInputMessage>
   system: Array<AnthropicTextBlock>
@@ -548,7 +600,7 @@ function translateInputToAnthropic(
   if (typeof input === 'string') {
     messages.push({ role: 'user', content: input })
   } else if (Array.isArray(input)) {
-    translateInputItems(input, messages, system, registry)
+    translateInputItems(input, messages, system, registry, webSearchResult)
   }
   if (toolCallTips) {
     appendToolCallTips(system)
@@ -570,11 +622,55 @@ function translateInputItems(
   messages: Array<AnthropicInputMessage>,
   system: Array<AnthropicTextBlock>,
   registry: MessagesToolRegistry,
+  webSearchResult?: WebSearchResultLookup,
 ): void {
   let userMessageSeen = false
+  // Search results belong in the user turn that follows the assistant's
+  // tool calls, together with any client tool results from the same turn.
+  const searchResults: Array<AnthropicUserContentBlock> = []
+  const flushSearchResults = () => {
+    for (const block of searchResults.splice(0))
+      appendUserBlock(messages, block)
+  }
   for (const item of input) {
     const type = getItemType(item)
+    if (
+      type !== 'web_search_call'
+      && type !== 'function_call'
+      && type !== 'custom_tool_call'
+    )
+      flushSearchResults()
     switch (type) {
+      case 'web_search_call': {
+        const id = requireStringField(item, 'id', 'web_search_call')
+        const action =
+          isRecord((item as Record<string, unknown>).action) ?
+            ((item as Record<string, unknown>).action as Record<
+              string,
+              unknown
+            >)
+          : {}
+        const queries =
+          Array.isArray(action.queries) ?
+            action.queries.filter((query) => typeof query === 'string')
+          : []
+        const query =
+          typeof action.query === 'string' ? action.query : queries.join('; ')
+        appendAssistantBlock(messages, {
+          type: 'tool_use',
+          id,
+          name: registerWebSearchTool(registry).alias,
+          input: { query },
+        })
+        searchResults.push({
+          type: 'tool_result',
+          tool_use_id: id,
+          content:
+            webSearchResult?.(id)
+            ?? `The earlier web search for "${query}" is no longer available. Search again if the result is still needed.`,
+        })
+        break
+      }
       case undefined:
       case 'message': {
         translateInputMessage(item, messages, system, userMessageSeen)
@@ -623,6 +719,7 @@ function translateInputItems(
       }
     }
   }
+  flushSearchResults()
 }
 
 function translateInputMessage(
@@ -1027,6 +1124,7 @@ function translateToolUseOutput(
   idSeed: string,
 ): ResponseOutputFunctionCall | ResponseOutputCustomToolCall {
   const descriptor = resolveToolDescriptor(registry, block.name)
+  if (descriptor.kind === 'web_search') registry.webSearchCalls.add(block.id)
   const common = {
     call_id: block.id,
     name: descriptor.name,

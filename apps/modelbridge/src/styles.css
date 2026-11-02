@@ -17,7 +17,14 @@ button { cursor: pointer; background: #f2f6fb; } button:disabled { opacity: .55;
 .actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 14px; }
 code { font-size: 12px; overflow-wrap: anywhere; }
 .muted, .actions span { color: #526178; }
-.source { display: flex; gap: 18px; align-items: center; padding: 12px 0; border-bottom: 1px solid #edf2f8; }
+.source { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; padding: 12px 0; border-bottom: 1px solid #edf2f8; }
+.model-sharing { flex-basis: 100%; margin-top: 0; padding: 12px; background: #f6f9fd; border-radius: 8px; }
+.model-sharing > label, .model-sharing .actions { margin-top: 12px; }
+.model-sharing-list { max-height: 260px; overflow-y: auto; margin-top: 10px; }
+.model-sharing-list .checkbox { margin: 0; padding: 8px 0; gap: 10px; }
+.model-sharing-list code { display: block; color: #526178; }
+.web-search-model { flex-basis: 100%; display: grid; gap: 6px; }
+.web-search-model .muted { font-weight: normal; }
 .checkbox { display: flex; align-items: center; margin-left: auto; }
 table { width: 100%; border-collapse: collapse; margin-top: 12px; } th, td { text-align: left; padding: 10px; border-bottom: 1px solid #edf2f8; }
 .key { margin-top: 14px; padding: 14px; border: 1px solid #9ab5d8; border-radius: 8px; background: #f6f9fd; } .key button { margin-left: 14px; }

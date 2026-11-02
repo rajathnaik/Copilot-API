@@ -78,6 +78,7 @@ test('direct Copilot uses the inherited token exchange, endpoint discovery, head
           endpoints: { api: 'https://api.business.githubcopilot.com' },
         })
       }
+      expect(headers.get('editor-version')).toBe('vscode/1.139.1')
       if (url.endsWith('/models')) return Response.json(catalog)
       expect(url).toBe('https://api.business.githubcopilot.com/responses')
       expect(headers.get('copilot-integration-id')).toBe('vscode-chat')

@@ -80,6 +80,7 @@ test('native catalog is authenticated, sharing-scoped and refreshed by determini
     apiKey: 'synthetic',
     shared: false,
   })
+
   const gateway = createGateway(sources, 'local', true)
   expect((await gateway.request('/v1/codex/models')).status).toBe(401)
   const headers = { Authorization: 'Bearer local' }
@@ -125,6 +126,48 @@ test('native catalog is authenticated, sharing-scoped and refreshed by determini
       })
     ).status,
   ).toBe(422)
+})
+
+test('native catalog filters model selections and invalidates a cached catalog when access changes', async () => {
+  const sources = new SourceService(
+    [],
+    { get: () => 'synthetic', set: () => {}, remove: () => {} },
+    () => {},
+    async () => Response.json({ data: [{ id: 'one' }, { id: 'two' }] }),
+  )
+  const source = await sources.add({
+    label: 'Selected host',
+    kind: 'api',
+    baseUrl: 'https://provider.example/v1',
+    protocol: 'responses',
+    apiKey: 'synthetic',
+    shared: true,
+  })
+  const remote = createGateway(sources, 'remote-key', true)
+  const headers = { Authorization: 'Bearer remote-key' }
+  const all = await remote.request('/v1/codex/models', { headers })
+  const etag = all.headers.get('etag')
+  if (!etag) throw new Error('Missing catalog ETag.')
+  sources.setShared(source.id, true, ['two'])
+  const selected = await remote.request('/v1/codex/models', {
+    headers: { ...headers, 'If-None-Match': etag },
+  })
+  expect(selected.status).toBe(200)
+  expect(selected.headers.get('etag')).not.toBe(etag)
+  expect(await selected.json()).toMatchObject({
+    models: [{ slug: `${source.id}/two` }],
+  })
+  sources.setShared(source.id, true, [])
+  expect((await remote.request('/v1/codex/models', { headers })).status).toBe(
+    422,
+  )
+  const local = createGateway(sources, 'local-key')
+  const localCatalog = await local.request('/v1/codex/models', {
+    headers: { Authorization: 'Bearer local-key' },
+  })
+  expect(await localCatalog.json()).toMatchObject({
+    models: [{ slug: `${source.id}/one` }, { slug: `${source.id}/two` }],
+  })
 })
 
 test('Codex catalog enforces the actual native client response-size limit', async () => {

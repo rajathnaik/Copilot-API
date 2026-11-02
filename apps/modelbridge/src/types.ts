@@ -32,7 +32,15 @@ export type Result<T> = { ok: true; value: T } | { ok: false; error: string }
 export interface ModelBridgeAPI {
   status(): Promise<Result<AppStatus>>
   addSource(input: SourceInput): Promise<Result<AppStatus>>
-  shareSource(sourceId: string, shared: boolean): Promise<Result<AppStatus>>
+  shareSource(
+    sourceId: string,
+    shared: boolean,
+    sharedModelIds?: string[] | null,
+  ): Promise<Result<AppStatus>>
+  setWebSearchModel(
+    sourceId: string,
+    modelId: string | null,
+  ): Promise<Result<AppStatus>>
   localKey(): Promise<Result<string>>
   remoteKey(): Promise<Result<string>>
   loginTunnel(provider: 'github' | 'microsoft'): Promise<Result<AppStatus>>

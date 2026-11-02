@@ -4,7 +4,7 @@ import { bodyLimit } from 'hono/body-limit'
 import { HTTPException } from 'hono/http-exception'
 import { z } from 'zod'
 import { ResponsesMessagesTranslationError } from '../providers/copilot-compatibility/messages-translation'
-import { protocolSchema, type Protocol } from '../contracts'
+import { protocolSchema, modelCapabilities, type Protocol } from '../contracts'
 import { createCodexCatalog } from '../harnesses/codex-catalog'
 import {
   SourceService,
@@ -53,11 +53,8 @@ export function createGateway(
         object: 'model',
         modelbridge: {
           protocol: model.protocol,
-          upstreamProtocol: model.upstreamProtocol,
-          reasoningEfforts: model.reasoningEfforts,
           source: model.sourceLabel,
-          supportsTools: model.supportsTools,
-          contextWindow: model.contextWindow,
+          ...modelCapabilities(model),
         },
       })),
     }),
@@ -152,11 +149,13 @@ export function createGateway(
         ])
         response =
           route.source.kind === 'copilot' ?
+            // Copilot applies the deadline per upstream request because one
+            // proxied web-search turn can span several requests.
             await sources.copilot.forward(
               route.source,
               route.model.upstreamProtocol ?? protocol,
               { ...body, model: route.model.id },
-              signal,
+              context.req.raw.signal,
               conversation,
             )
           : await sources.fetcher(

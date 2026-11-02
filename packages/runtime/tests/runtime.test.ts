@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { createGateway, SourceService } from '../src/runtime'
-import type { Credentials, Protocol, SourceInput } from '../src/contracts'
+import {
+  sharingInputSchema,
+  type Credentials,
+  type Protocol,
+  type Source,
+  type SourceInput,
+} from '../src/contracts'
 import {
   normalizeBaseUrl,
   sourceHeaders,
@@ -163,6 +169,70 @@ describe('source contracts', () => {
 })
 
 describe('authenticated explicit routing', () => {
+  test.each<Protocol>(['responses', 'messages', 'chat-completions'])(
+    'enforces selected model access on %s without forwarding guessed hidden IDs',
+    async (protocol) => {
+      let forwarded = 0
+      const sources = service(async (url, init) => {
+        if (url.endsWith('/models'))
+          return Response.json({ data: [{ id: 'allowed' }, { id: 'private' }] })
+        forwarded++
+        if (typeof init?.body !== 'string')
+          throw new Error('Expected a JSON request body.')
+        expect(JSON.parse(init.body)).toMatchObject({
+          model: 'allowed',
+        })
+        return new Response('data: selected\n\n', {
+          headers: { 'content-type': 'text/event-stream' },
+        })
+      })
+      const source = await sources.add({ ...input, protocol, shared: true })
+      sources.setShared(source.id, true, ['allowed'])
+      const remote = createGateway(sources, 'remote-key', true)
+      const local = createGateway(sources, 'local-key')
+      const headers = { Authorization: 'Bearer remote-key' }
+      const catalog = () => remote.request('/v1/models', { headers })
+      expect(await (await catalog()).json()).toMatchObject({
+        data: [{ id: `${source.id}/allowed` }],
+      })
+      const endpoint =
+        protocol === 'chat-completions' ? 'chat/completions' : protocol
+      const send = (model: string) =>
+        remote.request(`/v1/${endpoint}`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            model: `${source.id}/${model}`,
+            stream: true,
+          }),
+        })
+      expect((await send('private')).status).toBe(404)
+      expect(forwarded).toBe(0)
+      const allowed = await send('allowed')
+      expect(allowed.status).toBe(200)
+      expect(await allowed.text()).toBe('data: selected\n\n')
+      expect(forwarded).toBe(1)
+      sources.setShared(source.id, true, [])
+      expect((await send('allowed')).status).toBe(404)
+      expect(forwarded).toBe(1)
+      expect(await (await catalog()).json()).toEqual({
+        object: 'list',
+        data: [],
+      })
+      sources.setShared(source.id, true, null)
+      expect(sources.models(true)).toHaveLength(2)
+      sources.setShared(source.id, false)
+      expect((await send('allowed')).status).toBe(404)
+      expect(forwarded).toBe(1)
+      const localCatalog = await local.request('/v1/models', {
+        headers: { Authorization: 'Bearer local-key' },
+      })
+      expect(await localCatalog.json()).toMatchObject({
+        data: [{ id: `${source.id}/allowed` }, { id: `${source.id}/private` }],
+      })
+    },
+  )
+
   test('keeps local and shared catalogs and credentials separate', async () => {
     const sources = service()
     const source = await sources.add(input)
@@ -308,7 +378,8 @@ describe('authenticated explicit routing', () => {
   })
 })
 
-test('real local sockets route consumer hub -> producer hub -> selected provider without changing model identity', async () => {
+test('real local sockets route consumer -> producer -> provider and reject a stale client catalog after model access is revoked', async () => {
+  let forwarded = 0
   const upstream = Bun.serve({
     hostname: '127.0.0.1',
     port: 0,
@@ -319,6 +390,7 @@ test('real local sockets route consumer hub -> producer hub -> selected provider
       if (new URL(request.url).pathname === '/v1/models')
         return Response.json({ data: [{ id: 'native-model' }] })
       expect(await request.json()).toMatchObject({ model: 'native-model' })
+      forwarded++
       return new Response('data: {"output":"synthetic-ok"}\n\n', {
         headers: { 'content-type': 'text/event-stream' },
       })
@@ -326,7 +398,7 @@ test('real local sockets route consumer hub -> producer hub -> selected provider
   })
   servers.push(upstream)
   const producer = new SourceService([], new MemoryCredentials(), () => {})
-  await producer.add({
+  const source = await producer.add({
     ...input,
     baseUrl: `http://127.0.0.1:${upstream.port}/v1`,
     shared: true,
@@ -353,4 +425,89 @@ test('real local sockets route consumer hub -> producer hub -> selected provider
   })
   expect(response.status).toBe(200)
   expect(await response.text()).toContain('synthetic-ok')
+  producer.setShared(source.id, true, [])
+  const denied = await gateway.request('/v1/responses', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer consumer-access' },
+    body: JSON.stringify({ model: consumer.models()[0].id }),
+  })
+  expect(denied.status).toBe(404)
+  expect(forwarded).toBe(1)
+})
+
+test('model selections persist, survive refresh/removal, validate before writes and preserve legacy all-model access', async () => {
+  const credentials = new MemoryCredentials()
+  let saved: Source[] = []
+  let ids = ['one', 'two']
+  let diskFailure = false
+  const sources = new SourceService(
+    [],
+    credentials,
+    (next) => {
+      if (diskFailure) throw new Error('disk failure')
+      saved = structuredClone(next)
+    },
+    async () => Response.json({ data: ids.map((id) => ({ id })) }),
+  )
+  const source = await sources.add({ ...input, shared: true })
+  expect(source).not.toHaveProperty('sharedModelIds')
+  expect(sources.models(true)).toHaveLength(2)
+  const selection = ['one']
+  sources.setShared(source.id, true, selection)
+  selection.push('two')
+  expect(sources.models(true).map((model) => model.id)).toEqual([
+    `${source.id}/one`,
+  ])
+  sources.setShared(source.id, false)
+  expect(sources.models(true)).toHaveLength(0)
+  sources.setShared(source.id, true)
+  const restored = new SourceService(saved, credentials, () => {})
+  expect(restored.models()).toHaveLength(2)
+  expect(restored.models(true)).toHaveLength(1)
+  const before = sources.list()
+  expect(() => sources.setShared(source.id, true, ['unknown'])).toThrow(
+    'available models',
+  )
+  expect(() => sources.setShared(source.id, true, ['one', 'one'])).toThrow(
+    'unique',
+  )
+  expect(
+    sharingInputSchema.safeParse({
+      sourceId: source.id,
+      shared: true,
+      sharedModelIds: [''],
+    }).success,
+  ).toBe(false)
+  expect(
+    sharingInputSchema.safeParse({
+      sourceId: source.id,
+      shared: true,
+      sharedModelIds: [1],
+    }).success,
+  ).toBe(false)
+  expect(sources.list()).toEqual(before)
+  expect(saved).toEqual(before)
+  diskFailure = true
+  expect(() => sources.setShared(source.id, true, null)).toThrow('disk failure')
+  expect(sources.list()).toEqual(before)
+  diskFailure = false
+  ids = ['two', 'new']
+  await sources.refresh(source.id)
+  expect(sources.list()[0].sharedModelIds).toEqual(['one'])
+  expect(sources.models(true)).toHaveLength(0)
+  ids.push('one')
+  await sources.refresh(source.id)
+  expect(sources.models(true).map((model) => model.id)).toEqual([
+    `${source.id}/one`,
+  ])
+  sources.setShared(source.id, true, null)
+  expect(sources.models(true)).toHaveLength(3)
+  ids.push('newer')
+  await sources.refresh(source.id)
+  expect(sources.models(true)).toHaveLength(4)
+  sources.setShared(source.id, true, [])
+  expect(
+    new SourceService(saved, credentials, () => {}).models(true),
+  ).toHaveLength(0)
+  expect(sources.models()).toHaveLength(4)
 })

@@ -71,6 +71,7 @@ const channels = [
   'modelbridge:codex-reconcile',
   'modelbridge:add-source',
   'modelbridge:share-source',
+  'modelbridge:web-search-model',
   'modelbridge:tunnel-login',
   'modelbridge:tunnel-check-login',
   'modelbridge:sharing-start',
@@ -346,7 +347,18 @@ async function initialize(): Promise<void> {
   })
   handle('modelbridge:share-source', (input) => {
     const value = sharingInputSchema.parse(input)
-    sources.setShared(value.sourceId, value.shared)
+    sources.setShared(value.sourceId, value.shared, value.sharedModelIds)
+    return snapshot()
+  })
+  handle('modelbridge:web-search-model', (input) => {
+    const value = z
+      .object({
+        sourceId: z.string().min(1),
+        modelId: z.string().trim().min(1).max(512).nullable(),
+      })
+      .strict()
+      .parse(input)
+    sources.setWebSearchModel(value.sourceId, value.modelId)
     return snapshot()
   })
   handle('modelbridge:tunnel-login', async (input) => {
@@ -366,7 +378,7 @@ async function initialize(): Promise<void> {
       )
     if (!sources.models(true).length)
       throw new Error(
-        'Choose at least one source to share before enabling remote access.',
+        'Choose at least one model to share before enabling remote access.',
       )
     sharingBusy = true
     try {
