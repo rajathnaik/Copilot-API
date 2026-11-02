@@ -1,6 +1,6 @@
 {
   "name": "@modelbridge/runtime",
-  "version": "0.1.0-dev.7",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "exports": {

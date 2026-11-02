@@ -1,6 +1,6 @@
 {
   "name": "modelbridge-desktop",
-  "version": "0.1.0-dev.7",
+  "version": "0.1.0",
   "private": true,
   "description": "A single desktop hub for local providers and remote AI sources.",
   "author": "Rajath Naik",

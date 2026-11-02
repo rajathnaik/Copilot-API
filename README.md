@@ -7,28 +7,29 @@ The new desktop structure retains the original Copilot API's direct
 authentication, token exchange, forwarding and protocol translations.
 **There is no Copilot SDK integration.**
 
-**Development pre-release: 0.1.0-dev.7.**
+**Pre-release: 0.1.0, the first ModelBridge release.**
 
 Download the unsigned Windows installer from the
-[ModelBridge development release](https://github.com/rajathnaik/Copilot-API/releases/tag/modelbridge-v0.1.0-dev.7):
+[ModelBridge 0.1.0 release](https://github.com/rajathnaik/Copilot-API/releases/tag/modelbridge-v0.1.0):
 
-- [Windows installer](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.0-dev.7/ModelBridge.Setup.0.1.0-dev.7.exe)
-- [SHA256 checksum](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.0-dev.7/ModelBridge.Setup.0.1.0-dev.7.exe.sha256)
+- [Windows installer](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.0/ModelBridge.Setup.0.1.0.exe)
+- [SHA256 checksum](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.0/ModelBridge.Setup.0.1.0.exe.sha256)
 
-Compare `Get-FileHash .\ModelBridge.Setup.0.1.0-dev.7.exe -Algorithm SHA256`
+Compare `Get-FileHash .\ModelBridge.Setup.0.1.0.exe -Algorithm SHA256`
 with the downloaded checksum before running the installer. Windows may warn
 about an unknown publisher because this development build is not code-signed.
 Use the same installer on the host and client machines.
 
 To build the unsigned Windows development installer locally, run
 `bun run --cwd apps/modelbridge package:win`. Its output is
-`apps/modelbridge/release/ModelBridge.Setup.0.1.0-dev.7.exe`. This is a test
+`apps/modelbridge/release/ModelBridge.Setup.0.1.0.exe`. This is a test
 candidate, not a verified production release; installation/upgrade/uninstall
 and the real two-machine acceptance test are still pending.
 
-## Unreleased
+## What's new in 0.1.0
 
-These changes are on `master` but not yet in a published installer.
+0.1.0 is the first ModelBridge release. It includes everything in this README,
+including the changes from the earlier development builds listed below.
 
 - **Manage hosts on clients.** The client **Connect** tab is now **Hosts**. Each
   connected host has a card with its URL, model count, connection status and
@@ -47,9 +48,9 @@ These changes are on `master` but not yet in a published installer.
   longer match the applied Codex model list (offering **Preview Codex update**)
   or when Codex's default model is no longer available.
 
-## What's new in dev.7
+## Introduced in development build dev.7
 
-These changes ship in the dev.7 installer linked above.
+These changes are included in 0.1.0.
 
 - **Claude tool-schema fix.** Anthropic models rejected Codex tools whose input
   schema uses `oneOf`, `anyOf` or `allOf` at the top level
@@ -85,9 +86,9 @@ These changes ship in the dev.7 installer linked above.
   it is: the GPT model that runs web searches for Claude and other non-GPT
   models. It is not a default model.
 
-## What's new in dev.6
+## Introduced in development build dev.6
 
-These changes ship in the dev.6 installer linked above.
+These changes are included in 0.1.0.
 
 - Copilot discovery and inference now advertise the original Gateway's
   `vscode/1.139.1` compatibility version instead of the unsupported `1.109.0`.
