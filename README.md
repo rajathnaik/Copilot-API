@@ -7,24 +7,32 @@ The new desktop structure retains the original Copilot API's direct
 authentication, token exchange, forwarding and protocol translations.
 **There is no Copilot SDK integration.**
 
-**Development pre-release: 0.1.0**, the first ModelBridge release.
+**Development pre-release: 0.1.1**, the latest ModelBridge release.
 
 Download the unsigned Windows installer from the
-[ModelBridge 0.1.0 release](https://github.com/rajathnaik/Copilot-API/releases/tag/modelbridge-v0.1.0):
+[ModelBridge 0.1.1 release](https://github.com/rajathnaik/Copilot-API/releases/tag/modelbridge-v0.1.1):
 
-- [Windows installer](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.0/ModelBridge.Setup.0.1.0.exe)
-- [SHA256 checksum](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.0/ModelBridge.Setup.0.1.0.exe.sha256)
+- [Windows installer](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.1/ModelBridge.Setup.0.1.1.exe)
+- [SHA256 checksum](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.1/ModelBridge.Setup.0.1.1.exe.sha256)
 
-Compare `Get-FileHash .\ModelBridge.Setup.0.1.0.exe -Algorithm SHA256`
+Compare `Get-FileHash .\ModelBridge.Setup.0.1.1.exe -Algorithm SHA256`
 with the downloaded checksum before running the installer. Windows may warn
 about an unknown publisher because this development build is not code-signed.
 Use the same installer on the host and client machines.
 
 To build the unsigned Windows development installer locally, run
 `bun run --cwd apps/modelbridge package:win`. Its output is
-`apps/modelbridge/release/ModelBridge.Setup.0.1.0.exe`. This is a test
+`apps/modelbridge/release/ModelBridge.Setup.0.1.1.exe`. This is a test
 candidate, not a verified production release; installation/upgrade/uninstall
 and the real two-machine acceptance test are still pending.
+
+## What's new in 0.1.1
+
+- **No more duplicated replies in the Codex desktop app.** Copilot gives a
+  streamed reply a new encrypted id in every event, so Codex showed each message
+  twice (once while streaming and once when it finished). The gateway now keeps
+  the first id for every event of an item. Updating the host is enough; clients
+  benefit without changes.
 
 ## What's new in 0.1.0
 
