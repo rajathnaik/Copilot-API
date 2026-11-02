@@ -12,6 +12,7 @@ import {
   readBoundedText,
 } from '../sources/source-service'
 import { meteredFetch, type UpstreamUsage } from '../usage/usage-meter'
+import { stabilizeResponseItemIds } from './stable-item-ids'
 import { unnamedClientLabel, type UsageEntry } from '../usage/usage-ledger'
 
 export interface UsageRecorder {
@@ -262,7 +263,17 @@ export function createGateway(
             .join('[redacted]'),
           { status: response.status, headers },
         )
-      return new Response(response.body, { status: response.status, headers })
+      const output =
+        (
+          protocol === 'responses'
+          && response.body
+          && (response.headers.get('content-type') ?? '').includes(
+            'text/event-stream',
+          )
+        ) ?
+          stabilizeResponseItemIds(response.body)
+        : response.body
+      return new Response(output, { status: response.status, headers })
     })
   }
   app.onError((error, context) => {
