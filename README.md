@@ -7,29 +7,28 @@ The new desktop structure retains the original Copilot API's direct
 authentication, token exchange, forwarding and protocol translations.
 **There is no Copilot SDK integration.**
 
-**Development pre-release: 0.1.0-dev.5.**
+**Development pre-release: 0.1.0-dev.6.**
 
 Download the unsigned Windows installer from the
-[ModelBridge development release](https://github.com/rajathnaik/Copilot-API/releases/tag/modelbridge-v0.1.0-dev.5):
+[ModelBridge development release](https://github.com/rajathnaik/Copilot-API/releases/tag/modelbridge-v0.1.0-dev.6):
 
-- [Windows installer](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.0-dev.5/ModelBridge.Setup.0.1.0-dev.5.exe)
-- [SHA256 checksum](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.0-dev.5/ModelBridge.Setup.0.1.0-dev.5.exe.sha256)
+- [Windows installer](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.0-dev.6/ModelBridge.Setup.0.1.0-dev.6.exe)
+- [SHA256 checksum](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.0-dev.6/ModelBridge.Setup.0.1.0-dev.6.exe.sha256)
 
-Compare `Get-FileHash .\ModelBridge.Setup.0.1.0-dev.5.exe -Algorithm SHA256`
+Compare `Get-FileHash .\ModelBridge.Setup.0.1.0-dev.6.exe -Algorithm SHA256`
 with the downloaded checksum before running the installer. Windows may warn
 about an unknown publisher because this development build is not code-signed.
 Use the same installer on the host and client machines.
 
 To build the unsigned Windows development installer locally, run
 `bun run --cwd apps/modelbridge package:win`. Its output is
-`apps/modelbridge/release/ModelBridge.Setup.0.1.0-dev.5.exe`. This is a test
+`apps/modelbridge/release/ModelBridge.Setup.0.1.0-dev.6.exe`. This is a test
 candidate, not a verified production release; installation/upgrade/uninstall
 and the real two-machine acceptance test are still pending.
 
-## Unreleased host improvements
+## What's new in dev.6
 
-These changes are in source; the dev.5 installer linked above does not include
-them yet.
+These changes ship in the dev.6 installer linked above.
 
 - Copilot discovery and inference now advertise the original Gateway's
   `vscode/1.139.1` compatibility version instead of the unsupported `1.109.0`.
@@ -152,7 +151,7 @@ a real subscription.
   required model instructions, preserves explicit tool/context capabilities
   across remote hops, supports ETag refresh, and enforces Codex's 1 MiB limit.
 - Independently selected sources and models for sharing through a separate
-  authenticated listener on `127.0.0.1:4322` (model selection is unreleased).
+  authenticated listener on `127.0.0.1:4322`.
 - Credentials (access keys and the Copilot sign-in token) are stored
   **unencrypted** in `%APPDATA%\ModelBridge\credentials.json`, protected only
   by your Windows user account. This is a deliberate simplification for a

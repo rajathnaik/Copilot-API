@@ -253,7 +253,7 @@ test.skipIf(
           new Response(helper.stderr).text(),
           helper.exited,
         ])
-        expect(code, stderr).toBe(0)
+        expect(code, `helper exited ${code}: ${stderr}`).toBe(0)
         expect(createHash('sha256').update(stdout.trim()).digest('hex')).toBe(
           previousHash,
         )

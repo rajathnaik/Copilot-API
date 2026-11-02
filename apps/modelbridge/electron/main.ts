@@ -565,8 +565,10 @@ app.on('before-quit', (event) => {
     })
 })
 if (credentialMode) {
-  void app
-    .whenReady()
+  // The helper only reads a file; skipping Chromium readiness and GPU startup
+  // keeps Codex key lookups fast and avoids intermittent native exit codes.
+  app.disableHardwareAcceleration()
+  void Promise.resolve()
     .then(() => {
       if (!fs.existsSync(path.join(app.getPath('userData'), 'state.json')))
         throw new Error(
