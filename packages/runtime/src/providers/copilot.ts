@@ -17,6 +17,12 @@ import type {
 } from './copilot-compatibility/responses'
 import { normalizeCopilotRequest } from './copilot-compatibility/request-normalization'
 import {
+  nativeChatPayload,
+  nativeInitiatorIsAgent,
+  nativeMessagesPayload,
+} from './copilot-compatibility/native-requests'
+import { rewriteSseJson } from '../routing/sse-lines'
+import {
   collectResponse,
   extractWebSearchResult,
   proxyWebSearch,
@@ -25,7 +31,11 @@ import {
   type WebSearchRound,
 } from './copilot-compatibility/web-search-proxy'
 import type { Credentials, Protocol, Source } from '../contracts'
-import { reasoningEffortSchema, webSearchModel } from '../contracts'
+import {
+  protocolSchema,
+  reasoningEffortSchema,
+  webSearchModel,
+} from '../contracts'
 import { resolveSupportedReasoningEffort } from './copilot-compatibility/reasoning-effort'
 import { translateToOpenAI } from './copilot-compatibility/chat-translation'
 import {
@@ -410,11 +420,17 @@ export class CopilotProvider {
       )
         continue
       const endpoints = model.supported_endpoints ?? ['/chat/completions']
+      const accepted = new Set<Protocol>()
+      for (const item of endpoints) {
+        if (/(?:^|\/)responses$/u.test(item)) accepted.add('responses')
+        else if (/(?:^|\/)messages$/u.test(item)) accepted.add('messages')
+        else if (/chat\/completions$/u.test(item))
+          accepted.add('chat-completions')
+      }
       const protocol: Protocol | undefined =
-        endpoints.some((item) => /(?:^|\/)responses$/u.test(item)) ? 'responses'
-        : endpoints.some((item) => /(?:^|\/)messages$/u.test(item)) ? 'messages'
-        : endpoints.some((item) => /chat\/completions$/u.test(item)) ?
-          'chat-completions'
+        accepted.has('responses') ? 'responses'
+        : accepted.has('messages') ? 'messages'
+        : accepted.has('chat-completions') ? 'chat-completions'
         : undefined
       if (!protocol) continue
       models.push({
@@ -422,6 +438,9 @@ export class CopilotProvider {
         name: model.name || model.id,
         protocol: 'responses',
         upstreamProtocol: protocol,
+        nativeProtocols: protocolSchema.options.filter((item) =>
+          accepted.has(item),
+        ),
         reasoningEfforts:
           model.capabilities?.supports?.reasoning_effort?.flatMap((value) => {
             const effort = reasoningEffortSchema.safeParse(value)
@@ -522,6 +541,65 @@ export class CopilotProvider {
     }
     this.quotas.set(id, quota)
     return quota
+  }
+
+  // Chat Completions and Messages requests for a model Copilot serves on that
+  // endpoint go straight through, without the Responses translation.
+  async forwardNative(
+    source: Source,
+    protocol: 'chat-completions' | 'messages',
+    body: Record<string, unknown>,
+    signal: AbortSignal,
+    conversation?: string,
+    report?: UsageReporter,
+  ): Promise<Response> {
+    const token = await this.token(source.id)
+    const model = source.models.find((item) => item.id === body.model)
+    const prepared =
+      protocol === 'messages' ?
+        { payload: nativeMessagesPayload(body), usage: true }
+      : nativeChatPayload(body, model?.reasoningEfforts)
+    const { payload } = prepared
+    const agent = nativeInitiatorIsAgent(protocol, payload)
+    const serialized = JSON.stringify(payload)
+    const headers = this.headers(token, false, conversation)
+    headers.set('x-initiator', agent ? 'agent' : 'user')
+    if (/"type":"(?:image_url|image)"/u.test(serialized))
+      headers.set('copilot-vision-request', 'true')
+    const response = await meteredFetch(
+      this.fetcher,
+      `${token.api}${protocol === 'messages' ? '/v1/messages' : '/chat/completions'}`,
+      {
+        method: 'POST',
+        headers,
+        body: serialized,
+        redirect: 'error',
+        signal: this.deadline(signal),
+      },
+      report,
+      {
+        model: typeof body.model === 'string' ? body.model : 'unknown',
+        purpose: 'request',
+        client: signal,
+        initiator: agent ? 'agent' : 'user',
+        premium: agent ? 0 : (model?.premiumMultiplier ?? null),
+      },
+      this.now,
+    )
+    if (!response.ok) return this.failure(source.id, token, response)
+    if (prepared.usage || !response.body || payload.stream !== true)
+      return response
+    // Usage is always requested so the meter can count the tokens; clients
+    // that did not ask for it get the stream they expect.
+    return new Response(
+      rewriteSseJson(response.body, (event) => {
+        if (!('usage' in event)) return 'unchanged'
+        if (Array.isArray(event.choices) && !event.choices.length) return 'drop'
+        delete event.usage
+        return 'changed'
+      }),
+      { status: response.status, headers: response.headers },
+    )
   }
 
   // `signal` is the client's connection; each upstream request adds its own

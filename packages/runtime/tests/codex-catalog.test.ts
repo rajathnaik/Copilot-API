@@ -10,6 +10,7 @@ test('Codex uses a native models envelope and exact qualified routes, with conse
       sourceId: 'source',
       sourceLabel: 'Host',
       protocol: 'responses',
+      protocols: ['responses'],
       supportsTools: true,
       contextWindow: 32000,
     },
@@ -19,6 +20,7 @@ test('Codex uses a native models envelope and exact qualified routes, with conse
       sourceId: 'source',
       sourceLabel: 'Host',
       protocol: 'responses',
+      protocols: ['responses'],
     },
     {
       id: 'source/messages',
@@ -26,6 +28,7 @@ test('Codex uses a native models envelope and exact qualified routes, with conse
       sourceId: 'source',
       sourceLabel: 'Host',
       protocol: 'messages',
+      protocols: ['messages'],
     },
   ])
   expect(catalog.models.map((model) => model.slug)).toEqual([

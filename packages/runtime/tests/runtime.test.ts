@@ -336,7 +336,25 @@ describe('authenticated explicit routing', () => {
           'messages',
         )
       ).status,
-    ).toBe(422)
+    ).toBe(400)
+    const messagesOnly = service()
+    await messagesOnly.add({ ...input, protocol: 'messages' })
+    const incompatible = await createGateway(messagesOnly, 'key').request(
+      '/v1/chat/completions',
+      {
+        method: 'POST',
+        headers: { Authorization: 'Bearer key' },
+        body: JSON.stringify({
+          model: messagesOnly.models()[0].id,
+          messages: [{ role: 'user', content: 'hi' }],
+        }),
+      },
+    )
+    expect(incompatible.status).toBe(422)
+    expect(
+      ((await incompatible.json()) as { error: { message: string } }).error
+        .message,
+    ).toContain('/v1/messages')
     const shared = createGateway(sources, 'key', true)
     expect(
       (

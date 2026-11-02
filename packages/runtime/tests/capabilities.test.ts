@@ -32,6 +32,7 @@ const base: AvailableModel = {
   sourceId: 'source',
   sourceLabel: 'Host',
   protocol: 'responses',
+  protocols: ['responses'],
 }
 
 test('Codex catalog advertises native instructions and discovered model capabilities', () => {

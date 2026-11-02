@@ -23,6 +23,7 @@ const models: AvailableModel[] = [
     sourceId: 'host',
     sourceLabel: 'Remote Copilot',
     protocol: 'responses',
+    protocols: ['responses'],
     supportsTools: true,
   },
   {
@@ -31,6 +32,7 @@ const models: AvailableModel[] = [
     sourceId: 'host',
     sourceLabel: 'Remote Copilot',
     protocol: 'responses',
+    protocols: ['responses'],
     upstreamProtocol: 'messages',
     supportsTools: true,
   },

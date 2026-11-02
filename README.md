@@ -26,6 +26,55 @@ To build the unsigned Windows development installer locally, run
 candidate, not a verified production release; installation/upgrade/uninstall
 and the real two-machine acceptance test are still pending.
 
+## Unreleased: every harness, not just Codex
+
+Any tool that speaks the OpenAI Chat Completions or Anthropic Messages API can
+now use every shared model with only the tunnel URL and access key. Before
+this, those requests failed with HTTP 422 ("Cross-protocol adapters are not
+enabled") unless Copilot happened to serve the model on that endpoint.
+
+- **Chat Completions** (`/v1/chat/completions`) works for every model, which
+  covers Hermes, Cline and other OpenAI-compatible tools. Claude, Gemini and
+  other models that Copilot serves on Chat Completions are forwarded directly.
+  GPT and other Responses-only models are translated: the request becomes a
+  Responses request and the reply, including streamed tool calls and usage, is
+  translated back. Reasoning summaries arrive as `reasoning_content`.
+  Reasoning models ignore `temperature` and `top_p`, which Copilot rejects.
+- **Anthropic Messages** (`/v1/messages`) works for every model, which covers
+  Claude Code. Claude models go directly to Copilot's Messages endpoint. Other
+  models are translated, and their reasoning is carried in the thinking-block
+  signature so the next turn can continue it. The gateway also accepts the key
+  in `x-api-key` and answers `/v1/messages/count_tokens` with an estimate.
+- Claude tool schemas with a top-level `anyOf`, `oneOf` or `allOf` are
+  flattened before they reach Copilot, which fixes "input_schema does not
+  support oneOf, allOf, or anyOf at the top level".
+- `/v1/models` lists the protocols each model serves in
+  `modelbridge.protocols`. Clients forward those requests to the host
+  unchanged; with an older host, the client translates them itself.
+- Usage, premium-request counting and per-client limits apply to every
+  protocol.
+
+Example settings (the host needs this build; clients use their tunnel URL):
+
+```yaml
+# Hermes: ~/.hermes/config.yaml
+providers:
+  modelbridge:
+    api: https://<tunnel-host>/v1
+    key_env: MODELBRIDGE_API_KEY
+    default_model: <source-id>/gpt-6.1-sol
+```
+
+```powershell
+# Claude Code
+$env:ANTHROPIC_BASE_URL = 'https://<tunnel-host>'
+$env:ANTHROPIC_AUTH_TOKEN = '<access key>'
+$env:ANTHROPIC_MODEL = '<source-id>/claude-sonnet-5.5'
+```
+
+Model IDs are the source-qualified IDs from `/v1/models`. On the host
+machine itself, use `http://127.0.0.1:4321` with the local access key.
+
 ## What's new in 0.1.1
 
 - **No more duplicated replies in the Codex desktop app.** Copilot gives a
@@ -210,6 +259,9 @@ a real subscription.
   short-lived Copilot token refresh, and forwarding to the account's service
   endpoint. Native Responses models and the inherited Messages/Chat
   Completions translators expose a Responses interface for Codex.
+- Responses, Chat Completions and Anthropic Messages endpoints for every
+  model: forwarded natively where the source supports the protocol, otherwise
+  translated through the Responses API.
 - API-source discovery and native Responses, Messages, and Chat Completions
   forwarding. Select the protocol the provider actually supports.
 - Remote ModelBridge sources, source-qualified model IDs, and explicit

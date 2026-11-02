@@ -8,6 +8,7 @@ import {
   protocolSchema,
   modelCapabilities,
   modelCapabilitiesSchema,
+  servedProtocols,
   sharingInputSchema,
   webSearchCandidates,
   type AvailableModel,
@@ -64,6 +65,7 @@ const discoverySchema = z.object({
         modelbridge: z
           .object({
             protocol: protocolSchema,
+            protocols: z.array(protocolSchema).min(1).max(3).optional(),
             ...modelCapabilitiesSchema.shape,
           })
           .optional(),
@@ -204,6 +206,7 @@ export class SourceService {
         sourceId: source.id,
         sourceLabel: source.label,
         protocol: model.protocol,
+        protocols: servedProtocols(source, model),
         ...modelCapabilities(model),
       })),
     )
@@ -392,6 +395,12 @@ export class SourceService {
         name: model.name || model.id,
         protocol: model.modelbridge?.protocol ?? protocol,
         ...(model.modelbridge && modelCapabilities(model.modelbridge)),
+        // A ModelBridge host lists every protocol it serves for the model, so
+        // the client forwards those requests instead of translating them.
+        ...(kind === 'remote'
+          && model.modelbridge?.protocols && {
+            nativeProtocols: [...new Set(model.modelbridge.protocols)],
+          }),
       }
     })
   }

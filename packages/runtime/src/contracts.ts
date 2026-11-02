@@ -53,10 +53,39 @@ export const modelSchema = z
     name: z.string().min(1),
     protocol: protocolSchema,
     ...modelCapabilitiesSchema.shape,
+    // Protocols the source itself accepts for this model, beyond `protocol`.
+    // Copilot lists them per model; a ModelBridge host advertises them.
+    nativeProtocols: z.array(protocolSchema).min(1).max(3).optional(),
     // Copilot premium-request multiplier; kept out of advertised capabilities.
     premiumMultiplier: z.number().nonnegative().max(1000).optional(),
   })
   .strict()
+export type Model = z.infer<typeof modelSchema>
+
+// Protocols a source accepts for a model without ModelBridge translating the
+// request. Copilot models always accept Responses because ModelBridge already
+// adapts Responses to each model's Copilot endpoint.
+export function directProtocols(
+  source: Pick<Source, 'kind'>,
+  model: Pick<Model, 'protocol' | 'upstreamProtocol' | 'nativeProtocols'>,
+): Protocol[] {
+  const native =
+    model.nativeProtocols
+    ?? (source.kind === 'copilot' && model.upstreamProtocol ?
+      [model.upstreamProtocol]
+    : [])
+  return [...new Set<Protocol>([model.protocol, ...native])]
+}
+
+// Protocols the gateway serves for a model: its direct protocols, plus Chat
+// Completions and Messages translated through Responses when Responses is direct.
+export function servedProtocols(
+  source: Pick<Source, 'kind'>,
+  model: Pick<Model, 'protocol' | 'upstreamProtocol' | 'nativeProtocols'>,
+): Protocol[] {
+  const direct = directProtocols(source, model)
+  return direct.includes('responses') ? [...protocolSchema.options] : direct
+}
 
 const sharedModelIdsSchema = z
   .array(modelSchema.shape.id)
@@ -122,6 +151,8 @@ export interface AvailableModel extends ModelCapabilities {
   sourceId: string
   sourceLabel: string
   protocol: Protocol
+  // Protocols the gateway serves for this model, directly or translated.
+  protocols: Protocol[]
 }
 
 export function webSearchCandidates(source: Pick<Source, 'models'>) {

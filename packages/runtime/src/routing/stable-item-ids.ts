@@ -3,6 +3,8 @@
 // id (such as the Codex desktop app) then render a message twice: once from
 // its streamed text and again from its completed item. Every event for an
 // output index therefore reuses the id from that index's first event.
+import { rewriteSseJson } from './sse-lines'
+
 type Json = Record<string, unknown>
 
 const terminalTypes = new Set([
@@ -56,47 +58,11 @@ function stabilize(event: Json, ids: Map<number, string>): boolean {
   return changed
 }
 
-function rewriteLine(line: string, ids: Map<number, string>): string {
-  const carriage = line.endsWith('\r') ? '\r' : ''
-  const content = carriage ? line.slice(0, -1) : line
-  if (!content.startsWith('data:')) return line
-  const data = content.slice(5).trimStart()
-  if (!data.startsWith('{')) return line
-  let event: unknown
-  try {
-    event = JSON.parse(data)
-  } catch {
-    return line
-  }
-  if (!isRecord(event) || !stabilize(event, ids)) return line
-  return `data: ${JSON.stringify(event)}${carriage}`
-}
-
 export function stabilizeResponseItemIds(
   body: ReadableStream<Uint8Array>,
 ): ReadableStream<Uint8Array> {
   const ids = new Map<number, string>()
-  const decoder = new TextDecoder()
-  const encoder = new TextEncoder()
-  let pending = ''
-  return body.pipeThrough(
-    new TransformStream<Uint8Array, Uint8Array>({
-      transform(chunk, controller) {
-        pending += decoder.decode(chunk, { stream: true })
-        const lines = pending.split('\n')
-        pending = lines.pop() ?? ''
-        if (lines.length)
-          controller.enqueue(
-            encoder.encode(
-              lines.map((line) => rewriteLine(line, ids)).join('\n') + '\n',
-            ),
-          )
-      },
-      flush(controller) {
-        pending += decoder.decode()
-        if (pending)
-          controller.enqueue(encoder.encode(rewriteLine(pending, ids)))
-      },
-    }),
+  return rewriteSseJson(body, (event) =>
+    stabilize(event, ids) ? 'changed' : 'unchanged',
   )
 }

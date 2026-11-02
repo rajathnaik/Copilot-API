@@ -53,6 +53,7 @@ test.skipIf(
           sourceId: source.id,
           sourceLabel: source.label,
           protocol: 'responses' as const,
+          protocols: ['responses' as const],
         })),
       ),
       sharing: false,
