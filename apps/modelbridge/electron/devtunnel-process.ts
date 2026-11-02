@@ -4,6 +4,7 @@ import type { Readable } from 'node:stream'
 import fs from 'node:fs'
 import path from 'node:path'
 import type { CommandResult } from '@modelbridge/runtime/dev-tunnels'
+import { validateTunnelUrl } from '@modelbridge/runtime/dev-tunnels'
 
 interface TunnelChild extends EventEmitter {
   readonly stdout: Readable
@@ -147,6 +148,38 @@ export function parseTunnelUser(output: string): TunnelUser | null {
   return match ? { name: match[1], provider: match[2] } : null
 }
 
+export function parseHostUrl(output: string, port: number): string | null {
+  let hostedPort: number | null = null
+  for (const line of output.split(/\r?\n/u).slice(0, -1)) {
+    const hosting = /^\s*Hosting port:?\s+(\d+)(?:\s+at\s+(.+))?\s*$/iu.exec(
+      line,
+    )
+    if (hosting) hostedPort = Number(hosting[1])
+    const browser = /^\s*Connect via browser:\s*(.+)$/iu.exec(line)
+    const addresses = hosting?.[2] ?? browser?.[1]
+    if (!addresses || (hostedPort !== null && hostedPort !== port)) continue
+    const urls = [
+      ...addresses
+        .split(/\s+and inspect\b/iu)[0]
+        .matchAll(/https?:\/\/[^\s,]+/giu),
+    ]
+      .map((match) => match[0])
+      .filter((value) => {
+        const url = new URL(value)
+        if (url.hostname.split('.')[0].endsWith('-inspect')) return false
+        if (hostedPort === port) return true
+        return (
+          url.port === String(port)
+          || url.hostname.split('.')[0].endsWith(`-${port}`)
+        )
+      })
+      .map(validateTunnelUrl)
+    if (urls.length)
+      return urls.find((value) => !new URL(value).port) ?? urls[0]
+  }
+  return null
+}
+
 export class TunnelProcess {
   private host: TunnelChild | null = null
   private loginProcess: TunnelChild | null = null
@@ -265,50 +298,78 @@ export class TunnelProcess {
     })
   }
 
-  start(id: string): Promise<void> {
+  start(id: string, port: number): Promise<string> {
     if (this.host)
       return Promise.reject(new Error('A tunnel host is already active.'))
+    if (!Number.isInteger(port) || port < 1 || port > 65535)
+      return Promise.reject(new Error('A valid sharing port is required.'))
     this.error = null
     this.stopping = false
     return new Promise((resolve, reject) => {
       const child = this.processLauncher.spawn(['host', id])
       this.host = child
       let output = ''
-      let ready = false
-      const timer = setTimeout(() => {
-        this.error = 'Tunnel hosting timed out.'
+      let hostReady = false
+      let settled = false
+      const fail = (message: string) => {
+        clearTimeout(timer)
+        this.error = message
+        if (!settled) {
+          settled = true
+          reject(new Error(message))
+        }
         child.kill()
+      }
+      const timer = setTimeout(() => {
+        fail(
+          hostReady ?
+            `Dev Tunnels reported ready but did not return a URL for sharing port ${port}.`
+          : 'Tunnel hosting timed out.',
+        )
       }, 60_000)
       const receive = (chunk: Buffer) => {
         output = (output + chunk.toString()).slice(-32_768)
-        if (!ready && /Ready to accept connections/iu.test(output)) {
-          ready = true
-          this.running = true
-          clearTimeout(timer)
-          resolve()
-        }
         if (/Another host for the tunnel has connected/iu.test(output)) {
-          this.error = 'Another process replaced this tunnel host.'
-          child.kill()
+          fail('Another process replaced this tunnel host.')
+          return
+        }
+        if (settled) return
+        hostReady ||= /Ready to accept connections/iu.test(output)
+        try {
+          const url = parseHostUrl(output, port)
+          if (hostReady && url) {
+            settled = true
+            this.running = true
+            clearTimeout(timer)
+            resolve(url)
+          }
+        } catch (error) {
+          fail(
+            error instanceof Error ?
+              error.message
+            : 'Could not read the Dev Tunnels sharing URL.',
+          )
         }
       }
       child.stdout.on('data', receive)
       child.stderr.on('data', receive)
       child.on('error', (error: Error) => {
-        this.error = error.message
-        if (!ready) reject(error)
+        clearTimeout(timer)
+        fail(error.message)
       })
       child.on('close', () => {
         clearTimeout(timer)
         this.host = null
+        const wasRunning = this.running
         this.running = false
-        if (!ready)
+        if (!settled) {
+          settled = true
           reject(
             new Error(
               this.error ?? 'Tunnel hosting exited before it was ready.',
             ),
           )
-        else if (!this.stopping) {
+        } else if (wasRunning && !this.stopping) {
           if (!this.error)
             this.error =
               'The tunnel host stopped. Enable remote access again to reconnect.'

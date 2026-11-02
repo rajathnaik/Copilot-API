@@ -9,11 +9,7 @@ export type TunnelCommand = (args: string[]) => Promise<CommandResult>
 const tunnelSchema = z.object({
   tunnel: z.object({
     tunnelId: z.string().min(1),
-    ports: z
-      .array(
-        z.object({ portNumber: z.number(), portUri: z.string().optional() }),
-      )
-      .default([]),
+    ports: z.array(z.object({ portNumber: z.number() })).default([]),
     accessControl: z
       .array(z.object({ type: z.string(), scopes: z.array(z.string()) }))
       .default([]),
@@ -59,7 +55,7 @@ export class DevTunnels {
     return tunnelSchema.parse(JSON.parse(output.slice(start))).tunnel
   }
 
-  async provision(port: number): Promise<{ id: string; url: string }> {
+  async provision(port: number): Promise<{ id: string }> {
     if (!Number.isInteger(port) || port < 1 || port > 65535)
       throw new Error('A valid sharing port is required.')
     let shown = await this.command(['show', this.id, '-j'])
@@ -107,9 +103,8 @@ export class DevTunnels {
       throw new Error(
         'Microsoft did not confirm anonymous transport access for this tunnel.',
       )
-    const uri = info.ports.find((entry) => entry.portNumber === port)?.portUri
-    if (!uri)
-      throw new Error('Microsoft did not return a URL for the sharing port.')
-    return { id: info.tunnelId, url: validateTunnelUrl(uri) }
+    if (!info.ports.some((entry) => entry.portNumber === port))
+      throw new Error('Microsoft did not confirm the configured sharing port.')
+    return { id: info.tunnelId }
   }
 }

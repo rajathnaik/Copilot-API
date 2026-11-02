@@ -379,13 +379,13 @@ async function initialize(): Promise<void> {
       const resource = await new DevTunnels(state.value.tunnelId, (args) =>
         transport.command(args),
       ).provision(remote.port)
-      await transport.start(resource.id)
+      const url = await transport.start(resource.id, remote.port)
       if (!transport.running)
         throw new Error(
           transport.error
             ?? 'The tunnel host stopped during startup. Remote access was not enabled.',
         )
-      remoteUrl = resource.url
+      remoteUrl = url
       return snapshot()
     } catch (error) {
       await transport.stop()

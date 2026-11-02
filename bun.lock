@@ -23,7 +23,7 @@
     },
     "apps/modelbridge": {
       "name": "modelbridge-desktop",
-      "version": "0.1.0-dev.4",
+      "version": "0.1.0-dev.5",
       "devDependencies": {
         "@modelbridge/runtime": "workspace:*",
         "@types/react": "^18.3.18",
@@ -39,7 +39,7 @@
     },
     "packages/runtime": {
       "name": "@modelbridge/runtime",
-      "version": "0.1.0-dev.4",
+      "version": "0.1.0-dev.5",
       "dependencies": {
         "@hono/node-server": "^1.19.15",
         "fetch-event-stream": "^0.1.5",

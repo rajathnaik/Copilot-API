@@ -7,22 +7,22 @@ The new desktop structure retains the original Copilot API's direct
 authentication, token exchange, forwarding and protocol translations.
 **There is no Copilot SDK integration.**
 
-**Development pre-release: 0.1.0-dev.4.**
+**Development pre-release: 0.1.0-dev.5.**
 
 Download the unsigned Windows installer from the
-[ModelBridge development release](https://github.com/rajathnaik/Copilot-API/releases/tag/modelbridge-v0.1.0-dev.4):
+[ModelBridge development release](https://github.com/rajathnaik/Copilot-API/releases/tag/modelbridge-v0.1.0-dev.5):
 
-- [Windows installer](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.0-dev.4/ModelBridge.Setup.0.1.0-dev.4.exe)
-- [SHA256 checksum](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.0-dev.4/ModelBridge.Setup.0.1.0-dev.4.exe.sha256)
+- [Windows installer](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.0-dev.5/ModelBridge.Setup.0.1.0-dev.5.exe)
+- [SHA256 checksum](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.0-dev.5/ModelBridge.Setup.0.1.0-dev.5.exe.sha256)
 
-Compare `Get-FileHash .\ModelBridge.Setup.0.1.0-dev.4.exe -Algorithm SHA256`
+Compare `Get-FileHash .\ModelBridge.Setup.0.1.0-dev.5.exe -Algorithm SHA256`
 with the downloaded checksum before running the installer. Windows may warn
 about an unknown publisher because this development build is not code-signed.
 Use the same installer on the host and client machines.
 
 To build the unsigned Windows development installer locally, run
 `bun run --cwd apps/modelbridge package:win`. Its output is
-`apps/modelbridge/release/ModelBridge.Setup.0.1.0-dev.4.exe`. This is a test
+`apps/modelbridge/release/ModelBridge.Setup.0.1.0-dev.5.exe`. This is a test
 candidate, not a verified production release; installation/upgrade/uninstall
 and the real two-machine acceptance test are still pending.
 
@@ -186,7 +186,13 @@ switching because existing threads can retain their provider.
 ModelBridge does not invent a public hostname. On explicit **Enable remote
 access**, it asks the Microsoft Dev Tunnels CLI to create or reuse its owned
 persistent tunnel, registers the sharing port, and starts a host process.
-Microsoft assigns the HTTPS URL; ModelBridge reads it from returned metadata.
+Microsoft assigns the HTTPS URL; ModelBridge reads the sharing port's address
+from `devtunnel host` output and waits for **Ready to accept connections**.
+The CLI's `show` and `port show` metadata may omit public URLs, even when the
+port is configured correctly; a missing metadata URL is not a sign-in failure.
+Both a validated HTTPS URL for the sharing port and the ready signal are
+required before ModelBridge reports sharing as active. It never constructs
+a hostname from the tunnel ID or displays an inspection URL as the API URL.
 The URL is reusable while the tunnel identity and port remain valid, but it is
 not guaranteed permanent if the service resource expires or is recreated.
 

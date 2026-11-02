@@ -6,7 +6,9 @@ import os from 'node:os'
 import path from 'node:path'
 import fs from 'node:fs'
 import { PassThrough } from 'node:stream'
+import { DevTunnels } from '@modelbridge/runtime/dev-tunnels'
 import {
+  parseHostUrl,
   parseTunnelUser,
   refreshRegistryPath,
   resolveDevTunnelExecutable,
@@ -28,6 +30,198 @@ function fakeRegistry(reply: () => string) {
     return new EventEmitter()
   }) as unknown as typeof childProcess.execFile)
 }
+
+test('host URLs come from the sharing port, not metadata, partial lines or inspection links', () => {
+  const url = 'https://owned-4322.euw.devtunnels.ms'
+  expect(
+    parseHostUrl(`Hosting port: 4322\nConnect via browser: ${url}/\n`, 4322),
+  ).toBe(url)
+  expect(
+    parseHostUrl(
+      `Hosting port 4322 at https://owned.euw.devtunnels.ms:4322/, ${url}/ and inspect it at https://owned-4322-inspect.euw.devtunnels.ms/\n`,
+      4322,
+    ),
+  ).toBe(url)
+  expect(parseHostUrl(`Connect via browser: ${url}/\r\n`, 4322)).toBe(url)
+  expect(
+    parseHostUrl(
+      'Connect via browser: https://owned.euw.devtunnels.ms:4322/\n',
+      4322,
+    ),
+  ).toBe('https://owned.euw.devtunnels.ms:4322')
+  expect(
+    parseHostUrl(`Hosting port: 4322\nConnect via browser: ${url}/`, 4322),
+  ).toBeNull()
+  expect(
+    parseHostUrl(
+      'Hosting port 9000 at https://owned-9000.euw.devtunnels.ms/\n',
+      4322,
+    ),
+  ).toBeNull()
+  expect(
+    parseHostUrl(
+      'Connect via browser: https://owned-9000.euw.devtunnels.ms/\n',
+      4322,
+    ),
+  ).toBeNull()
+  expect(
+    parseHostUrl(
+      'Hosting port: 4322\nConnect via browser: https://owned-4322-inspect.euw.devtunnels.ms/\n',
+      4322,
+    ),
+  ).toBeNull()
+  expect(
+    parseHostUrl(
+      'Hosting port: 4322\nConnect via browser: https://owned-4322.euw.devtunnels.ms/, https://owned-4322-inspect.euw.devtunnels.ms/\n',
+      4322,
+    ),
+  ).toBe(url)
+  for (const invalid of [
+    'http://owned-4322.euw.devtunnels.ms',
+    'https://attacker.example',
+    'https://owned-4322.euw.devtunnels.ms?token=unexpected',
+  ]) {
+    expect(() =>
+      parseHostUrl(`Hosting port 4322 at ${invalid}\n`, 4322),
+    ).toThrow()
+  }
+})
+
+test('URL-less provisioning starts hosting, requires both URL and readiness, and cleans failed starts', async () => {
+  const callbacks: Array<() => void> = []
+  const timers: Array<ReturnType<typeof setTimeout>> = []
+  const originalTimeout = setTimeout
+  const timeout = spyOn(globalThis, 'setTimeout').mockImplementation(
+    new Proxy(originalTimeout, {
+      apply(_target, _this, args: unknown[]) {
+        const callback = args[0]
+        if (typeof callback !== 'function')
+          throw new Error('Expected timeout callback.')
+        callbacks.push(() => {
+          Reflect.apply(callback, undefined, [])
+        })
+        const timer = originalTimeout(() => {}, 60_000)
+        timers.push(timer)
+        return timer
+      },
+    }),
+  )
+  const calls: string[][] = []
+  const children: Array<
+    EventEmitter & { stdout: PassThrough; stderr: PassThrough; kill(): boolean }
+  > = []
+  const id = `modelbridge-${'a'.repeat(32)}`
+  const transport = new TunnelProcess({
+    command: async (args) => {
+      calls.push(args)
+      return {
+        code: 0,
+        output: JSON.stringify({
+          tunnel: {
+            tunnelId: id,
+            accessControl: [{ type: 'Anonymous', scopes: ['connect'] }],
+            ports: [
+              { portNumber: 4322, protocol: 'http' },
+              { portNumber: 9000 },
+            ],
+          },
+        }),
+      }
+    },
+    spawn: (args) => {
+      calls.push(args)
+      const events = new EventEmitter()
+      const child = Object.assign(events, {
+        stdout: new PassThrough(),
+        stderr: new PassThrough(),
+        exitCode: null,
+        kill: () => {
+          events.emit('close', 0)
+          return true
+        },
+      })
+      children.push(child)
+      return child
+    },
+  })
+  const child = () => {
+    const value = children.at(-1)
+    if (!value) throw new Error('Missing host process.')
+    return value
+  }
+  const expire = () => {
+    const callback = callbacks.at(-1)
+    if (!callback) throw new Error('Missing timeout.')
+    callback()
+  }
+  try {
+    await expect(transport.start(id, 0)).rejects.toThrow('valid sharing port')
+    const resource = await new DevTunnels(id, (args) =>
+      transport.command(args),
+    ).provision(4322)
+    let started = transport.start(resource.id, 4322)
+    expect(calls.at(-1)).toEqual(['host', id])
+    child().stdout.emit(
+      'data',
+      Buffer.from(
+        'Hosting port 9000 at https://owned-9000.euw.devtunnels.ms/\nReady to accept connections\n',
+      ),
+    )
+    expect(transport.running).toBe(false)
+    child().stdout.emit(
+      'data',
+      Buffer.from('Hosting port 4322 at https://owned-4322.eu'),
+    )
+    expect(transport.running).toBe(false)
+    child().stderr.emit('data', Buffer.from('w.devtunnels.ms/\n'))
+    expect(await started).toBe('https://owned-4322.euw.devtunnels.ms')
+    expect(transport.running).toBe(true)
+    await transport.stop()
+    started = transport.start(id, 4322)
+    child().stdout.emit(
+      'data',
+      Buffer.from(
+        'Hosting port: 4322\nConnect via browser: https://owned-4322.euw.devtunnels.ms/\n',
+      ),
+    )
+    expect(transport.running).toBe(false)
+    child().stdout.emit('data', Buffer.from('Ready to accept connections\n'))
+    await started
+    await transport.stop()
+    started = transport.start(id, 4322)
+    child().stdout.emit('data', Buffer.from('Ready to accept connections\n'))
+    expect(transport.running).toBe(false)
+    expire()
+    await expect(started).rejects.toThrow(
+      'did not return a URL for sharing port 4322',
+    )
+    started = transport.start(id, 4322)
+    child().stdout.emit(
+      'data',
+      Buffer.from(
+        'Hosting port 4322 at https://attacker.example/\nReady to accept connections\n',
+      ),
+    )
+    await expect(started).rejects.toThrow('invalid Dev Tunnels URL')
+    expect(transport.running).toBe(false)
+    started = transport.start(id, 4322)
+    child().emit('close', 1)
+    await expect(started).rejects.toThrow('exited before it was ready')
+    started = transport.start(id, 4322)
+    child().stdout.emit(
+      'data',
+      Buffer.from('Another host for the tunnel has connected\n'),
+    )
+    await expect(started).rejects.toThrow('replaced')
+    expect(
+      calls.some((args) => args.includes('delete') || args.includes('create')),
+    ).toBe(false)
+  } finally {
+    await transport.dispose()
+    timeout.mockRestore()
+    for (const timer of timers) clearTimeout(timer)
+  }
+})
 
 test('tunnel CLI lifecycle reports device login, readiness, replacement, failures and explicit stopping', async () => {
   const callbacks: Array<() => void> = []
@@ -131,16 +325,26 @@ test('tunnel CLI lifecycle reports device login, readiness, replacement, failure
     expect(transport.error).toContain('did not complete')
     let stopped = 0
     transport.onUnexpectedStop = () => stopped++
-    let started = transport.start('owned')
-    await expect(transport.start('owned')).rejects.toThrow('already')
-    child().stdout.emit('data', Buffer.from('Ready to accept connections\n'))
-    await started
+    let started = transport.start('owned', 4322)
+    await expect(transport.start('owned', 4322)).rejects.toThrow('already')
+    child().stdout.emit(
+      'data',
+      Buffer.from(
+        'Hosting port: 4322\nConnect via browser: https://owned-4322.euw.devtunnels.ms/\nReady to accept connections\n',
+      ),
+    )
+    expect(await started).toBe('https://owned-4322.euw.devtunnels.ms')
     expect(transport.running).toBe(true)
     expect(() => transport.beginLogin()).toThrow('Stop sharing')
     await transport.stop()
     expect(stopped).toBe(0)
-    started = transport.start('owned')
-    child().stdout.emit('data', Buffer.from('Ready to accept connections\n'))
+    started = transport.start('owned', 4322)
+    child().stdout.emit(
+      'data',
+      Buffer.from(
+        'Hosting port 4322 at https://owned-4322.euw.devtunnels.ms/\nReady to accept connections\n',
+      ),
+    )
     await started
     child().stderr.emit(
       'data',
@@ -148,11 +352,11 @@ test('tunnel CLI lifecycle reports device login, readiness, replacement, failure
     )
     expect(transport.error).toContain('replaced')
     expect(stopped).toBe(1)
-    started = transport.start('owned')
+    started = transport.start('owned', 4322)
     child().emit('error', new Error('spawn error'))
     child().emit('close', 1)
     await expect(started).rejects.toThrow('spawn error')
-    started = transport.start('owned')
+    started = transport.start('owned', 4322)
     expire()
     await expect(started).rejects.toThrow('timed out')
     transport.beginLogin()
@@ -319,7 +523,7 @@ test('a missing tunnel CLI is an explicit error and never triggers installation 
     expect(() => transport.beginLogin()).toThrow(
       'No software is installed automatically',
     )
-    await expect(transport.start('owned')).rejects.toThrow(
+    await expect(transport.start('owned', 4322)).rejects.toThrow(
       'Install the Microsoft Dev Tunnels CLI',
     )
     expect(registry).toHaveBeenCalledTimes(process.platform === 'win32' ? 2 : 0)

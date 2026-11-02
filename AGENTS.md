@@ -39,7 +39,7 @@
 
 ## Product scope and releases
 
-- `0.1.0-dev.4` is a development foundation, not a shipped universal product.
+- `0.1.0-dev.5` is a development foundation, not a shipped universal product.
   Direct Copilot hosting and revision-safe Codex configuration are implemented
   with synthetic/native isolated checks. Do not claim real subscription,
   tunnel or two-machine acceptance before live verification. Other harnesses

@@ -81,7 +81,7 @@ test.skipIf(process.platform !== 'win32')(
 )
 
 const id = `modelbridge-${'a'.repeat(32)}`
-test('provisions an owned persistent tunnel and reads Microsoft-issued URLs without deleting other ports', async () => {
+test('provisions and reuses an owned persistent tunnel when CLI metadata omits URLs, without deleting other ports', async () => {
   const calls: string[][] = []
   let exists = false
   let port = false
@@ -100,15 +100,16 @@ test('provisions an owned persistent tunnel and reads Microsoft-issued URLs with
             tunnelId: id,
             accessControl:
               anonymous ? [{ type: 'Anonymous', scopes: ['connect'] }] : [],
-            ports:
-              port ?
+            ports: [
+              { portNumber: 9000 },
+              ...(port ?
                 [
                   {
                     portNumber: 4322,
-                    portUri: 'https://owned-4322.euw.devtunnels.ms/',
                   },
                 ]
-              : [],
+              : []),
+            ],
           },
         }),
       }
@@ -118,7 +119,6 @@ test('provisions an owned persistent tunnel and reads Microsoft-issued URLs with
   const transport = new DevTunnels(id, command)
   expect(await transport.provision(4322)).toEqual({
     id,
-    url: 'https://owned-4322.euw.devtunnels.ms',
   })
   expect(calls).toContainEqual(['create', id, '--allow-anonymous'])
   expect(calls).toContainEqual([
@@ -159,14 +159,7 @@ test('tunnel failures do not invent URLs, claim readiness, modify unrelated reso
       tunnel: {
         tunnelId: id,
         accessControl: [{ type: 'Anonymous', scopes: ['connect'] }],
-        ports: [{ portNumber: 4322 }],
-      },
-    }),
-    JSON.stringify({
-      tunnel: {
-        tunnelId: id,
-        accessControl: [{ type: 'Anonymous', scopes: ['connect'] }],
-        ports: [{ portNumber: 4322, portUri: 'https://attacker.example' }],
+        ports: [{ portNumber: 9000 }],
       },
     }),
   ])
@@ -180,4 +173,5 @@ test('tunnel failures do not invent URLs, claim readiness, modify unrelated reso
     })).provision(4322),
   ).rejects.toThrow('create failed')
   expect(() => validateTunnelUrl('http://host.devtunnels.ms')).toThrow()
+  expect(() => validateTunnelUrl('https://attacker.example')).toThrow()
 })

@@ -24,7 +24,7 @@ jobs:
       - run: bun run typecheck:all
       - run: bun run test
       - run: bun run build
-      - name: Verify isolated native profile and sign-in UI
+      - name: Verify isolated native profile, sign-in UI and remote sharing
         shell: pwsh
         run: |
           node .\scripts\ensure-electron.mjs
@@ -35,5 +35,5 @@ jobs:
             throw 'Electron discovery did not return an executable file.'
           }
           Set-Location apps\modelbridge
-          bun test ./tests/native-profile.test.ts ./tests/signin-ui.test.ts
+          bun test ./tests/native-profile.test.ts ./tests/signin-ui.test.ts ./tests/native-sharing.test.ts
           exit $LASTEXITCODE
