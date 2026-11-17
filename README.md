@@ -1,32 +1,32 @@
 # ModelBridge
 
 One desktop application for hosting a Copilot subscription and connecting
-Codex to local or remote models. Host and client are roles within the same
+coding tools to local or remote models. Host and client are roles within the same
 installation, not separate Gateway and Connector products.
 The new desktop structure retains the original Copilot API's direct
 authentication, token exchange, forwarding and protocol translations.
 **There is no Copilot SDK integration.**
 
-**Development pre-release: 0.1.1**, the latest ModelBridge release.
+**Development pre-release: 0.1.2**, the latest ModelBridge release.
 
 Download the unsigned Windows installer from the
-[ModelBridge 0.1.1 release](https://github.com/rajathnaik/Copilot-API/releases/tag/modelbridge-v0.1.1):
+[ModelBridge 0.1.2 release](https://github.com/rajathnaik/Copilot-API/releases/tag/modelbridge-v0.1.2):
 
-- [Windows installer](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.1/ModelBridge.Setup.0.1.1.exe)
-- [SHA256 checksum](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.1/ModelBridge.Setup.0.1.1.exe.sha256)
+- [Windows installer](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.2/ModelBridge.Setup.0.1.2.exe)
+- [SHA256 checksum](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.2/ModelBridge.Setup.0.1.2.exe.sha256)
 
-Compare `Get-FileHash .\ModelBridge.Setup.0.1.1.exe -Algorithm SHA256`
+Compare `Get-FileHash .\ModelBridge.Setup.0.1.2.exe -Algorithm SHA256`
 with the downloaded checksum before running the installer. Windows may warn
 about an unknown publisher because this development build is not code-signed.
 Use the same installer on the host and client machines.
 
 To build the unsigned Windows development installer locally, run
 `bun run --cwd apps/modelbridge package:win`. Its output is
-`apps/modelbridge/release/ModelBridge.Setup.0.1.1.exe`. This is a test
+`apps/modelbridge/release/ModelBridge.Setup.0.1.2.exe`. This is a test
 candidate, not a verified production release; installation/upgrade/uninstall
 and the real two-machine acceptance test are still pending.
 
-## Unreleased: every harness, not just Codex
+## What's new in 0.1.2: every harness, not just Codex
 
 Any tool that speaks the OpenAI Chat Completions or Anthropic Messages API can
 now use every shared model with only the tunnel URL and access key. Before
@@ -74,6 +74,15 @@ $env:ANTHROPIC_MODEL = '<source-id>/claude-sonnet-5.5'
 
 Model IDs are the source-qualified IDs from `/v1/models`. On the host
 machine itself, use `http://127.0.0.1:4321` with the local access key.
+
+For Nod by n8n, select **Settings > Models > Add connection > OpenAI-compatible**
+and enter `https://<tunnel-host>/v1` with the host's remote access key. Select a
+tool-capable model with at least 64K context. The **host serving the tunnel**
+must run 0.1.2 or newer: older hosts can list a model successfully but reject
+its Chat Completions requests with HTTP 422 ("Cross-protocol adapters are not
+enabled"). After updating, enable remote access again and reload the models
+in Nod. This fixes the protocol mismatch; a full Nod automation run remains
+a separate end-to-end acceptance check.
 
 ### Apps tab, Playground and per-app usage
 
