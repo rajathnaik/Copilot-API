@@ -1,8 +1,11 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { events } from 'fetch-event-stream'
 import {
+  decodeMessagesCompaction,
+  encodeMessagesCompaction,
   findWebSearchTool,
+  MESSAGES_COMPACTION_PROMPT,
   translateResponsesToMessages,
   translateAnthropicToResponses,
   ResponsesMessagesTranslationError,
@@ -10,6 +13,7 @@ import {
 } from './copilot-compatibility/messages-translation'
 import { translateMessagesStream } from './copilot-compatibility/messages-stream-translation'
 import { requestContext } from './copilot-compatibility/context'
+import { prepareNativeResponsesInput } from './copilot-compatibility/cross-model-history'
 import type { AnthropicResponse } from './copilot-compatibility/anthropic'
 import type {
   ResponseInputItem,
@@ -222,6 +226,9 @@ export class CopilotProvider {
   private readonly deviceId = randomUUID()
   private readonly sessionId = randomUUID()
   private readonly searchResults: WebSearchResultCache
+  // Plain-text summaries of GPT compactions, reused while a Claude model
+  // continues the same compacted conversation.
+  private readonly handoffs: WebSearchResultCache
   private readonly quotas = new Map<string, CopilotQuota>()
 
   constructor(
@@ -252,6 +259,7 @@ export class CopilotProvider {
     private readonly requestTimeout = 120_000,
   ) {
     this.searchResults = new WebSearchResultCache(now)
+    this.handoffs = new WebSearchResultCache(now, 50)
   }
 
   private async json(url: string, init: RequestInit): Promise<unknown> {
@@ -680,9 +688,35 @@ export class CopilotProvider {
       )
     }
     if (protocol === 'responses') {
+      const input = payload.input
+      if (Array.isArray(input))
+        payload.input = prepareNativeResponsesInput(
+          input as Array<ResponseInputItem>,
+        ).input
       const response = await send(payload, initiator)
-      return response.ok ? response : this.failure(source.id, token, response)
+      if (response.ok || response.status !== 400 || !Array.isArray(input))
+        return response.ok ? response : this.failure(source.id, token, response)
+      // Reasoning from before ModelBridge tagged it cannot be told apart from
+      // GPT's own, so earlier turns' reasoning is dropped if GPT rejects it.
+      const detail = await response.clone().text()
+      const retry = prepareNativeResponsesInput(
+        input as Array<ResponseInputItem>,
+        { dropEarlierReasoning: true },
+      )
+      if (!/could not be verified/iu.test(detail) || !retry.changed)
+        return this.failure(source.id, token, response)
+      await response.body?.cancel()
+      const second = await send({ ...payload, input: retry.input }, initiator)
+      return second.ok ? second : this.failure(source.id, token, second)
     }
+    if (Array.isArray(payload.input))
+      payload.input = await this.rehydrateCompactions(
+        source,
+        token,
+        payload.input as Array<ResponseInputItem>,
+        signal,
+        report,
+      )
     const translate = (value: Record<string, unknown>) =>
       requestContext.run({ sessionAffinity: conversation }, () => {
         z.object({
@@ -703,7 +737,8 @@ export class CopilotProvider {
           { ...value, model: z.string().parse(value.model) },
           {
             model: z.string().parse(value.model),
-            webSearchResult: (id) => this.searchResults.get(id),
+            webSearchResult: (id, query) =>
+              this.searchResults.lookup(id, query),
           },
         )
         const chat =
@@ -842,7 +877,8 @@ export class CopilotProvider {
       },
       search: (query) =>
         this.webSearch(source, token, query, signal, upstream.report),
-      remember: (id, text) => this.searchResults.set(id, text),
+      remember: (id, query, text) =>
+        this.searchResults.remember(id, query, text),
     })
     if (payload.stream) return eventStream(stream)
     const collected = await collectResponse(stream)
@@ -955,6 +991,115 @@ export class CopilotProvider {
           `Web search for ${model.id} timed out.`
         : `Web search failed: ${error instanceof Error ? error.message : 'unknown error'}.`,
       )
+    }
+  }
+
+  // A Claude model cannot read a compaction GPT encrypted, but GPT can, so
+  // ModelBridge asks a GPT model for the same handoff summary in plain text.
+  private async rehydrateCompactions(
+    source: Source,
+    token: CopilotToken,
+    input: Array<ResponseInputItem>,
+    signal: AbortSignal,
+    report?: UsageReporter,
+  ): Promise<Array<ResponseInputItem>> {
+    const output: Array<ResponseInputItem> = []
+    for (const item of input) {
+      const encrypted =
+        item && typeof item === 'object' && item.type === 'compaction' ?
+          (item as { encrypted_content?: unknown }).encrypted_content
+        : undefined
+      if (
+        typeof encrypted !== 'string'
+        || decodeMessagesCompaction(encrypted)
+      ) {
+        output.push(item)
+        continue
+      }
+      const key = createHash('sha256').update(encrypted).digest('hex')
+      const summary =
+        this.handoffs.get(key)
+        ?? (await this.summariseCompaction(source, token, item, signal, report))
+      if (!summary) {
+        output.push(item)
+        continue
+      }
+      this.handoffs.set(key, summary)
+      output.push({
+        type: 'compaction',
+        encrypted_content: encodeMessagesCompaction(summary),
+      } as ResponseInputItem)
+    }
+    return output
+  }
+
+  private async summariseCompaction(
+    source: Source,
+    token: CopilotToken,
+    compaction: ResponseInputItem,
+    signal: AbortSignal,
+    report?: UsageReporter,
+  ): Promise<string | undefined> {
+    const model = webSearchModel(source)
+    if (!model) return undefined
+    const headers = this.headers(token, false)
+    headers.set('x-initiator', 'agent')
+    try {
+      const response = await meteredFetch(
+        this.fetcher,
+        `${token.api}/responses`,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            model: model.id,
+            input: [
+              compaction,
+              {
+                type: 'message',
+                role: 'user',
+                content: MESSAGES_COMPACTION_PROMPT,
+              },
+            ],
+            stream: true,
+            store: false,
+          }),
+          redirect: 'error',
+          signal: this.deadline(signal),
+        },
+        report,
+        {
+          model: model.id,
+          purpose: 'continuation',
+          client: signal,
+          initiator: 'agent',
+          premium: 0,
+        },
+        this.now,
+      )
+      if (!response.ok) {
+        if (response.status === 401) this.tokens.delete(source.id)
+        await response.body?.cancel()
+        return undefined
+      }
+      let text = ''
+      for await (const message of events(response, signal)) {
+        if (!message.data || message.data === '[DONE]') continue
+        const event: unknown = JSON.parse(message.data)
+        if (
+          event
+          && typeof event === 'object'
+          && 'type' in event
+          && event.type === 'response.output_text.delta'
+          && 'delta' in event
+          && typeof event.delta === 'string'
+        )
+          text += event.delta
+      }
+      return text.trim() || undefined
+    } catch (error) {
+      if (signal.aborted) throw error
+      return undefined
     }
   }
 

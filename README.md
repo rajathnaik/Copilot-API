@@ -26,6 +26,32 @@ To build the unsigned Windows development installer locally, run
 candidate, not a verified production release; installation/upgrade/uninstall
 and the real two-machine acceptance test are still pending.
 
+## Coming in the next release: switch providers mid-conversation
+
+In Codex and any other Responses client, I can now switch between GPT and
+Claude models in the same conversation, in either direction and as often as
+I like. Before this, the switch failed with `web_search_call.id is required`,
+"Invalid `signature` in `thinking` block", "encrypted content could not be
+verified" or a compaction error. Each provider encrypts its hidden reasoning
+and compactions so that only that provider can read them, and GPT and Claude
+format tool and search IDs differently. ModelBridge now handles that:
+
+- **Reasoning.** Reasoning translated from Claude carries a ModelBridge tag
+  naming its model family. Each model receives only reasoning it can verify,
+  and the other model's hidden reasoning is dropped (as VS Code does). The
+  visible messages, tool calls, tool results and summaries are always kept.
+- **Web searches.** Search steps replay with or without their IDs, and IDs are
+  converted to a form the other provider accepts. GPT's own searches keep their
+  page contents on OpenAI's side, so Claude sees each search's query or opened
+  page and any cited sources, plus GPT's answer, but not the raw pages.
+- **Compactions.** A Claude compaction reaches GPT as its plain-text summary.
+  A GPT compaction is opaque, so before Claude continues from it, ModelBridge
+  asks the web-search helper GPT model for the same handoff summary in plain
+  text (one extra non-premium request, cached for later turns).
+- Older conversations whose reasoning was recorded before the tag existed
+  are handled too: if GPT rejects earlier-turn reasoning it cannot verify,
+  ModelBridge retries once without it.
+
 ## What's new in 0.1.3: choose your folders, update in the app
 
 - **Install folder.** The installer now asks where to install ModelBridge.

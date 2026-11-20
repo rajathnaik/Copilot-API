@@ -91,7 +91,8 @@ export function extractWebSearchResult(
 }
 
 // Codex replays web_search_call items without their results, so the host keeps
-// a bounded copy keyed by call ID to rebuild the conversation faithfully.
+// a bounded copy keyed by call ID, and by query because Codex can omit the ID,
+// to rebuild the conversation faithfully.
 export class WebSearchResultCache {
   private readonly entries = new Map<
     string,
@@ -112,6 +113,17 @@ export class WebSearchResultCache {
       if (oldest === undefined) break
       this.entries.delete(oldest)
     }
+  }
+
+  remember(id: string, query: string, text: string) {
+    this.set(id, text)
+    if (query) this.set(`query:${query}`, text)
+  }
+
+  lookup(id: string | undefined, query: string): string | undefined {
+    return (
+      (id && this.get(id)) || (query ? this.get(`query:${query}`) : undefined)
+    )
   }
 
   get(id: string): string | undefined {
@@ -146,7 +158,7 @@ export async function* proxyWebSearch(
     input: Array<ResponseInputItem>
     next: (input: Array<ResponseInputItem>) => Promise<WebSearchRound>
     search: (query: string) => Promise<WebSearchOutcome>
-    remember: (id: string, text: string) => void
+    remember: (id: string, query: string, text: string) => void
     maxSearches?: number
     maxRounds?: number
   },
@@ -258,7 +270,7 @@ export async function* proxyWebSearch(
               sources: [],
             }
           : await options.search(query)
-        options.remember(searchId, outcome.text)
+        options.remember(searchId, query, outcome.text)
         const item: ResponseOutputWebSearchCall = {
           id: searchId,
           type: 'web_search_call',

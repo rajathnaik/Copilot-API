@@ -2,9 +2,11 @@ import { describe, expect, test } from 'bun:test'
 
 import type { AnthropicResponse } from '../src/providers/copilot-compatibility/anthropic'
 import type {
+  ResponseInputItem,
   ResponsesPayload,
   ResponseStreamEvent,
 } from '../src/providers/copilot-compatibility/responses'
+import { prepareNativeResponsesInput } from '../src/providers/copilot-compatibility/cross-model-history'
 import { requestContext } from '../src/providers/copilot-compatibility/context'
 import {
   buildOutputFormatInstruction,
@@ -21,6 +23,10 @@ import {
   responsesResultToStreamEvents,
   translateMessagesStream,
 } from '../src/providers/copilot-compatibility/messages-stream-translation'
+import {
+  decodeReasoningSignature,
+  encodeReasoningSignature,
+} from '../src/providers/copilot-compatibility/reasoning-signature'
 
 const translate = (
   payload: Omit<ResponsesPayload, 'model'>,
@@ -694,7 +700,10 @@ describe('Responses Lite to Messages translation', () => {
           id: 'reasoning-1',
           type: 'reasoning',
           summary: [{ type: 'summary_text', text: 'Calculate the sum.' }],
-          encrypted_content: 'reasoning-signature',
+          encrypted_content: encodeReasoningSignature(
+            'claude',
+            'reasoning-signature',
+          ),
         },
         {
           role: 'assistant',
@@ -729,6 +738,121 @@ describe('Responses Lite to Messages translation', () => {
         ],
       },
     ])
+  })
+
+  test('replays only reasoning the target model family can verify', () => {
+    const result = translate({
+      input: [
+        { role: 'user', content: 'Earlier', type: 'message' },
+        {
+          type: 'reasoning',
+          summary: [{ type: 'summary_text', text: 'Untagged earlier.' }],
+          encrypted_content: 'legacy-signature',
+        },
+        {
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'Done' }],
+          type: 'message',
+        },
+        { role: 'user', content: 'Now', type: 'message' },
+        {
+          type: 'reasoning',
+          summary: [{ type: 'summary_text', text: 'From GPT.' }],
+          encrypted_content: encodeReasoningSignature('gpt', 'gpt-signature'),
+        },
+        {
+          type: 'reasoning',
+          summary: [{ type: 'summary_text', text: 'From Claude.' }],
+          encrypted_content: encodeReasoningSignature('claude', 'CAQS'),
+        },
+        {
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'Answer' }],
+          type: 'message',
+        },
+      ],
+    })
+
+    const thinking = result.messagesPayload.messages.flatMap((message) =>
+      Array.isArray(message.content) ?
+        message.content.filter((block) => block.type === 'thinking')
+      : [],
+    )
+    expect(thinking).toEqual([
+      { type: 'thinking', thinking: 'From Claude.', signature: 'CAQS' },
+    ])
+  })
+
+  test('replays GPT web searches with missing or non-Anthropic IDs', () => {
+    const lookups: Array<[string | undefined, string]> = []
+    const result = translateResponsesToMessages(
+      {
+        model: 'claude-sonnet-4.6',
+        input: [
+          { role: 'user', content: 'Search', type: 'message' },
+          {
+            type: 'web_search_call',
+            status: 'completed',
+            action: { type: 'search', query: 'first' },
+          },
+          {
+            type: 'web_search_call',
+            id: 'ws_a+b/c==',
+            status: 'completed',
+            action: { type: 'search', query: 'second' },
+          },
+          {
+            type: 'web_search_call',
+            id: 'ws_page',
+            status: 'completed',
+            action: { type: 'open_page', url: 'https://nodejs.org' },
+          },
+          { role: 'user', content: 'Next', type: 'message' },
+        ],
+      } as ResponsesPayload,
+      {
+        model: 'claude-sonnet-4.6',
+        webSearchResult: (id, query) => {
+          lookups.push([id, query])
+          return `result ${query}`
+        },
+      },
+    )
+
+    const blocks = result.messagesPayload.messages.flatMap((message) =>
+      Array.isArray(message.content) ?
+        (message.content as unknown as Array<Record<string, unknown>>)
+      : [],
+    )
+    const ids = blocks.flatMap((block) =>
+      block.type === 'tool_use' ? [String(block.id)]
+      : block.type === 'tool_result' ? [String(block.tool_use_id)]
+      : [],
+    )
+    expect(ids).toHaveLength(6)
+    expect(ids.every((id) => /^[a-zA-Z0-9_-]+$/u.test(id))).toBe(true)
+    expect(new Set(ids).size).toBe(3)
+    expect(lookups).toEqual([
+      [undefined, 'first'],
+      ['ws_a+b/c==', 'second'],
+      ['ws_page', 'open https://nodejs.org'],
+    ])
+  })
+
+  test('prepares history from other models for native Responses models', () => {
+    const input = [
+      { role: 'user', content: 'Earlier', type: 'message' },
+      { type: 'reasoning', summary: [], encrypted_content: 'gpt-own' },
+      { role: 'user', content: 'Now', type: 'message' },
+      { type: 'reasoning', summary: [], encrypted_content: 'gpt-current' },
+    ] as Array<ResponseInputItem>
+    expect(prepareNativeResponsesInput(input)).toEqual({
+      input,
+      changed: false,
+    })
+    expect(
+      prepareNativeResponsesInput(input, { dropEarlierReasoning: true }).input,
+    ).toEqual([input[0], input[2], input[3]])
   })
 
   test('keeps an empty thinking text for reasoning items without a summary', () => {
@@ -1176,10 +1300,12 @@ describe('Responses Lite to Messages translation', () => {
       translation,
     )
 
-    expect(result.output[0]).toMatchObject({
-      type: 'reasoning',
-      encrypted_content: 'claude-signature',
-    })
+    expect(result.output[0]?.type).toBe('reasoning')
+    expect(
+      decodeReasoningSignature(
+        (result.output[0] as { encrypted_content?: string }).encrypted_content,
+      ),
+    ).toEqual({ family: 'claude', signature: 'claude-signature' })
     expect(result.output[0]?.id?.endsWith('__a1')).toBe(true)
   })
 
@@ -1408,7 +1534,9 @@ describe('Responses Lite to Messages translation', () => {
     expect(reasoningItems[0]?.encrypted_content).toBe('')
     expect(reasoningItems[1]?.encrypted_content).toBe('')
     expect(reasoningItems[2]?.encrypted_content).toBe('')
-    expect(reasoningItems[3]?.encrypted_content).toBe(signature)
+    expect(
+      decodeReasoningSignature(reasoningItems[3]?.encrypted_content),
+    ).toEqual({ family: 'claude', signature })
     expectCanonicalBase64(reasoningItems[3]?.encrypted_content)
   })
 

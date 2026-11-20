@@ -15,6 +15,10 @@ import type {
 
 import { CustomToolInputStreamDecoder } from './custom-tool-input-stream-decoder'
 import {
+  encodeReasoningSignature,
+  reasoningFamily,
+} from './reasoning-signature'
+import {
   createMessagesBackedResponsesResult,
   encodeMessagesCompaction,
   markMessagesReasoningId,
@@ -594,7 +598,10 @@ function* translateContentDelta(
   if (event.delta.type === 'signature_delta' && block.type === 'reasoning') {
     block.signature += event.delta.signature
     block.item.encrypted_content =
-      block.signature || EMPTY_SIGNATURE_ENCRYPTED_CONTENT
+      encodeReasoningSignature(
+        reasoningFamily(state.context.originalPayload.model),
+        block.signature,
+      ) || EMPTY_SIGNATURE_ENCRYPTED_CONTENT
     return
   }
 
@@ -696,7 +703,10 @@ function* closeContentBlock(
       })
     }
     block.item.encrypted_content =
-      block.signature || EMPTY_SIGNATURE_ENCRYPTED_CONTENT
+      encodeReasoningSignature(
+        reasoningFamily(state.context.originalPayload.model),
+        block.signature,
+      ) || EMPTY_SIGNATURE_ENCRYPTED_CONTENT
   } else if (block.type === 'custom_tool') {
     const input = block.decoder.finish()
     block.item.input = input

@@ -96,3 +96,8 @@
   requests/hour) and installs only releases tagged `modelbridge-v<version>`
   with both `ModelBridge.Setup.<version>.exe` and its `.sha256` asset. Every
   release must publish both.
+- Each provider encrypts reasoning and compactions for itself, and Codex
+  replays `web_search_call` without `id`. Keep reasoning family-tagged
+  (`reasoning-signature.ts`), keep `cross-model-history.ts` for native
+  Responses input, and verify model switching live in both directions
+  (search, reasoning, compaction) because mocks cannot verify signatures.

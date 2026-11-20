@@ -14,7 +14,11 @@ import {
   proxyWebSearch,
   WebSearchResultCache,
 } from '../src/providers/copilot-compatibility/web-search-proxy'
-import type { MessagesToolRegistry } from '../src/providers/copilot-compatibility/messages-translation'
+import {
+  encodeMessagesCompaction,
+  type MessagesToolRegistry,
+} from '../src/providers/copilot-compatibility/messages-translation'
+import { encodeReasoningSignature } from '../src/providers/copilot-compatibility/reasoning-signature'
 import type { ResponseStreamEvent } from '../src/providers/copilot-compatibility/responses'
 
 function credentials(): Credentials {
@@ -459,7 +463,7 @@ test('non-streaming turns with client tool calls return after searching and repl
     'toolu_exec',
   ])
   expect(String(user.content[0]?.content)).toContain('Bun 2 shipped.')
-  expect(String(user.content[1]?.content)).toContain('no longer available')
+  expect(String(user.content[1]?.content)).toContain('are not stored')
 })
 
 test('chat-completions models use the same web search proxy', async () => {
@@ -881,7 +885,7 @@ test('the proxy enforces search and round limits and passes upstream failures th
         queries.push(query)
         return Promise.resolve({ failed: false, text: 'ok', sources: [] })
       },
-      remember: (id, text) => remembered.set(id, text),
+      remember: (id, _query, text) => remembered.set(id, text),
       next: () =>
         Promise.resolve(
           syntheticRound(
@@ -956,4 +960,107 @@ test('the proxy enforces search and round limits and passes upstream failures th
     ok: false,
     message: 'not an error',
   })
+})
+
+test('GPT models receive history from other models without foreign reasoning or IDs', async () => {
+  let calls = 0
+  const { send, searches } = await harness({
+    search: () =>
+      ++calls === 1 ?
+        new Response(
+          '{"error":"The encrypted content could not be verified."}',
+          {
+            status: 400,
+          },
+        )
+      : Response.json({ id: 'resp_ok', output: [], output_text: 'ok' }),
+  })
+  const response = await send({
+    model: 'gpt-5.4',
+    input: [
+      { type: 'message', role: 'user', content: 'First' },
+      {
+        type: 'reasoning',
+        summary: [],
+        encrypted_content: 'untagged-earlier',
+        status: 'completed',
+      },
+      {
+        type: 'reasoning',
+        summary: [],
+        encrypted_content: encodeReasoningSignature('claude', 'CAQS'),
+      },
+      {
+        type: 'web_search_call',
+        id: 'toolu_search',
+        status: 'completed',
+        action: { type: 'search', query: 'bun' },
+      },
+      {
+        type: 'compaction',
+        encrypted_content: encodeMessagesCompaction('Claude summary'),
+      },
+      { type: 'message', role: 'user', content: 'Second' },
+    ],
+  })
+  expect(response.status).toBe(200)
+  expect(searches).toHaveLength(2)
+  const first = searches[0]?.body.input as Array<Record<string, unknown>>
+  expect(first.map((item) => item.type ?? 'message')).toEqual([
+    'message',
+    'reasoning',
+    'web_search_call',
+    'message',
+    'message',
+  ])
+  expect(first[1]).not.toHaveProperty('status')
+  expect(first[2]).not.toHaveProperty('id')
+  expect(String(first[3]?.content)).toContain('Claude summary')
+  const retry = searches[1]?.body.input as Array<Record<string, unknown>>
+  expect(retry.some((item) => item.type === 'reasoning')).toBe(false)
+})
+
+test('Claude models continue a GPT compaction from a cached handoff summary', async () => {
+  const summary = [
+    {
+      type: 'response.output_text.delta',
+      delta: 'Handoff: fix the build.',
+    },
+    { type: 'response.completed', response: { id: 'resp_summary' } },
+  ]
+  const { send, searches, upstream } = await harness({
+    rounds: [
+      () => messagesStream([{ type: 'text', text: 'Continued.' }], 'end_turn'),
+      () => messagesStream([{ type: 'text', text: 'Again.' }], 'end_turn'),
+    ],
+    search: () =>
+      new Response(
+        summary.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(''),
+        { headers: { 'Content-Type': 'text/event-stream' } },
+      ),
+  })
+  const body = {
+    model: 'claude',
+    input: [
+      { type: 'compaction', encrypted_content: 'gpt-opaque' },
+      { type: 'message', role: 'user', content: 'Continue' },
+    ],
+    stream: true,
+  }
+  for (let turn = 0; turn < 2; turn++) {
+    const response = await send(body)
+    expect(response.status).toBe(200)
+    expect(await response.text()).toContain('response.completed')
+  }
+  expect(searches).toHaveLength(1)
+  expect(searches[0]?.body.model).toBe('gpt-5.4')
+  expect(searches[0]?.headers.get('x-initiator')).toBe('agent')
+  expect((searches[0]?.body.input as Array<unknown>)[0]).toEqual({
+    type: 'compaction',
+    encrypted_content: 'gpt-opaque',
+  })
+  for (const call of upstream)
+    expect(JSON.stringify(call.body.messages)).toContain(
+      'Handoff: fix the build.',
+    )
 })

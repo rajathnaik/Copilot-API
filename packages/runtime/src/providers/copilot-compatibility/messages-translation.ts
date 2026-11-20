@@ -34,6 +34,13 @@ import type {
   ResponseUsage,
 } from './responses'
 
+import {
+  decodeReasoningSignature,
+  encodeReasoningSignature,
+  lastUserMessageIndex,
+  reasoningFamily,
+} from './reasoning-signature'
+
 export const MESSAGES_COMPACTION_PREFIX = 'copilot-api:messages-compaction:v1:'
 const MESSAGES_REASONING_ID_SUFFIX = '__a1'
 
@@ -97,7 +104,7 @@ export const buildOutputFormatInstruction = (
   return null
 }
 
-const COMPACTION_REPLAY_PROMPT =
+export const COMPACTION_REPLAY_PROMPT =
   'The previous conversation was compacted. Continue from this handoff summary:\n\n'
 const MAX_DEVELOPER_PROMPTS = 5
 const TOOL_NAME_PATTERN = /^[A-Za-z0-9_-]{1,64}$/u
@@ -134,7 +141,11 @@ export interface MessagesToolRegistry {
 }
 
 // Resolves cached results when Codex replays an earlier web_search_call.
-export type WebSearchResultLookup = (id: string) => string | undefined
+// Codex can omit the call ID, so the query is the fallback key.
+export type WebSearchResultLookup = (
+  id: string | undefined,
+  query: string,
+) => string | undefined
 
 const WEB_SEARCH_TOOL_NAME = 'web_search'
 const WEB_SEARCH_TOOL_DESCRIPTION =
@@ -194,6 +205,7 @@ export function translateResponsesToMessages(
     payload.instructions,
     payload.input,
     options.toolCallTips ?? false,
+    reasoningFamily(options.model),
     options.webSearchResult,
   )
 
@@ -255,7 +267,11 @@ export function translateAnthropicToResponses(
   const output =
     context.compaction ?
       translateCompactionOutput(response)
-    : translateAssistantOutput(response, context.registry)
+    : translateAssistantOutput(
+        response,
+        context.registry,
+        reasoningFamily(context.originalPayload.model),
+      )
   const outputText =
     context.compaction ? '' : extractAnthropicResponseText(response)
 
@@ -586,6 +602,7 @@ function translateInputToAnthropic(
   instructions: string | null | undefined,
   originalInput: ResponsesPayload['input'],
   toolCallTips: boolean,
+  family: string,
   webSearchResult?: WebSearchResultLookup,
 ): {
   messages: Array<AnthropicInputMessage>
@@ -601,7 +618,14 @@ function translateInputToAnthropic(
   if (typeof input === 'string') {
     messages.push({ role: 'user', content: input })
   } else if (Array.isArray(input)) {
-    translateInputItems(input, messages, system, registry, webSearchResult)
+    translateInputItems(
+      input,
+      messages,
+      system,
+      registry,
+      family,
+      webSearchResult,
+    )
   }
   if (toolCallTips) {
     appendToolCallTips(system)
@@ -623,9 +647,12 @@ function translateInputItems(
   messages: Array<AnthropicInputMessage>,
   system: Array<AnthropicTextBlock>,
   registry: MessagesToolRegistry,
+  family: string,
   webSearchResult?: WebSearchResultLookup,
 ): void {
   let userMessageSeen = false
+  let replayedSearches = 0
+  const lastUser = lastUserMessageIndex(input)
   // Search results belong in the user turn that follows the assistant's
   // tool calls, together with any client tool results from the same turn.
   const searchResults: Array<AnthropicUserContentBlock> = []
@@ -633,7 +660,7 @@ function translateInputItems(
     for (const block of searchResults.splice(0))
       appendUserBlock(messages, block)
   }
-  for (const item of input) {
+  for (const [index, item] of input.entries()) {
     const type = getItemType(item)
     if (
       type !== 'web_search_call'
@@ -643,7 +670,13 @@ function translateInputItems(
       flushSearchResults()
     switch (type) {
       case 'web_search_call': {
-        const id = requireStringField(item, 'id', 'web_search_call')
+        const original = getStringField(item, 'id')
+        // Codex can omit the ID, and GPT search IDs are not valid tool IDs.
+        const id =
+          original ?
+            toAnthropicToolId(original)
+          : `ws_replay_${replayedSearches}`
+        replayedSearches++
         const action =
           isRecord((item as Record<string, unknown>).action) ?
             ((item as Record<string, unknown>).action as Record<
@@ -655,8 +688,7 @@ function translateInputItems(
           Array.isArray(action.queries) ?
             action.queries.filter((query) => typeof query === 'string')
           : []
-        const query =
-          typeof action.query === 'string' ? action.query : queries.join('; ')
+        const query = describeWebSearchAction(action, queries)
         appendAssistantBlock(messages, {
           type: 'tool_use',
           id,
@@ -667,8 +699,8 @@ function translateInputItems(
           type: 'tool_result',
           tool_use_id: id,
           content:
-            webSearchResult?.(id)
-            ?? `The earlier web search for "${query}" is no longer available. Search again if the result is still needed.`,
+            webSearchResult?.(original, query)
+            ?? describeMissingSearchResult(query, action),
         })
         break
       }
@@ -686,7 +718,12 @@ function translateInputItems(
         break
       }
       case 'reasoning': {
-        translateInputReasoning(item as ResponseInputReasoning, messages)
+        translateInputReasoning(
+          item as ResponseInputReasoning,
+          messages,
+          family,
+          index > lastUser,
+        )
         break
       }
       case 'function_call': {
@@ -701,7 +738,9 @@ function translateInputItems(
       case 'custom_tool_call_output': {
         appendUserBlock(messages, {
           type: 'tool_result',
-          tool_use_id: requireStringField(item, 'call_id', type),
+          tool_use_id: toAnthropicToolId(
+            requireStringField(item, 'call_id', type),
+          ),
           content: translateToolResultContent(
             (item as Record<string, unknown>).output,
             `${type}.output`,
@@ -808,7 +847,16 @@ function appendDeveloperPrompts(
 function translateInputReasoning(
   item: ResponseInputReasoning,
   messages: Array<AnthropicInputMessage>,
+  family: string,
+  currentTurn: boolean,
 ): void {
+  const encrypted = item.encrypted_content ?? ''
+  const tagged = decodeReasoningSignature(encrypted)
+  // Thinking signatures only verify for the model family that produced them,
+  // so reasoning from another family (e.g. GPT) is dropped, as VS Code does.
+  // Untagged signatures predate tagging; they can only belong to this model
+  // within the current turn, because Codex switches models between turns.
+  if (tagged ? tagged.family !== family : encrypted && !currentTurn) return
   const thinking =
     Array.isArray(item.summary) ?
       item.summary
@@ -819,7 +867,7 @@ function translateInputReasoning(
   appendAssistantBlock(messages, {
     type: 'thinking',
     thinking: thinking || '',
-    signature: item.encrypted_content ?? '',
+    signature: tagged ? tagged.signature : encrypted,
   })
 }
 
@@ -850,10 +898,55 @@ function translateInputToolCall(
       )
   appendAssistantBlock(messages, {
     type: 'tool_use',
-    id: requireStringField(item, 'call_id', `${kind}_tool_call`),
+    id: toAnthropicToolId(
+      requireStringField(item, 'call_id', `${kind}_tool_call`),
+    ),
     name: descriptor.alias,
     input,
   })
+}
+
+const ANTHROPIC_TOOL_ID = /^[A-Za-z0-9_-]+$/u
+
+// Other providers' call IDs can contain characters Anthropic rejects; mapping
+// them deterministically keeps each tool_use paired with its tool_result.
+function toAnthropicToolId(id: string): string {
+  return ANTHROPIC_TOOL_ID.test(id) ? id : `mb_${createStableHash(id)}`
+}
+
+// GPT's native search also opens and searches within pages; those steps carry
+// a URL or pattern instead of a query.
+function describeWebSearchAction(
+  action: Record<string, unknown>,
+  queries: Array<string>,
+): string {
+  const text = (key: string) =>
+    typeof action[key] === 'string' ? action[key] : ''
+  if (action.type === 'open_page') return `open ${text('url')}`.trim()
+  if (action.type === 'find')
+    return `find "${text('pattern')}" in ${text('url')}`.trim()
+  return text('query') || queries.join('; ')
+}
+
+// GPT's native search keeps page contents server-side, so a Claude model only
+// ever sees what the search cited and what the replies after it concluded.
+function describeMissingSearchResult(
+  query: string,
+  action: Record<string, unknown>,
+): string {
+  const sources =
+    Array.isArray(action.sources) ?
+      action.sources.flatMap((source) =>
+        isRecord(source) && typeof source.url === 'string' ? [source.url] : [],
+      )
+    : []
+  return [
+    `The raw results of this earlier web search (${query}) are not stored.`,
+    sources.length ? `It cited: ${sources.slice(0, 10).join(', ')}.` : '',
+    'The replies that follow already summarise what it found; search again if you need to verify a detail.',
+  ]
+    .filter(Boolean)
+    .join(' ')
 }
 
 function translateUserContent(
@@ -1077,6 +1170,7 @@ function translateToolChoice(
 function translateAssistantOutput(
   response: AnthropicResponse,
   registry: MessagesToolRegistry,
+  family: string,
 ): Array<ResponseOutputItem> {
   const output: Array<ResponseOutputItem> = []
   for (const [index, block] of response.content.entries()) {
@@ -1090,7 +1184,14 @@ function translateAssistantOutput(
         ...(block.thinking && block.thinking !== 'Thinking...' ?
           { summary: [{ type: 'summary_text', text: block.thinking }] }
         : {}),
-        ...(block.signature ? { encrypted_content: block.signature } : {}),
+        ...(block.signature ?
+          {
+            encrypted_content: encodeReasoningSignature(
+              family,
+              block.signature,
+            ),
+          }
+        : {}),
       })
       continue
     }
