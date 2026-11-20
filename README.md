@@ -7,24 +7,50 @@ The new desktop structure retains the original Copilot API's direct
 authentication, token exchange, forwarding and protocol translations.
 **There is no Copilot SDK integration.**
 
-**Development pre-release: 0.1.2**, the latest ModelBridge release.
+**Development pre-release: 0.1.3**, the latest ModelBridge release.
 
 Download the unsigned Windows installer from the
-[ModelBridge 0.1.2 release](https://github.com/rajathnaik/Copilot-API/releases/tag/modelbridge-v0.1.2):
+[ModelBridge 0.1.3 release](https://github.com/rajathnaik/Copilot-API/releases/tag/modelbridge-v0.1.3):
 
-- [Windows installer](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.2/ModelBridge.Setup.0.1.2.exe)
-- [SHA256 checksum](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.2/ModelBridge.Setup.0.1.2.exe.sha256)
+- [Windows installer](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.3/ModelBridge.Setup.0.1.3.exe)
+- [SHA256 checksum](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.3/ModelBridge.Setup.0.1.3.exe.sha256)
 
-Compare `Get-FileHash .\ModelBridge.Setup.0.1.2.exe -Algorithm SHA256`
+Compare `Get-FileHash .\ModelBridge.Setup.0.1.3.exe -Algorithm SHA256`
 with the downloaded checksum before running the installer. Windows may warn
 about an unknown publisher because this development build is not code-signed.
 Use the same installer on the host and client machines.
 
 To build the unsigned Windows development installer locally, run
 `bun run --cwd apps/modelbridge package:win`. Its output is
-`apps/modelbridge/release/ModelBridge.Setup.0.1.2.exe`. This is a test
+`apps/modelbridge/release/ModelBridge.Setup.0.1.3.exe`. This is a test
 candidate, not a verified production release; installation/upgrade/uninstall
 and the real two-machine acceptance test are still pending.
+
+## What's new in 0.1.3: choose your folders, update in the app
+
+- **Install folder.** The installer now asks where to install ModelBridge.
+  The default is still `%LOCALAPPDATA%\Programs\ModelBridge`, which needs no
+  administrator rights. Any folder you can write to works, for example
+  `D:\Apps\ModelBridge`.
+- **Data folder.** The next page asks where ModelBridge keeps its settings,
+  sign-ins, access keys, hosts, usage history and logs. The default is still
+  `%APPDATA%\ModelBridge`. If you pick another folder, the installer copies
+  your existing data there and keeps the original folder. The data folder
+  must be outside the install folder, because updates replace everything
+  inside it. Keys are stored unencrypted, so choose a folder only you can open.
+  The choice is saved in `HKCU\Software\ModelBridge` (`DataDir`) and in
+  `data-location.txt` next to `ModelBridge.exe`, so updates keep using it.
+  Silent installs accept `/D=<install folder>` and `/DATADIR=<data folder>`.
+- **Move the data folder later.** Settings → Data folder → "Move data
+  folder…" copies your data to an empty folder and restarts ModelBridge there.
+  If Codex was set up, Apps then offers to point Codex at the new folder.
+- **Updates.** ModelBridge checks GitHub for newer releases, including
+  pre-releases, shortly after it starts and every six hours. "Update to X" in
+  the header or in Settings downloads the installer, verifies its SHA-256
+  checksum, closes ModelBridge, installs silently and reopens it. Updates keep
+  your folders. This works from 0.1.3 onward; install 0.1.3 itself manually.
+- The installer's "Recheck" button for the Dev Tunnels CLI is now fully
+  visible, inside its own group with the CLI status.
 
 ## What's new in 0.1.2: every harness, not just Codex
 
