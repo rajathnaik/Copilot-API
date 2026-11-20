@@ -74,10 +74,15 @@ export function CodexPanel({ models }: { models: AvailableModel[] }) {
           longer available because its source was removed or changed. Choose
           another default model below, then preview and apply the change.
         </div>
-      : status?.catalogStale && status.active ?
+      : (status?.catalogStale || status?.pathsStale) && status.active ?
         <div className="notice warn codex-update" role="status">
-          Your hosts or models changed since Codex was configured, so
-          Codex&apos;s model list is out of date.
+          {status.pathsStale ?
+            'ModelBridge was moved to another install or data folder since Codex was configured, so Codex still points to the old one.'
+          : <>
+              Your hosts or models changed since Codex was configured, so
+              Codex&apos;s model list is out of date.
+            </>
+          }
           <div className="actions">
             <button
               className="primary"

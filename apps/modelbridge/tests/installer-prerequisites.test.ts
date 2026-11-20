@@ -41,7 +41,7 @@ AutoCloseWindow true
     StrCpy $MBDescription "Ready: isolated CLI fixture"
 !macroend
 !include "${include}"
-!insertmacro customPageAfterChangeDir
+Page custom MBPrerequisitePage MBPrerequisiteLeave
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "English"
 Function .onInit
@@ -318,7 +318,7 @@ SectionEnd
 test.skipIf(
   process.platform !== 'win32' || !process.env.MODELBRIDGE_TEST_INSTALLER_EXE,
 )(
-  'full development installer exposes the host/client prerequisite page and cancels before installing',
+  'full development installer offers install and data folders, then the host/client prerequisite page, and cancels before installing',
   async () => {
     const executable = process.env.MODELBRIDGE_TEST_INSTALLER_EXE
     if (!executable) throw new Error('Set MODELBRIDGE_TEST_INSTALLER_EXE.')
@@ -345,16 +345,33 @@ Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 Add-Type 'using System; using System.Runtime.InteropServices; public static class MBWizardClick { [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l); }'
 $root = $null
-$deadline = [DateTime]::UtcNow.AddSeconds(20)
+$recheck = $null
+$sawDirectory = $false
+$sawData = $false
+$deadline = [DateTime]::UtcNow.AddSeconds(30)
 while ([DateTime]::UtcNow -lt $deadline) {
   $process = Get-Process -Id ${child.pid} -ErrorAction Stop
   if ($process.MainWindowHandle -ne 0) {
     $root = [System.Windows.Automation.AutomationElement]::FromHandle($process.MainWindowHandle)
     $recheck = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, 'Recheck')))
     if ($recheck) { break }
+    $all = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
+    $names = @($all | ForEach-Object { $_.Current.Name })
+    $page = $null
+    if ($names -contains 'Data folder:') { $sawData = $true; $page = 'data' }
+    elseif (@($names | Where-Object { $_ -like '*Destination Folder*' }).Count) { $sawDirectory = $true; $page = 'directory' }
+    $forward = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty, '1')))
+    if ($page -and $forward -and $forward.Current.IsEnabled) {
+      # BM_CLICK is ignored once the data field has focus; WM_COMMAND IDOK is what Next sends.
+      [void][MBWizardClick]::PostMessage([IntPtr]$process.MainWindowHandle, 0x0111, [IntPtr]1, [IntPtr]::Zero)
+      Start-Sleep -Milliseconds 700
+      continue
+    }
   }
   Start-Sleep -Milliseconds 100
 }
+if (!$sawDirectory) { throw 'Full installer did not offer an install folder.' }
+if (!$sawData) { throw 'Full installer did not offer a data folder.' }
 if (!$recheck) { throw 'Full installer prerequisite page did not open.' }
 function FindControl($property, $value) {
   $control = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition($property, $value)))
@@ -407,4 +424,184 @@ Write-Output "WIZARD_OK CLI_READY=$ready"
     }
   },
   60_000,
+)
+
+test.skipIf(process.platform !== 'win32' || !process.env.MODELBRIDGE_TEST_NSIS)(
+  'data folder page and silent installs record, copy and protect the chosen data folder',
+  async () => {
+    const compiler = process.env.MODELBRIDGE_TEST_NSIS
+    if (!compiler) throw new Error('Set MODELBRIDGE_TEST_NSIS to makensis.exe.')
+    const { readDataLocation } = await import('../electron/data-location')
+    const directory = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'modelbridge-data-nsis-'),
+    )
+    const key = `Software\\ModelBridgeTest-${path.basename(directory)}`
+    const install = path.join(directory, 'install')
+    const previous = path.join(directory, 'previous')
+    const chosen = path.join(directory, 'Chosen data')
+    const executable = path.join(directory, 'data.exe')
+    const script = path.join(directory, 'data.nsi')
+    const reg = async (...args: string[]) => {
+      const child = Bun.spawn(['reg.exe', ...args], {
+        stdout: 'pipe',
+        stderr: 'pipe',
+      })
+      const output = await new Response(child.stdout).text()
+      return { code: await child.exited, output }
+    }
+    const registered = async () =>
+      /DataDir\s+REG_SZ\s+(.+)/u
+        .exec((await reg('query', `HKCU\\${key}`, '/v', 'DataDir')).output)?.[1]
+        ?.trim()
+    const run = async (args: string[]) => {
+      const child = Bun.spawn([executable, ...args], {
+        stdout: 'ignore',
+        stderr: 'ignore',
+      })
+      const deadline = Date.now() + 20_000
+      while (child.exitCode === null && Date.now() < deadline)
+        await Bun.sleep(100)
+      if (child.exitCode === null) {
+        child.kill()
+        await child.exited
+        throw new Error('Data folder fixture timed out.')
+      }
+      return child.exited
+    }
+    try {
+      fs.mkdirSync(previous)
+      fs.writeFileSync(path.join(previous, 'state.json'), '{"role":"client"}')
+      fs.writeFileSync(path.join(previous, 'credentials.json'), '{"k":"v"}')
+      expect(
+        (
+          await reg(
+            'add',
+            `HKCU\\${key}`,
+            '/v',
+            'DataDir',
+            '/t',
+            'REG_SZ',
+            '/d',
+            previous,
+            '/f',
+          )
+        ).code,
+      ).toBe(0)
+      fs.writeFileSync(
+        script,
+        `
+Unicode true
+Name "ModelBridge data folder test"
+OutFile "${executable}"
+InstallDir "${install}"
+RequestExecutionLevel user
+AutoCloseWindow true
+!define MB_DATA_REGISTRY_KEY "${key}"
+!include "MUI2.nsh"
+!include "${include}"
+Page custom MBDataPage MBDataLeave
+!insertmacro MUI_PAGE_INSTFILES
+!insertmacro MUI_LANGUAGE "English"
+Section
+  CreateDirectory "$INSTDIR"
+  Call MBApplyDataFolder
+SectionEnd
+`,
+      )
+      const compilation = Bun.spawn([compiler, '/V2', script], {
+        stdout: 'pipe',
+        stderr: 'pipe',
+      })
+      const output = await new Response(compilation.stdout).text()
+      expect(await compilation.exited, output).toBe(0)
+
+      // A silent update without a choice keeps the recorded folder.
+      expect(await run(['/S'])).toBe(0)
+      expect(readDataLocation(install)).toBe(previous)
+      expect(
+        fs.existsSync(path.join(previous, '.modelbridge-write-test')),
+      ).toBe(false)
+
+      // Choosing a new folder copies the profile and records it everywhere.
+      expect(await run(['/S', `/DATADIR=${chosen}`])).toBe(0)
+      expect(await registered()).toBe(chosen)
+      expect(readDataLocation(install)).toBe(chosen)
+      expect(
+        fs.readFileSync(path.join(chosen, 'credentials.json'), 'utf8'),
+      ).toBe('{"k":"v"}')
+      expect(fs.existsSync(path.join(previous, 'state.json'))).toBe(true)
+
+      // Unsafe choices fall back to the recorded folder.
+      for (const unsafe of [
+        'relative\\data',
+        path.join(install, 'data'),
+        path.join(chosen, 'inner'),
+        path.parse(directory).root,
+      ]) {
+        expect(await run(['/S', `/DATADIR=${unsafe}`])).toBe(0)
+        expect(await registered()).toBe(chosen)
+        expect(readDataLocation(install)).toBe(chosen)
+      }
+      expect(fs.existsSync(path.join(install, 'data'))).toBe(false)
+
+      // The page shows the recorded folder and accepts a typed one.
+      const typed = path.join(directory, 'typed')
+      const child = Bun.spawn([executable], {
+        stdout: 'ignore',
+        stderr: 'ignore',
+      })
+      try {
+        const driver = Bun.spawn(
+          [
+            'powershell.exe',
+            '-NoProfile',
+            '-NonInteractive',
+            '-Command',
+            `
+Add-Type -AssemblyName UIAutomationClient
+Add-Type -AssemblyName UIAutomationTypes
+Add-Type 'using System; using System.Runtime.InteropServices; public static class MBDataClick { [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l); [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr SendMessage(IntPtr h, uint m, IntPtr w, string l); }'
+$deadline = [DateTime]::UtcNow.AddSeconds(15)
+$field = $null
+while ([DateTime]::UtcNow -lt $deadline -and !$field) {
+  $process = Get-Process -Id ${child.pid} -ErrorAction Stop
+  if ($process.MainWindowHandle -ne 0) {
+    $root = [System.Windows.Automation.AutomationElement]::FromHandle($process.MainWindowHandle)
+    $field = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty, '1202')))
+  }
+  Start-Sleep -Milliseconds 100
+}
+if (!$field) { throw 'Data folder page did not open.' }
+$browse = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, 'Browse...')))
+if (!$browse) { throw 'Browse button missing.' }
+if ($field.Current.Name -ne '${chosen}') { throw "Page did not show the recorded folder: $($field.Current.Name)" }
+[void][MBDataClick]::SendMessage([IntPtr]$field.Current.NativeWindowHandle, 0x000C, [IntPtr]::Zero, '${typed}')
+Start-Sleep -Milliseconds 200
+$next = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty, '1')))
+[void][MBDataClick]::PostMessage([IntPtr]$next.Current.NativeWindowHandle, 0xF5, [IntPtr]::Zero, [IntPtr]::Zero)
+`,
+          ],
+          { stdout: 'pipe', stderr: 'pipe' },
+        )
+        const errors = await new Response(driver.stderr).text()
+        expect(await driver.exited, errors).toBe(0)
+        const deadline = Date.now() + 10_000
+        while (child.exitCode === null && Date.now() < deadline)
+          await Bun.sleep(100)
+        expect(child.exitCode).toBe(0)
+      } finally {
+        if (child.exitCode === null) child.kill()
+        await child.exited
+      }
+      expect(await registered()).toBe(typed)
+      expect(readDataLocation(install)).toBe(typed)
+      expect(fs.readFileSync(path.join(typed, 'state.json'), 'utf8')).toBe(
+        '{"role":"client"}',
+      )
+    } finally {
+      await reg('delete', `HKCU\\${key}`, '/f')
+      fs.rmSync(directory, { recursive: true, force: true })
+    }
+  },
+  120_000,
 )

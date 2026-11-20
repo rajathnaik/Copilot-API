@@ -70,5 +70,12 @@ const api: ModelBridgeAPI = {
     ipcRenderer.invoke('modelbridge:app-config-restore', app),
   applyAppConfig: (id) =>
     ipcRenderer.invoke('modelbridge:app-config-apply', id),
+  checkForUpdate: () => ipcRenderer.invoke('modelbridge:update-check'),
+  installUpdate: () => ipcRenderer.invoke('modelbridge:update-install'),
+  openRelease: () => ipcRenderer.invoke('modelbridge:open-release'),
+  chooseDataFolder: () => ipcRenderer.invoke('modelbridge:data-choose'),
+  moveDataFolder: (target) =>
+    ipcRenderer.invoke('modelbridge:data-move', target),
+  openDataFolder: () => ipcRenderer.invoke('modelbridge:data-open'),
 }
 contextBridge.exposeInMainWorld('modelbridge', api)

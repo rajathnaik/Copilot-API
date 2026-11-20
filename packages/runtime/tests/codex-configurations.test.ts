@@ -183,6 +183,38 @@ test('status reports when the active Codex model list or default model no longer
     missingModel: false,
   })
 })
+test('status flags an active Codex configuration that runs a moved executable or data folder', async () => {
+  const { file, vault, revisions, service } = await fixture()
+  expect(service.status().pathsStale).toBe(false)
+  const applied = service.preview('GPT', models[0].id, models, url)
+  await service.apply(applied.id)
+  expect(service.status().pathsStale).toBe(false)
+  const moved = {
+    command: 'D:\\Apps\\ModelBridge\\ModelBridge.exe',
+    args: ['--modelbridge-credential', '--user-data-dir=D:\\Data'],
+  }
+  const installMoved = await CodexConfigurations.open(
+    file,
+    revisions,
+    vault,
+    moved,
+  )
+  expect(installMoved.status().pathsStale).toBe(true)
+  const movedRevisions = path.join(path.dirname(revisions), 'moved', 'codex')
+  fs.cpSync(revisions, movedRevisions, { recursive: true })
+  const dataMoved = await CodexConfigurations.open(
+    file,
+    movedRevisions,
+    vault,
+    helper,
+  )
+  expect(dataMoved.status().pathsStale).toBe(true)
+  await dataMoved.apply(dataMoved.previewRevision(applied.id, models, url).id)
+  expect(dataMoved.status().pathsStale).toBe(false)
+  expect(fs.readFileSync(file, 'utf8')).toContain(
+    JSON.stringify(movedRevisions).slice(1, -1),
+  )
+})
 test('concurrent Codex writes are rejected instead of interleaving', async () => {
   const { service } = await fixture()
   const first = service.preview('First', models[0].id, models, url)

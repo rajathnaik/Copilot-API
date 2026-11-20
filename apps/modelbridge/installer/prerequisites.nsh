@@ -34,12 +34,18 @@
   nsProcess::_Unload
 !macroend
 
+; ModelBridge installs per user only, so skip the "Only for me / Anyone" page.
+!macro customInstallMode
+  StrCpy $isForceCurrentInstall "1"
+!macroend
+
 !ifndef BUILD_UNINSTALLER
 !include "MUI2.nsh"
 !include "nsDialogs.nsh"
 !include "FileFunc.nsh"
 !include "LogicLib.nsh"
 !include "WordFunc.nsh"
+!include "${__FILEDIR__}\data-folder.nsh"
 
 Var MBHost
 Var MBDialog
@@ -201,7 +207,12 @@ Var MBEntry
 !macroend
 
 !macro customPageAfterChangeDir
+  Page custom MBDataPage MBDataLeave
   Page custom MBPrerequisitePage MBPrerequisiteLeave
+!macroend
+
+!macro customInstall
+  Call MBApplyDataFolder
 !macroend
 
 Function MBUpdatePrerequisiteStatus
@@ -244,10 +255,11 @@ Function MBPrerequisitePage
     MessageBox MB_OK|MB_ICONSTOP "Could not create the prerequisite page. Installation cannot continue."
     Quit
   ${EndIf}
+  ; The page is about 300 x 140 dialog units; keep every control inside it.
   ${NSD_CreateRadioButton} 0 0 100% 12u "Use as a host (requires Microsoft Dev Tunnels CLI)"
   Pop $MBHostRadio
   ${NSD_OnClick} $MBHostRadio MBRoleChanged
-  ${NSD_CreateRadioButton} 0 19u 100% 12u "Client-only for now (URL and key; no CLI required)"
+  ${NSD_CreateRadioButton} 0 14u 100% 12u "Client-only for now (URL and key; no CLI required)"
   Pop $MBClientRadio
   ${NSD_OnClick} $MBClientRadio MBRoleChanged
   ${If} $MBHost == "1"
@@ -255,17 +267,19 @@ Function MBPrerequisitePage
   ${Else}
     ${NSD_Check} $MBClientRadio
   ${EndIf}
-  ${NSD_CreateLabel} 0 40u 100% 27u "Hosting requires a separately installed Microsoft CLI. ModelBridge does not download it, install it, or accept Microsoft's terms for you."
+  ${NSD_CreateLabel} 0 32u 100% 20u "Hosting requires a separately installed Microsoft CLI. ModelBridge does not download it, install it, or accept Microsoft's terms for you."
   Pop $0
-  ${NSD_CreateLink} 0 73u 100% 12u "Open Microsoft's installation instructions"
+  ${NSD_CreateLink} 0 54u 100% 10u "Open Microsoft's installation instructions"
   Pop $0
   ${NSD_OnClick} $0 MBOpenInstructions
-  ${NSD_CreateLabel} 0 93u 100% 32u ""
+  ${NSD_CreateGroupBox} 0 68u 100% 40u "Dev Tunnels CLI"
+  Pop $0
+  ${NSD_CreateLabel} 8u 80u 210u 24u ""
   Pop $MBStatus
-  ${NSD_CreateButton} 0 130u 65u 14u "Recheck"
+  ${NSD_CreateButton} 226u 82u 66u 16u "Recheck"
   Pop $0
   ${NSD_OnClick} $0 MBRecheck
-  ${NSD_CreateLabel} 75u 130u 220u 24u "Keep this wizard open while installing the CLI. You can change roles later in the app."
+  ${NSD_CreateLabel} 0 113u 100% 20u "Keep this wizard open while you install the CLI, then click Recheck. You can change roles later in the app."
   Pop $0
   !insertmacro ModelBridgeDetectDevTunnel
   Call MBUpdatePrerequisiteStatus

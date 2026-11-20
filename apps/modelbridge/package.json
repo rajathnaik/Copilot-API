@@ -43,6 +43,10 @@
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
       "include": "installer/prerequisites.nsh",
       "installerLanguages": ["en_US"],
       "deleteAppDataOnUninstall": false

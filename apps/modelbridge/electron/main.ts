@@ -6,12 +6,13 @@ import {
   ipcMain,
   Menu,
   nativeImage,
+  net,
   Tray,
   shell,
 } from 'electron'
 import path from 'node:path'
 import os from 'node:os'
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import fs from 'node:fs'
 import { promisify } from 'node:util'
 import { z } from 'zod'
@@ -53,17 +54,32 @@ import { AppState, credentialsFile } from './state'
 import { TunnelProcess } from './devtunnel-process'
 import { codexConfigPath, discoverCodex, inspectCodex } from './codex-discovery'
 import { createDiagnosticsLog, describeError } from './diagnostics'
+import {
+  copyProfile,
+  pointerFile,
+  readDataLocation,
+  validateDataTarget,
+  writeDataLocation,
+  writeDataRegistry,
+} from './data-location'
+import { downloadUpdate, findUpdate, type UpdateState } from './updates'
 
 app.setName('ModelBridge')
 app.setAppUserModelId('com.rajathnaik.modelbridge')
 const override = app.commandLine.getSwitchValue('user-data-dir')
+const installDir = path.dirname(process.execPath)
+const defaultDataDir = path.join(app.getPath('appData'), 'ModelBridge')
 app.setPath(
   'userData',
-  override ?
-    path.resolve(override)
-  : path.join(app.getPath('appData'), 'ModelBridge'),
+  override ? path.resolve(override)
+  : app.isPackaged ? (readDataLocation(installDir) ?? defaultDataDir)
+  : defaultDataDir,
 )
 app.setPath('sessionData', app.getPath('userData'))
+const movedFrom =
+  app.commandLine.getSwitchValue('modelbridge-moved-from') || null
+// Runs after the runtime has stopped and before the process exits.
+let afterShutdown: (() => Promise<void>) | null = null
 
 let window: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -117,6 +133,12 @@ const channels = [
   'modelbridge:app-config-preview',
   'modelbridge:app-config-restore',
   'modelbridge:app-config-apply',
+  'modelbridge:update-check',
+  'modelbridge:update-install',
+  'modelbridge:open-release',
+  'modelbridge:data-choose',
+  'modelbridge:data-move',
+  'modelbridge:data-open',
 ] as const
 type Channel = (typeof channels)[number]
 const operations = new Map<Channel, (value: unknown) => unknown>()
@@ -286,8 +308,59 @@ async function initialize(): Promise<void> {
         sharingBusy = false
       })
   }
+  let updateState: UpdateState = {
+    phase: 'idle',
+    current: app.getVersion(),
+    latest: null,
+    progress: null,
+    error: null,
+    checkedAt: null,
+  }
+  const fetcher = (url: string, init?: RequestInit) => net.fetch(url, init)
+  const checkForUpdate = async () => {
+    if (['checking', 'downloading', 'installing'].includes(updateState.phase))
+      return
+    updateState = { ...updateState, phase: 'checking', error: null }
+    try {
+      const latest = await findUpdate(fetcher, app.getVersion())
+      updateState = {
+        ...updateState,
+        phase: latest ? 'available' : 'current',
+        latest,
+        checkedAt: new Date().toISOString(),
+      }
+      if (latest) log('update available', latest.version)
+    } catch (error) {
+      log('update check failed', describeError(error))
+      updateState = {
+        ...updateState,
+        phase: 'error',
+        error:
+          error instanceof Error ? error.message : 'The update check failed.',
+        checkedAt: new Date().toISOString(),
+      }
+    }
+  }
+  if (app.isPackaged && process.env.MODELBRIDGE_UPDATE_CHECK !== '0') {
+    setTimeout(() => void checkForUpdate(), 10_000).unref()
+    setInterval(() => void checkForUpdate(), 6 * 60 * 60_000).unref()
+  }
+  const dataMovable = app.isPackaged && !override
+  const restartWith = (task: () => Promise<void>) => {
+    if (afterShutdown)
+      throw new Error('ModelBridge is already restarting. Wait a moment.')
+    afterShutdown = task
+    setTimeout(() => app.quit(), 250)
+  }
   const snapshot = (): AppStatus => ({
     version: app.getVersion(),
+    update: updateState,
+    data: {
+      path: app.getPath('userData'),
+      defaultPath: defaultDataDir,
+      movable: dataMovable,
+      movedFrom,
+    },
     role: state.value.role ?? null,
     clientName: clientName(),
     defaultClientName,
@@ -720,6 +793,140 @@ async function initialize(): Promise<void> {
   handle('modelbridge:app-config-apply', (input) =>
     appConfigurations.apply(z.string().uuid().parse(input)),
   )
+  handle('modelbridge:update-check', async () => {
+    await checkForUpdate()
+    return snapshot()
+  })
+  handle('modelbridge:update-install', async () => {
+    const latest = updateState.latest
+    if (!latest || updateState.phase !== 'available')
+      throw new Error('No update is ready to install. Check for updates first.')
+    if (!app.isPackaged)
+      throw new Error('Updates install only into the installed app.')
+    updateState = { ...updateState, phase: 'downloading', progress: 0 }
+    let installer: string
+    try {
+      installer = await downloadUpdate(
+        fetcher,
+        latest,
+        path.join(app.getPath('temp'), 'ModelBridge-update'),
+        (progress) => {
+          updateState = { ...updateState, progress }
+        },
+      )
+    } catch (error) {
+      updateState = {
+        ...updateState,
+        phase: 'available',
+        progress: null,
+        error: error instanceof Error ? error.message : 'The download failed.',
+      }
+      throw error
+    }
+    log('update downloaded', latest.version)
+    updateState = { ...updateState, phase: 'installing', progress: 1 }
+    // The installer reuses the recorded install and data folders when silent,
+    // and --force-run reopens ModelBridge when it finishes.
+    restartWith(() => {
+      try {
+        spawn(installer, ['/S', '--updated', '--force-run'], {
+          detached: true,
+          stdio: 'ignore',
+        }).unref()
+      } catch (error) {
+        dialog.showErrorBox(
+          'ModelBridge update failed',
+          `${error instanceof Error ? error.message : 'The installer did not start.'}\n\nModelBridge will reopen on version ${app.getVersion()}.`,
+        )
+        app.relaunch()
+      }
+      return Promise.resolve()
+    })
+    return snapshot()
+  })
+  handle('modelbridge:open-release', async () => {
+    const page = updateState.latest?.pageUrl
+    if (
+      !page?.startsWith(
+        'https://github.com/rajathnaik/Copilot-API/releases/tag/',
+      )
+    )
+      throw new Error('No release page is available.')
+    await shell.openExternal(page)
+  })
+  const movableTarget = (input: unknown) => {
+    if (!dataMovable)
+      throw new Error(
+        'The data folder can be moved only in the installed app started normally.',
+      )
+    return validateDataTarget(
+      z.string().min(1).max(1024).parse(input),
+      app.getPath('userData'),
+      installDir,
+    )
+  }
+  handle('modelbridge:data-choose', async () => {
+    if (!window) throw new Error('ModelBridge main window is not available.')
+    const selected = await dialog.showOpenDialog(window, {
+      title: 'Choose an empty folder for ModelBridge data',
+      properties: ['openDirectory', 'createDirectory', 'promptToCreate'],
+    })
+    if (selected.canceled || !selected.filePaths[0]) return null
+    return movableTarget(selected.filePaths[0])
+  })
+  handle('modelbridge:data-move', (input) => {
+    const target = movableTarget(input)
+    // Fail now, not after shutdown, when the install folder is read-only.
+    const probe = path.join(installDir, `${pointerFile}.probe`)
+    fs.writeFileSync(probe, '')
+    fs.rmSync(probe)
+    const from = app.getPath('userData')
+    const created = !fs.existsSync(target)
+    restartWith(async () => {
+      try {
+        const skipped = copyProfile(from, target)
+        if (skipped.length)
+          log('data move skipped cache entries', skipped.join(', '))
+        await writeDataRegistry(target)
+        try {
+          writeDataLocation(installDir, target)
+        } catch (error) {
+          await writeDataRegistry(from).catch(() => undefined)
+          throw error
+        }
+        log('data folder moved', target)
+        app.relaunch({
+          args: [
+            ...process.argv
+              .slice(1)
+              .filter((arg) => !arg.startsWith('--modelbridge-moved-from=')),
+            `--modelbridge-moved-from=${from}`,
+          ],
+        })
+      } catch (error) {
+        log('data move failed', describeError(error))
+        if (created)
+          fs.rmSync(target, { recursive: true, force: true, maxRetries: 3 })
+        else
+          for (const entry of fs.readdirSync(target))
+            fs.rmSync(path.join(target, entry), {
+              recursive: true,
+              force: true,
+              maxRetries: 3,
+            })
+        dialog.showErrorBox(
+          'ModelBridge could not move its data',
+          `${error instanceof Error ? error.message : 'The copy failed.'}\n\nYour data is still in ${from}, and ModelBridge will reopen using it.`,
+        )
+        app.relaunch()
+      }
+    })
+    return snapshot()
+  })
+  handle('modelbridge:data-open', async () => {
+    const failed = await shell.openPath(app.getPath('userData'))
+    if (failed) throw new Error(failed)
+  })
   const missing = channels.filter((channel) => !operations.has(channel))
   if (missing.length)
     throw new Error(`ModelBridge actions are missing: ${missing.join(', ')}`)
@@ -801,6 +1008,7 @@ app.on('before-quit', (event) => {
       Promise.all([closeServer(localServer), closeServer(remoteServer)]),
     )
     .then(() => usageLedger?.flush())
+    .then(() => afterShutdown?.())
     .then(() => app.quit())
     .catch((error: unknown) => {
       console.error(

@@ -53,6 +53,9 @@ export interface CodexConfigurationStatus {
   externalManagedEdit: boolean
   // The active configuration's model list no longer matches the sources.
   catalogStale: boolean
+  // The active configuration runs another ModelBridge executable or data
+  // folder, for example after either was moved.
+  pathsStale: boolean
   // The active configuration's default model is no longer available.
   missingModel: boolean
   revisions: Array<{
@@ -164,6 +167,12 @@ export class CodexConfigurations {
         !!active
         && !!models
         && active.catalog !== JSON.stringify(createCodexCatalog(models)),
+      pathsStale:
+        !!active
+        && [this.helper.command, this.directory].some(
+          (value) =>
+            !active.content.includes(JSON.stringify(value).slice(1, -1)),
+        ),
       missingModel:
         !!active
         && !!models

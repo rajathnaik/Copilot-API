@@ -20,6 +20,20 @@ test.skipIf(
     )
     const status: AppStatus = {
       version: 'test',
+      update: {
+        phase: 'idle',
+        current: 'test',
+        latest: null,
+        progress: null,
+        error: null,
+        checkedAt: null,
+      },
+      data: {
+        path: directory,
+        defaultPath: directory,
+        movable: false,
+        movedFrom: null,
+      },
       role: 'host',
       clientName: 'test-host',
       defaultClientName: 'test-host',

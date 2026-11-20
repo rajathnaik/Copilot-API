@@ -10,7 +10,12 @@
   the Copilot SDK or replace conversations with lossy prompt serialization.
 - `apps/modelbridge/` owns Electron, IPC, profile composition, UI,
   tray and external CLI processes. Its new app ID is
-  `com.rajathnaik.modelbridge`; data defaults to `%APPDATA%\ModelBridge`.
+  `com.rajathnaik.modelbridge`. Install and data folders are chosen in the
+  installer (defaults `%LOCALAPPDATA%\Programs\ModelBridge` and
+  `%APPDATA%\ModelBridge`). The data folder is recorded in
+  `HKCU\Software\ModelBridge\DataDir` and in `data-location.txt` beside the
+  exe; the packaged app reads only the file at startup, and `--user-data-dir`
+  overrides both.
 - `packages/runtime/` owns source/model contracts, routing, authenticated
   gateways, credential abstractions and Dev Tunnels provisioning. It must
   not import Electron or application source.
@@ -39,7 +44,7 @@
 
 ## Product scope and releases
 
-- `0.1.2` (a pre-release) is a development foundation, not a shipped universal product.
+- `0.1.3` (a pre-release) is a development foundation, not a shipped universal product.
   Direct Copilot hosting and revision-safe Codex configuration are implemented
   with synthetic/native isolated checks. Do not claim real subscription,
   tunnel or two-machine acceptance before live verification. Additional harness
@@ -77,3 +82,17 @@
   froze the wizard on entering the prerequisite page on a client machine. Keep
   `MBSearchPathList`'s explicit last-entry/no-progress exit and its regression
   test.
+- Updates run the old uninstaller, which empties the install folder, so the
+  data folder must stay outside it. The registry entry is the durable record
+  and the installer rewrites `data-location.txt` from it on every install.
+  Codex config embeds the exe and data paths, so `pathsStale` must prompt a
+  reapply after either moves.
+- NSIS `GetOptions` cannot read an argument quoted as a whole
+  (`"/DATADIR=C:\a b"`), which is how `CreateProcess` launchers pass paths
+  with spaces. Normalize it to `/DATADIR="C:\a b"` first. In UI Automation,
+  nsDialogs controls appear as Panes, so drive them by AutomationId and
+  `WM_SETTEXT`, not ValuePattern.
+- The in-app updater uses GitHub's release API (60 unauthenticated
+  requests/hour) and installs only releases tagged `modelbridge-v<version>`
+  with both `ModelBridge.Setup.<version>.exe` and its `.sha256` asset. Every
+  release must publish both.

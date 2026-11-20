@@ -21,9 +21,23 @@ import type {
   PremiumLimits,
 } from '@modelbridge/runtime/limits'
 import type { CodexInstallation } from '../electron/codex-discovery'
+import type { UpdateState } from '../electron/updates'
+
+export type { UpdateState }
+
+export interface DataLocationStatus {
+  path: string
+  defaultPath: string
+  // False in development builds or when started with --user-data-dir.
+  movable: boolean
+  // The previous folder, after a move in this session.
+  movedFrom: string | null
+}
 
 export interface AppStatus {
   version: string
+  update: UpdateState
+  data: DataLocationStatus
   role: Role | null
   // Name reported to remote hosts; defaults to this computer's name.
   clientName: string
@@ -146,6 +160,14 @@ export interface ModelBridgeAPI {
     app: ConfigurableApp,
   ): Promise<Result<AppConfigurationPreview>>
   applyAppConfig(id: string): Promise<Result<AppConfigurationStatus>>
+  checkForUpdate(): Promise<Result<AppStatus>>
+  // Downloads, verifies, then restarts ModelBridge into the installer.
+  installUpdate(): Promise<Result<AppStatus>>
+  openRelease(): Promise<Result<void>>
+  // Resolves to null when the folder picker is cancelled.
+  chooseDataFolder(): Promise<Result<string | null>>
+  moveDataFolder(target: string): Promise<Result<AppStatus>>
+  openDataFolder(): Promise<Result<void>>
 }
 
 declare global {

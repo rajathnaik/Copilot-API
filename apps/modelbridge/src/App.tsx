@@ -246,6 +246,13 @@ export default function App() {
             ))}
           </div>
         )}
+        {status?.update.phase === 'available'
+          && status.update.latest
+          && role && (
+            <button className="update-badge" onClick={() => select('settings')}>
+              Update to {status.update.latest.version}
+            </button>
+          )}
         <span className="version">{status?.version ?? ''}</span>
       </header>
       {error && (

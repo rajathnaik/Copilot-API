@@ -59,6 +59,196 @@ function ClientName({
   )
 }
 
+function Updates({
+  status,
+  busy,
+  run,
+}: Pick<Props, 'status' | 'busy' | 'run'>) {
+  const [confirming, setConfirming] = useState(false)
+  const update = status.update
+  const latest = update.latest
+  const checked =
+    update.checkedAt ?
+      ` Last checked ${new Date(update.checkedAt).toLocaleString()}.`
+    : ''
+  const message =
+    update.phase === 'checking' ? 'Checking GitHub for a newer release…'
+    : update.phase === 'downloading' ?
+      `Downloading ${latest?.version ?? 'the update'}… ${Math.round((update.progress ?? 0) * 100)}%`
+    : update.phase === 'installing' ?
+      'Installing the update. ModelBridge will reopen in a moment.'
+    : update.phase === 'available' && latest ?
+      `Version ${latest.version}${latest.prerelease ? ' (pre-release)' : ''} is available.${checked}`
+    : update.phase === 'current' ? `You have the latest version.${checked}`
+    : update.phase === 'error' ?
+      `${update.error ?? 'The update check failed.'}${checked}`
+    : 'ModelBridge checks GitHub for new releases, including pre-releases, shortly after it starts.'
+  const working = ['checking', 'downloading', 'installing'].includes(
+    update.phase,
+  )
+  return (
+    <section>
+      <h2>Updates</h2>
+      <p className="muted">
+        Installed version {status.version}. Updates keep your install folder,
+        data folder, sign-ins and settings.
+      </p>
+      <p role="status" aria-live="polite">
+        {message}
+      </p>
+      {update.phase === 'available' && update.error && (
+        <p role="alert" className="error">
+          {update.error}
+        </p>
+      )}
+      {update.phase === 'downloading' && (
+        <progress max={1} value={update.progress ?? 0} />
+      )}
+      <div className="actions">
+        {update.phase === 'available' && latest && !confirming && (
+          <button
+            className="primary"
+            disabled={busy}
+            onClick={() => setConfirming(true)}
+          >
+            Update to {latest.version}
+          </button>
+        )}
+        {confirming && latest && (
+          <>
+            <span>
+              ModelBridge will download {latest.version}, close, install it and
+              reopen. Remote sharing stops while it restarts.
+            </span>
+            <button
+              className="primary"
+              disabled={busy}
+              onClick={() => {
+                setConfirming(false)
+                void run(() => window.modelbridge.installUpdate())
+              }}
+            >
+              Update and restart
+            </button>
+            <button disabled={busy} onClick={() => setConfirming(false)}>
+              Not now
+            </button>
+          </>
+        )}
+        {latest && (
+          <button
+            disabled={busy}
+            onClick={() => void window.modelbridge.openRelease()}
+          >
+            Release notes
+          </button>
+        )}
+        <button
+          disabled={busy || working}
+          onClick={() => void run(() => window.modelbridge.checkForUpdate())}
+        >
+          Check for updates
+        </button>
+      </div>
+    </section>
+  )
+}
+
+function DataFolder({
+  status,
+  busy,
+  run,
+}: Pick<Props, 'status' | 'busy' | 'run'>) {
+  const [target, setTarget] = useState<string | null>(null)
+  const [error, setError] = useState('')
+  const data = status.data
+  const choose = async () => {
+    setError('')
+    try {
+      const result = await window.modelbridge.chooseDataFolder()
+      if (result.ok) setTarget(result.value)
+      else setError(result.error)
+    } catch (reason) {
+      setError(failure(reason, 'Could not choose a folder.'))
+    }
+  }
+  return (
+    <section>
+      <h2>Data folder</h2>
+      <p className="muted">
+        Sign-ins, access keys, hosts, usage history and logs. Keys are stored
+        unencrypted, so keep this folder private to you.
+      </p>
+      <code>{data.path}</code>
+      {data.movedFrom && (
+        <p className="notice" role="status">
+          Your data was copied here from <code>{data.movedFrom}</code>. That
+          folder is kept; delete it once everything works. If Codex was set up,
+          open Apps and apply its update so it uses the new folder.
+        </p>
+      )}
+      <div className="actions">
+        <button
+          disabled={busy}
+          onClick={() => void window.modelbridge.openDataFolder()}
+        >
+          Open folder
+        </button>
+        {data.movable && !target && (
+          <button disabled={busy} onClick={() => void choose()}>
+            Move data folder…
+          </button>
+        )}
+      </div>
+      {!data.movable && (
+        <p className="muted">
+          You can choose this folder when installing. Moving it here works in
+          the installed app.
+        </p>
+      )}
+      {target && (
+        <div className="notice warn" role="status">
+          ModelBridge will close, copy your data to <code>{target}</code> and
+          reopen from there. Your current folder is kept. Remote sharing stops
+          while it restarts.
+          <div className="actions">
+            <button
+              className="primary"
+              disabled={busy}
+              onClick={() =>
+                void run(
+                  () => window.modelbridge.moveDataFolder(target),
+                  setError,
+                )
+              }
+            >
+              Move and restart
+            </button>
+            <button disabled={busy} onClick={() => setTarget(null)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+      {error && (
+        <p role="alert" className="error">
+          {error}
+        </p>
+      )}
+    </section>
+  )
+}
+
+interface Props {
+  status: AppStatus
+  role: Role
+  busy: boolean
+  run: Run
+  revealed: Revealed | null
+  onReveal: (remote: boolean) => void
+  onHide: () => void
+}
+
 export function SettingsPanel({
   status,
   role,
@@ -67,15 +257,7 @@ export function SettingsPanel({
   revealed,
   onReveal,
   onHide,
-}: {
-  status: AppStatus
-  role: Role
-  busy: boolean
-  run: Run
-  revealed: Revealed | null
-  onReveal: (remote: boolean) => void
-  onHide: () => void
-}) {
+}: Props) {
   const [confirming, setConfirming] = useState(false)
   const [clearing, setClearing] = useState(false)
   const [notice, setNotice] = useState('')
@@ -172,6 +354,8 @@ export function SettingsPanel({
           </p>
         )}
       </section>
+      <Updates status={status} busy={busy} run={run} />
+      <DataFolder status={status} busy={busy} run={run} />
       <p className="muted footnote">ModelBridge {status.version}</p>
     </>
   )

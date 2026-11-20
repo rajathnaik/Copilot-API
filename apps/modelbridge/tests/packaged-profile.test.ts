@@ -49,6 +49,7 @@ test.skipIf(
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       MODELBRIDGE_PORT: String(port),
+      MODELBRIDGE_UPDATE_CHECK: '0',
       CODEX_HOME: path.join(directory, 'codex-home'),
     }
     delete env.ELECTRON_RUN_AS_NODE
