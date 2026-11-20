@@ -44,7 +44,7 @@
 
 ## Product scope and releases
 
-- `0.1.3` (a pre-release) is a development foundation, not a shipped universal product.
+- `0.1.4` (a pre-release) is a development foundation, not a shipped universal product.
   Direct Copilot hosting and revision-safe Codex configuration are implemented
   with synthetic/native isolated checks. Do not claim real subscription,
   tunnel or two-machine acceptance before live verification. Additional harness

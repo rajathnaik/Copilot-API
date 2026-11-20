@@ -7,26 +7,27 @@ The new desktop structure retains the original Copilot API's direct
 authentication, token exchange, forwarding and protocol translations.
 **There is no Copilot SDK integration.**
 
-**Development pre-release: 0.1.3**, the latest ModelBridge release.
+**Development pre-release: 0.1.4**, the latest ModelBridge release.
 
 Download the unsigned Windows installer from the
-[ModelBridge 0.1.3 release](https://github.com/rajathnaik/Copilot-API/releases/tag/modelbridge-v0.1.3):
+[ModelBridge 0.1.4 release](https://github.com/rajathnaik/Copilot-API/releases/tag/modelbridge-v0.1.4):
 
-- [Windows installer](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.3/ModelBridge.Setup.0.1.3.exe)
-- [SHA256 checksum](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.3/ModelBridge.Setup.0.1.3.exe.sha256)
+- [Windows installer](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.4/ModelBridge.Setup.0.1.4.exe)
+- [SHA256 checksum](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.4/ModelBridge.Setup.0.1.4.exe.sha256)
 
-Compare `Get-FileHash .\ModelBridge.Setup.0.1.3.exe -Algorithm SHA256`
+Compare `Get-FileHash .\ModelBridge.Setup.0.1.4.exe -Algorithm SHA256`
 with the downloaded checksum before running the installer. Windows may warn
 about an unknown publisher because this development build is not code-signed.
-Use the same installer on the host and client machines.
+Use the same installer on the host and client machines. If 0.1.3 or later is
+installed, use **Update to 0.1.4** in the app instead of reinstalling.
 
 To build the unsigned Windows development installer locally, run
 `bun run --cwd apps/modelbridge package:win`. Its output is
-`apps/modelbridge/release/ModelBridge.Setup.0.1.3.exe`. This is a test
+`apps/modelbridge/release/ModelBridge.Setup.0.1.4.exe`. This is a test
 candidate, not a verified production release; installation/upgrade/uninstall
 and the real two-machine acceptance test are still pending.
 
-## Coming in the next release: switch providers mid-conversation
+## What's new in 0.1.4: switch providers mid-conversation
 
 In Codex and any other Responses client, I can now switch between GPT and
 Claude models in the same conversation, in either direction and as often as
