@@ -76,12 +76,17 @@ export function withStreamTimeouts(
           stream.enqueue(next.value)
         } catch (error) {
           release()
-          await reader.cancel(error).catch(() => undefined)
           stream.error(error)
+          void reader.cancel(error).catch((cancelError: unknown) => {
+            console.error(
+              `[ModelBridge] Upstream cancellation failed (${cancelError instanceof Error ? cancelError.name : 'Unknown failure'}).`,
+            )
+          })
         }
       },
       async cancel(reason) {
         release()
+        controller.abort(reason)
         await reader.cancel(reason)
       },
     })

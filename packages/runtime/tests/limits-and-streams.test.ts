@@ -63,6 +63,47 @@ test('stream timeouts let a long answer finish but stop a stalled one', async ()
   await expect(reading).rejects.toThrow('client left')
 })
 
+test('a stalled response fails even if upstream cancellation never settles', async () => {
+  let cancelled = false
+  const fetcher = withStreamTimeouts(
+    async () =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          pull: () => new Promise(() => {}),
+          cancel: () => {
+            cancelled = true
+            return new Promise(() => {})
+          },
+        }),
+      ),
+    { headers: 100, idle: 20 },
+  )
+  const response = await fetcher('https://source.test')
+  const result = await Promise.race([
+    response.text().then(
+      () => 'completed',
+      (error: Error) => error.message,
+    ),
+    sleep(200).then(() => 'hung'),
+  ])
+  expect(result).toBe('Upstream stream timed out.')
+  expect(cancelled).toBe(true)
+})
+
+test('cancelling a response aborts its upstream request', async () => {
+  let upstreamSignal: AbortSignal | undefined
+  const fetcher = withStreamTimeouts(
+    async (_url, init) => {
+      upstreamSignal = init?.signal ?? undefined
+      return new Response(new ReadableStream<Uint8Array>())
+    },
+    { headers: 100, idle: 100 },
+  )
+  const response = await fetcher('https://source.test')
+  await response.body?.cancel('client stopped reading')
+  expect(upstreamSignal?.aborted).toBe(true)
+})
+
 test('catalog reads enforce the exact byte boundary and decode split UTF-8 without loss', async () => {
   expect(await readBoundedText(new Response(null), 1)).toBe('')
   expect(await readBoundedText(new Response('abcd'), 4)).toBe('abcd')

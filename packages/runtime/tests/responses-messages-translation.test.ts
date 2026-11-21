@@ -788,6 +788,28 @@ describe('Responses Lite to Messages translation', () => {
     ])
   })
 
+  test('preserves unsigned reasoning for chat-based models', () => {
+    const result = translateResponsesToMessages(
+      {
+        model: 'gemini-4-carbon',
+        input: [
+          { type: 'message', role: 'user', content: 'Continue' },
+          {
+            type: 'reasoning',
+            summary: [{ type: 'summary_text', text: 'Previous thought.' }],
+            encrypted_content: '',
+          },
+          { type: 'message', role: 'assistant', content: 'Result' },
+        ],
+      },
+      { model: 'gemini-4-carbon' },
+    )
+    expect(result.messagesPayload.messages[1]?.content).toMatchObject([
+      { type: 'thinking', thinking: 'Previous thought.', signature: '' },
+      { type: 'text', text: 'Result' },
+    ])
+  })
+
   test('pairs tool calls and outputs that lost their call IDs', () => {
     const result = translate({
       input: [
@@ -808,6 +830,114 @@ describe('Responses Lite to Messages translation', () => {
       { type: 'text', text: 'Output of an earlier tool call:' },
       { type: 'text', text: 'orphan' },
     ])
+  })
+
+  test('recovers missing IDs on either side of an unambiguous tool call', () => {
+    for (const [callId, outputId, expected] of [
+      ['call_existing', '', 'call_existing'],
+      ['', 'call_returned', 'call_returned'],
+      ['', '', 'call_missing_0'],
+    ]) {
+      const result = translate({
+        input: [
+          { type: 'message', role: 'user', content: 'Run it' },
+          {
+            type: 'function_call',
+            call_id: callId,
+            name: 'shell',
+            arguments: '{}',
+          },
+          { type: 'function_call_output', call_id: outputId, output: 'done' },
+        ],
+      })
+      const [, assistant, user] = result.messagesPayload.messages
+      expect(assistant?.content).toMatchObject([
+        { type: 'tool_use', id: expected },
+      ])
+      expect(user?.content).toMatchObject([
+        { type: 'tool_result', tool_use_id: expected, content: 'done' },
+      ])
+    }
+  })
+
+  test('uses known results to resolve parallel calls without guessing', () => {
+    const calls = [
+      {
+        type: 'function_call',
+        call_id: 'call_first',
+        name: 'shell',
+        arguments: '{}',
+      },
+      {
+        type: 'function_call',
+        call_id: 'call_second',
+        name: 'shell',
+        arguments: '{}',
+      },
+    ] as Array<ResponseInputItem>
+    const result = translate({
+      input: [
+        { type: 'message', role: 'user', content: 'Run both' },
+        ...calls,
+        { type: 'function_call_output', call_id: '', output: 'second' },
+        {
+          type: 'function_call_output',
+          call_id: 'call_first',
+          output: 'first',
+        },
+      ],
+    })
+    expect(result.messagesPayload.messages.at(-1)?.content).toMatchObject([
+      { type: 'tool_result', tool_use_id: 'call_second', content: 'second' },
+      { type: 'tool_result', tool_use_id: 'call_first', content: 'first' },
+    ])
+    expect(() =>
+      translate({
+        input: [
+          { type: 'message', role: 'user', content: 'Run both' },
+          ...calls,
+          { type: 'function_call_output', call_id: '', output: 'ambiguous' },
+        ],
+      }),
+    ).toThrow('Cannot safely match a tool output without call_id')
+  })
+
+  test('does not reuse a synthetic ID belonging to another tool call', () => {
+    const result = translate({
+      input: [
+        { type: 'message', role: 'user', content: 'Run both' },
+        {
+          type: 'function_call',
+          call_id: 'call_missing_0',
+          name: 'shell',
+          arguments: '{}',
+        },
+        { type: 'custom_tool_call', call_id: '', name: 'patch', input: 'x' },
+        {
+          type: 'function_call_output',
+          call_id: 'call_missing_0',
+          output: 'first',
+        },
+        { type: 'custom_tool_call_output', call_id: '', output: 'second' },
+      ],
+    })
+    expect(result.messagesPayload.messages[1]?.content).toMatchObject([
+      { type: 'tool_use', id: 'call_missing_0' },
+      { type: 'tool_use', id: 'call_missing_1' },
+    ])
+    expect(result.messagesPayload.messages.at(-1)?.content).toMatchObject([
+      { type: 'tool_result', tool_use_id: 'call_missing_0' },
+      { type: 'tool_result', tool_use_id: 'call_missing_1' },
+    ])
+  })
+
+  test('rejects a malformed tool call ID instead of treating it as missing', () => {
+    const input = JSON.parse(
+      '[{"type":"function_call_output","call_id":42,"output":"result"}]',
+    ) as Array<ResponseInputItem>
+    expect(() => translate({ input })).toThrow(
+      'function_call_output.call_id must be a string',
+    )
   })
 
   test('replays GPT web searches with missing or non-Anthropic IDs', () => {

@@ -652,14 +652,28 @@ function translateInputItems(
 ): void {
   let userMessageSeen = false
   let replayedSearches = 0
-  // Tool calls that arrived without an ID, waiting for their outputs.
-  const unpairedCalls: Array<string> = []
+  const pendingCalls: Array<{
+    kind: 'function' | 'custom'
+    missingId: boolean
+    block: AnthropicToolUseBlock
+  }> = []
+  const usedIds = new Set(
+    input.flatMap((item) => {
+      const field = getItemType(item) === 'web_search_call' ? 'id' : 'call_id'
+      const id = getStringField(item, field)
+      return id ? [toAnthropicToolId(id)] : []
+    }),
+  )
   let missingCallIds = 0
   const missingCallId = () => {
-    const id = `call_missing_${missingCallIds++}`
-    unpairedCalls.push(id)
+    let id: string
+    do {
+      id = `call_missing_${missingCallIds++}`
+    } while (usedIds.has(id))
+    usedIds.add(id)
     return id
   }
+  let receivingResults = false
   const lastUser = lastUserMessageIndex(input)
   // Search results belong in the user turn that follows the assistant's
   // tool calls, together with any client tool results from the same turn.
@@ -670,6 +684,19 @@ function translateInputItems(
   }
   for (const [index, item] of input.entries()) {
     const type = getItemType(item)
+    if (
+      type === undefined
+      || type === 'message'
+      || type === 'agent_message'
+      || (receivingResults
+        && (type === 'reasoning'
+          || type === 'web_search_call'
+          || type === 'function_call'
+          || type === 'custom_tool_call'))
+    ) {
+      pendingCalls.length = 0
+      receivingResults = false
+    }
     if (
       type !== 'web_search_call'
       && type !== 'function_call'
@@ -734,36 +761,75 @@ function translateInputItems(
         )
         break
       }
-      case 'function_call': {
-        translateInputToolCall(
-          item,
-          'function',
-          messages,
-          registry,
-          missingCallId,
-        )
-        break
-      }
+      case 'function_call':
       case 'custom_tool_call': {
-        translateInputToolCall(
+        const kind = type === 'function_call' ? 'function' : 'custom'
+        const id = getToolCallId(item, type)
+        const block = translateInputToolCall(
           item,
-          'custom',
+          kind,
           messages,
           registry,
-          missingCallId,
+          id || missingCallId(),
         )
+        pendingCalls.push({ kind, missingId: !id, block })
         break
       }
       case 'function_call_output':
       case 'custom_tool_call_output': {
+        receivingResults = true
+        const kind = type === 'function_call_output' ? 'function' : 'custom'
+        const originalId = getToolCallId(item, type)
+        let callId = originalId ? toAnthropicToolId(originalId) : undefined
+        let matching = pendingCalls.findIndex(
+          (call) => call.kind === kind && call.block.id === callId,
+        )
+        if (matching < 0 && callId) {
+          const candidates = pendingCalls.filter(
+            (call) => call.kind === kind && call.missingId,
+          )
+          if (candidates.length > 1)
+            throw new ResponsesMessagesTranslationError(
+              'Cannot safely match a tool output: multiple calls are missing call_id.',
+            )
+          if (candidates.length === 1) {
+            matching = pendingCalls.indexOf(candidates[0])
+            candidates[0].block.id = callId
+          }
+        } else if (!originalId) {
+          const reservedIds = new Set<string>()
+          for (
+            let nextIndex = index + 1;
+            nextIndex < input.length;
+            nextIndex++
+          ) {
+            const next = input[nextIndex]
+            const nextType = getItemType(next)
+            if (
+              nextType !== 'function_call_output'
+              && nextType !== 'custom_tool_call_output'
+            )
+              break
+            const id = getToolCallId(next, nextType)
+            if (id) reservedIds.add(toAnthropicToolId(id))
+          }
+          const candidates = pendingCalls.filter(
+            (call) => call.kind === kind && !reservedIds.has(call.block.id),
+          )
+          if (candidates.length > 1)
+            throw new ResponsesMessagesTranslationError(
+              'Cannot safely match a tool output without call_id: multiple calls are pending.',
+            )
+          if (candidates.length === 1) {
+            matching = pendingCalls.indexOf(candidates[0])
+            callId = candidates[0].block.id
+          }
+        }
+        if (matching >= 0) pendingCalls.splice(matching, 1)
         const content = translateToolResultContent(
           (item as Record<string, unknown>).output,
           `${type}.output`,
         )
-        // A history that lost a call ID pairs the output with the oldest
-        // ID-less call; with no call to answer, the output stays as context
-        // rather than failing the whole turn.
-        const callId = getStringField(item, 'call_id') ?? unpairedCalls.shift()
         if (!callId) {
           appendUserBlock(messages, {
             type: 'text',
@@ -786,7 +852,7 @@ function translateInputItems(
         }
         appendUserBlock(messages, {
           type: 'tool_result',
-          tool_use_id: toAnthropicToolId(callId),
+          tool_use_id: callId,
           content,
           is_error: getStringField(item, 'status') === 'incomplete',
         })
@@ -899,9 +965,14 @@ function translateInputReasoning(
   // so reasoning from another family (e.g. GPT) is dropped, as VS Code does.
   // Untagged signatures predate tagging; they can only belong to this model
   // within the current turn, because Codex switches models between turns.
-  // Reasoning without a signature (Gemini can stream thought text alone) can
-  // never be verified, and Claude rejects the whole request over it.
-  if (!encrypted || (tagged ? tagged.family !== family : !currentTurn)) return
+  // I keep unsigned text for chat models; Claude requires a signature.
+  if (
+    encrypted ?
+      tagged ? tagged.family !== family
+      : !currentTurn
+    : family === 'claude'
+  )
+    return
   const thinking =
     Array.isArray(item.summary) ?
       item.summary
@@ -918,11 +989,11 @@ function translateInputReasoning(
 
 function translateInputToolCall(
   item: ResponseInputItem,
-  kind: MessagesToolDescriptor['kind'],
+  kind: 'function' | 'custom',
   messages: Array<AnthropicInputMessage>,
   registry: MessagesToolRegistry,
-  missingCallId: () => string,
-): void {
+  id: string,
+): AnthropicToolUseBlock {
   if (!isRecord(item)) {
     throw new ResponsesMessagesTranslationError(
       'Invalid Responses tool call item',
@@ -942,12 +1013,14 @@ function translateInputToolCall(
         getStringField(item, 'arguments') ?? '{}',
         `${kind}_tool_call.arguments`,
       )
-  appendAssistantBlock(messages, {
+  const block: AnthropicToolUseBlock = {
     type: 'tool_use',
-    id: toAnthropicToolId(getStringField(item, 'call_id') ?? missingCallId()),
+    id: toAnthropicToolId(id),
     name: descriptor.alias,
     input,
-  })
+  }
+  appendAssistantBlock(messages, block)
+  return block
 }
 
 const ANTHROPIC_TOOL_ID = /^[A-Za-z0-9_-]+$/u
@@ -1510,6 +1583,17 @@ function getStringField(value: unknown, field: string): string | undefined {
   if (!isRecord(value)) return undefined
   const fieldValue = value[field]
   return typeof fieldValue === 'string' ? fieldValue : undefined
+}
+
+function getToolCallId(value: unknown, path: string): string | undefined {
+  if (!isRecord(value)) return undefined
+  const id = value.call_id
+  if (id === undefined || id === null || id === '') return undefined
+  if (typeof id !== 'string')
+    throw new ResponsesMessagesTranslationError(
+      `${path}.call_id must be a string`,
+    )
+  return id
 }
 
 function getOptionalStringField(
