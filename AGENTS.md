@@ -44,7 +44,7 @@
 
 ## Product scope and releases
 
-- `0.1.4` (a pre-release) is a development foundation, not a shipped universal product.
+- `0.1.5` (a pre-release) is a development foundation, not a shipped universal product.
   Direct Copilot hosting and revision-safe Codex configuration are implemented
   with synthetic/native isolated checks. Do not claim real subscription,
   tunnel or two-machine acceptance before live verification. Additional harness
@@ -104,6 +104,6 @@
 - Never put a total deadline (`AbortSignal.timeout`) on a streamed model
   request: large turns stream for minutes, and cutting them shows up in Codex
   as endless "Reconnecting…" retries. Use `withStreamTimeouts`
-  (`sources/stream-timeouts.ts`), which limits time to first byte and silence
+  (`sources/stream-timeouts.ts`), which limits time to response headers and silence
   between chunks only. Claude rejects any thinking block without a valid
   signature, so never replay unsigned reasoning to it.

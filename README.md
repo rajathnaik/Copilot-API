@@ -7,47 +7,41 @@ The new desktop structure retains the original Copilot API's direct
 authentication, token exchange, forwarding and protocol translations.
 **There is no Copilot SDK integration.**
 
-**Development pre-release: 0.1.4**, the latest ModelBridge release.
+**Development pre-release: 0.1.5**, the latest ModelBridge release.
 
 Download the unsigned Windows installer from the
-[ModelBridge 0.1.4 release](https://github.com/rajathnaik/Copilot-API/releases/tag/modelbridge-v0.1.4):
+[ModelBridge 0.1.5 release](https://github.com/rajathnaik/Copilot-API/releases/tag/modelbridge-v0.1.5):
 
-- [Windows installer](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.4/ModelBridge.Setup.0.1.4.exe)
-- [SHA256 checksum](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.4/ModelBridge.Setup.0.1.4.exe.sha256)
+- [Windows installer](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.5/ModelBridge.Setup.0.1.5.exe)
+- [SHA256 checksum](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.5/ModelBridge.Setup.0.1.5.exe.sha256)
 
-Compare `Get-FileHash .\ModelBridge.Setup.0.1.4.exe -Algorithm SHA256`
+Compare `Get-FileHash .\ModelBridge.Setup.0.1.5.exe -Algorithm SHA256`
 with the downloaded checksum before running the installer. Windows may warn
 about an unknown publisher because this development build is not code-signed.
 Use the same installer on the host and client machines. If 0.1.3 or later is
-installed, use **Update to 0.1.4** in the app instead of reinstalling.
+installed, use **Update to 0.1.5** in the app instead of reinstalling.
 
 To build the unsigned Windows development installer locally, run
 `bun run --cwd apps/modelbridge package:win`. Its output is
-`apps/modelbridge/release/ModelBridge.Setup.0.1.4.exe`. This is a test
+`apps/modelbridge/release/ModelBridge.Setup.0.1.5.exe`. This is a test
 candidate, not a verified production release; installation/upgrade/uninstall
 and the real two-machine acceptance test are still pending.
 
-## Unreleased: no more cut-off long turns, steadier model switches
+## What's new in 0.1.5: longer turns and steadier model switches
 
-- **Long turns are no longer cut off.** Every model request used to have a
-  hard 120-second limit on the whole response, including the time spent
-  streaming the answer. Large Codex conversations with Claude or Gemini often
-  take longer than that, so the stream was cut, the request failed with a few
-  output tokens, and Codex showed "Reconnecting…" while it retried the same
-  request. Now a response must *start* within 120 seconds, and once it streams
-  it may run as long as it keeps producing output; it fails only if it goes
-  silent for 5 minutes. A client machine gives its host 5 minutes to start
-  and 5½ minutes of silence, so the host's own limits always report first.
-- **"Invalid `signature` in `thinking` block" after Gemini.** Gemini sometimes
-  streams its thought text without a signature. Claude rejects any thinking
-  block it cannot verify, so switching from Gemini to Claude failed. Unsigned
-  reasoning is now never replayed, and if Claude still rejects a signature I
-  could not foresee, ModelBridge retries that request once without the earlier
-  thinking (Claude continues fine without it, even mid tool loop).
-- **"function_call_output.call_id is required".** A tool call or tool output
-  that lost its ID no longer fails the turn: an ID-less output is paired with
-  the oldest ID-less call, and an output with no call to answer is kept as
-  plain context.
+- **Long turns.** A hard 120-second limit previously cut off the entire
+  response, even while it was streaming. I now allow 120 seconds for Copilot
+  response headers, then up to 5 minutes of silence between chunks. The client
+  allows 5 minutes for its host to start and 5½ minutes of silence. Active
+  streams can continue beyond those limits.
+- **Thinking signatures.** Claude rejects unsigned or invalid thinking blocks.
+  I no longer replay unsigned reasoning to Claude, and if it rejects a
+  signature, I retry once without replayed thinking. Other chat models retain
+  their unsigned reasoning text.
+- **Missing tool-call IDs.** I reconnect a call and its output when their
+  relationship is unambiguous and keep an orphaned ID-less output as context.
+  When multiple calls cannot be matched safely, I return an explicit error
+  instead of guessing which output belongs to which call.
 
 ## What's new in 0.1.4: switch providers mid-conversation
 
