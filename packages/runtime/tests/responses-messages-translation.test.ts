@@ -757,6 +757,11 @@ describe('Responses Lite to Messages translation', () => {
         { role: 'user', content: 'Now', type: 'message' },
         {
           type: 'reasoning',
+          summary: [{ type: 'summary_text', text: 'Gemini, unsigned.' }],
+          encrypted_content: '',
+        },
+        {
+          type: 'reasoning',
           summary: [{ type: 'summary_text', text: 'From GPT.' }],
           encrypted_content: encodeReasoningSignature('gpt', 'gpt-signature'),
         },
@@ -780,6 +785,28 @@ describe('Responses Lite to Messages translation', () => {
     )
     expect(thinking).toEqual([
       { type: 'thinking', thinking: 'From Claude.', signature: 'CAQS' },
+    ])
+  })
+
+  test('pairs tool calls and outputs that lost their call IDs', () => {
+    const result = translate({
+      input: [
+        { role: 'user', content: 'Run it', type: 'message' },
+        { type: 'function_call', name: 'shell', arguments: '{}' },
+        { type: 'function_call_output', output: 'first' },
+        { type: 'function_call_output', call_id: '', output: 'orphan' },
+      ] as Array<ResponseInputItem>,
+    })
+
+    const [, assistant, user] = result.messagesPayload.messages
+    const call = (
+      assistant?.content as unknown as Array<Record<string, unknown>>
+    )[0]
+    expect(call).toMatchObject({ type: 'tool_use', id: 'call_missing_0' })
+    expect(user?.content).toMatchObject([
+      { type: 'tool_result', tool_use_id: 'call_missing_0', content: 'first' },
+      { type: 'text', text: 'Output of an earlier tool call:' },
+      { type: 'text', text: 'orphan' },
     ])
   })
 

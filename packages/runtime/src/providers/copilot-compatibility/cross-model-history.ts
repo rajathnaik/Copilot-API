@@ -1,4 +1,5 @@
 import type { ResponseInputItem } from './responses'
+import type { AnthropicMessagesPayload } from './anthropic'
 
 import {
   COMPACTION_REPLAY_PROMPT,
@@ -73,4 +74,25 @@ export function prepareNativeResponsesInput(
     output.push(item as ResponseInputItem)
   }
   return { input: changed ? output : input, changed }
+}
+
+/**
+ * Returns the payload without replayed thinking, or undefined when it has
+ * none. I use it to retry once when Claude rejects a thinking signature I
+ * could not foresee: Claude continues a conversation, even mid tool loop,
+ * without its earlier thinking, but never with a block it cannot verify.
+ */
+export function withoutReplayedThinking(
+  payload: AnthropicMessagesPayload,
+): AnthropicMessagesPayload | undefined {
+  let changed = false
+  const messages = payload.messages.flatMap((message) => {
+    if (message.role !== 'assistant' || typeof message.content === 'string')
+      return [message]
+    const content = message.content.filter((block) => block.type !== 'thinking')
+    if (content.length === message.content.length) return [message]
+    changed = true
+    return content.length ? [{ ...message, content }] : []
+  })
+  return changed ? { ...payload, messages } : undefined
 }

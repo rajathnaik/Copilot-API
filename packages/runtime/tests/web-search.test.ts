@@ -1064,3 +1064,42 @@ test('Claude models continue a GPT compaction from a cached handoff summary', as
       'Handoff: fix the build.',
     )
 })
+
+test('Claude retries once without replayed thinking when it rejects a signature', async () => {
+  const { send, upstream } = await harness({
+    rounds: [
+      () =>
+        Response.json(
+          {
+            type: 'error',
+            error: {
+              type: 'invalid_request_error',
+              message:
+                'messages.1.content.0: Invalid `signature` in `thinking` block',
+            },
+          },
+          { status: 400 },
+        ),
+      () => messagesStream([{ type: 'text', text: 'Recovered.' }], 'end_turn'),
+    ],
+  })
+  const response = await send({
+    model: 'claude',
+    input: [
+      { type: 'message', role: 'user', content: 'First' },
+      {
+        type: 'reasoning',
+        summary: [{ type: 'summary_text', text: 'Thought.' }],
+        encrypted_content: encodeReasoningSignature('claude', 'stale'),
+      },
+      { type: 'message', role: 'assistant', content: 'Answer' },
+      { type: 'message', role: 'user', content: 'Second' },
+    ],
+    stream: true,
+  })
+  expect(response.status).toBe(200)
+  expect(await response.text()).toContain('Recovered.')
+  expect(upstream).toHaveLength(2)
+  expect(JSON.stringify(upstream[0]?.body.messages)).toContain('"thinking"')
+  expect(JSON.stringify(upstream[1]?.body.messages)).not.toContain('"thinking"')
+})

@@ -35,6 +35,7 @@ import {
   readBoundedText,
 } from '../sources/source-service'
 import { meteredFetch, type UpstreamUsage } from '../usage/usage-meter'
+import { withStreamTimeouts } from '../sources/stream-timeouts'
 import { stabilizeResponseItemIds } from './stable-item-ids'
 import {
   unnamedClientLabel,
@@ -54,6 +55,11 @@ export interface GatewayOptions {
 
 export const clientHeader = 'x-modelbridge-client'
 export const appHeader = 'x-modelbridge-app'
+
+// A remote host may spend a while before its first byte (it can summarise a
+// compaction first) and applies its own limits upstream, so I give it more
+// room than Copilot gets. A streaming answer is never cut off mid-way.
+const remoteSourceTimeouts = { headers: 300_000, idle: 330_000 }
 
 // Names the coding tool behind a request: ModelBridge's own header first
 // (the playground and client gateways set it), then the tool's user agent.
@@ -328,17 +334,14 @@ export function createGateway(
             headersForSource.set(appHeader, app)
           }
           response = await meteredFetch(
-            sources.fetcher,
+            withStreamTimeouts(sources.fetcher, remoteSourceTimeouts),
             `${source.baseUrl}/${endpoints[upstreamProtocol]}`,
             {
               method: 'POST',
               headers: headersForSource,
               body: JSON.stringify(payload),
               redirect: 'error',
-              signal: AbortSignal.any([
-                context.req.raw.signal,
-                AbortSignal.timeout(120_000),
-              ]),
+              signal: context.req.raw.signal,
             },
             report,
             {

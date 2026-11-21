@@ -652,6 +652,14 @@ function translateInputItems(
 ): void {
   let userMessageSeen = false
   let replayedSearches = 0
+  // Tool calls that arrived without an ID, waiting for their outputs.
+  const unpairedCalls: Array<string> = []
+  let missingCallIds = 0
+  const missingCallId = () => {
+    const id = `call_missing_${missingCallIds++}`
+    unpairedCalls.push(id)
+    return id
+  }
   const lastUser = lastUserMessageIndex(input)
   // Search results belong in the user turn that follows the assistant's
   // tool calls, together with any client tool results from the same turn.
@@ -727,24 +735,59 @@ function translateInputItems(
         break
       }
       case 'function_call': {
-        translateInputToolCall(item, 'function', messages, registry)
+        translateInputToolCall(
+          item,
+          'function',
+          messages,
+          registry,
+          missingCallId,
+        )
         break
       }
       case 'custom_tool_call': {
-        translateInputToolCall(item, 'custom', messages, registry)
+        translateInputToolCall(
+          item,
+          'custom',
+          messages,
+          registry,
+          missingCallId,
+        )
         break
       }
       case 'function_call_output':
       case 'custom_tool_call_output': {
+        const content = translateToolResultContent(
+          (item as Record<string, unknown>).output,
+          `${type}.output`,
+        )
+        // A history that lost a call ID pairs the output with the oldest
+        // ID-less call; with no call to answer, the output stays as context
+        // rather than failing the whole turn.
+        const callId = getStringField(item, 'call_id') ?? unpairedCalls.shift()
+        if (!callId) {
+          appendUserBlock(messages, {
+            type: 'text',
+            text: 'Output of an earlier tool call:',
+          })
+          if (typeof content === 'string')
+            appendUserBlock(messages, {
+              type: 'text',
+              text: content || '(empty)',
+            })
+          else
+            for (const block of content)
+              appendUserBlock(
+                messages,
+                block.type === 'tool_reference' ?
+                  { type: 'text', text: `Tool: ${block.tool_name}` }
+                : block,
+              )
+          break
+        }
         appendUserBlock(messages, {
           type: 'tool_result',
-          tool_use_id: toAnthropicToolId(
-            requireStringField(item, 'call_id', type),
-          ),
-          content: translateToolResultContent(
-            (item as Record<string, unknown>).output,
-            `${type}.output`,
-          ),
+          tool_use_id: toAnthropicToolId(callId),
+          content,
           is_error: getStringField(item, 'status') === 'incomplete',
         })
         break
@@ -856,7 +899,9 @@ function translateInputReasoning(
   // so reasoning from another family (e.g. GPT) is dropped, as VS Code does.
   // Untagged signatures predate tagging; they can only belong to this model
   // within the current turn, because Codex switches models between turns.
-  if (tagged ? tagged.family !== family : encrypted && !currentTurn) return
+  // Reasoning without a signature (Gemini can stream thought text alone) can
+  // never be verified, and Claude rejects the whole request over it.
+  if (!encrypted || (tagged ? tagged.family !== family : !currentTurn)) return
   const thinking =
     Array.isArray(item.summary) ?
       item.summary
@@ -876,6 +921,7 @@ function translateInputToolCall(
   kind: MessagesToolDescriptor['kind'],
   messages: Array<AnthropicInputMessage>,
   registry: MessagesToolRegistry,
+  missingCallId: () => string,
 ): void {
   if (!isRecord(item)) {
     throw new ResponsesMessagesTranslationError(
@@ -898,9 +944,7 @@ function translateInputToolCall(
       )
   appendAssistantBlock(messages, {
     type: 'tool_use',
-    id: toAnthropicToolId(
-      requireStringField(item, 'call_id', `${kind}_tool_call`),
-    ),
+    id: toAnthropicToolId(getStringField(item, 'call_id') ?? missingCallId()),
     name: descriptor.alias,
     input,
   })

@@ -13,8 +13,14 @@ import {
 } from './copilot-compatibility/messages-translation'
 import { translateMessagesStream } from './copilot-compatibility/messages-stream-translation'
 import { requestContext } from './copilot-compatibility/context'
-import { prepareNativeResponsesInput } from './copilot-compatibility/cross-model-history'
-import type { AnthropicResponse } from './copilot-compatibility/anthropic'
+import {
+  prepareNativeResponsesInput,
+  withoutReplayedThinking,
+} from './copilot-compatibility/cross-model-history'
+import type {
+  AnthropicMessagesPayload,
+  AnthropicResponse,
+} from './copilot-compatibility/anthropic'
 import type {
   ResponseInputItem,
   ResponseStreamEvent,
@@ -47,6 +53,7 @@ import {
   decodeChatResponse,
 } from './copilot-compatibility/chat-bridge'
 import { readBoundedText, type SourceFetch } from '../sources/source-service'
+import { withStreamTimeouts } from '../sources/stream-timeouts'
 import {
   meteredFetch,
   type UpstreamPurpose,
@@ -230,6 +237,8 @@ export class CopilotProvider {
   // continues the same compacted conversation.
   private readonly handoffs: WebSearchResultCache
   private readonly quotas = new Map<string, CopilotQuota>()
+  // Model requests may stream for as long as they keep producing output.
+  private readonly upstream: SourceFetch
 
   constructor(
     private readonly credentials: Credentials,
@@ -257,7 +266,12 @@ export class CopilotProvider {
         signal.addEventListener('abort', abort, { once: true })
       }),
     private readonly requestTimeout = 120_000,
+    idleTimeout = 300_000,
   ) {
+    this.upstream = withStreamTimeouts(fetcher, {
+      headers: requestTimeout,
+      idle: idleTimeout,
+    })
     this.searchResults = new WebSearchResultCache(now)
     this.handoffs = new WebSearchResultCache(now, 50)
   }
@@ -575,14 +589,14 @@ export class CopilotProvider {
     if (/"type":"(?:image_url|image)"/u.test(serialized))
       headers.set('copilot-vision-request', 'true')
     const response = await meteredFetch(
-      this.fetcher,
+      this.upstream,
       `${token.api}${protocol === 'messages' ? '/v1/messages' : '/chat/completions'}`,
       {
         method: 'POST',
         headers,
         body: serialized,
         redirect: 'error',
-        signal: this.deadline(signal),
+        signal,
       },
       report,
       {
@@ -611,7 +625,8 @@ export class CopilotProvider {
   }
 
   // `signal` is the client's connection; each upstream request adds its own
-  // deadline so multi-request web-search turns are not cut short. `report`
+  // start and idle limits so multi-request web-search turns are not cut
+  // short. `report`
   // receives the usage of every upstream request, including searches.
   async forward(
     source: Source,
@@ -654,23 +669,23 @@ export class CopilotProvider {
       : '/responses'
     const vision = JSON.stringify(payload).includes('"input_image"')
     const modelId = typeof body.model === 'string' ? body.model : 'unknown'
-    const send = (
+    const post = (
       upstream: unknown,
       agent: boolean,
-      purpose: UpstreamPurpose = 'request',
+      purpose: UpstreamPurpose,
     ) => {
       const headers = this.headers(token, false, conversation)
       headers.set('x-initiator', agent ? 'agent' : 'user')
       if (vision) headers.set('copilot-vision-request', 'true')
       return meteredFetch(
-        this.fetcher,
+        this.upstream,
         `${token.api}${endpoint}`,
         {
           method: 'POST',
           headers,
           body: JSON.stringify(upstream),
           redirect: 'error',
-          signal: this.deadline(signal),
+          signal,
         },
         report,
         {
@@ -686,6 +701,21 @@ export class CopilotProvider {
         },
         this.now,
       )
+    }
+    const send = async (
+      upstream: unknown,
+      agent: boolean,
+      purpose: UpstreamPurpose = 'request',
+    ) => {
+      const response = await post(upstream, agent, purpose)
+      const unthought =
+        protocol === 'messages' && response.status === 400 ?
+          withoutReplayedThinking(upstream as AnthropicMessagesPayload)
+        : undefined
+      if (!unthought || !/signature/iu.test(await response.clone().text()))
+        return response
+      await response.body?.cancel()
+      return post(unthought, agent, purpose)
     }
     if (protocol === 'responses') {
       const input = payload.input
@@ -1046,7 +1076,7 @@ export class CopilotProvider {
     headers.set('x-initiator', 'agent')
     try {
       const response = await meteredFetch(
-        this.fetcher,
+        this.upstream,
         `${token.api}/responses`,
         {
           method: 'POST',
@@ -1065,7 +1095,7 @@ export class CopilotProvider {
             store: false,
           }),
           redirect: 'error',
-          signal: this.deadline(signal),
+          signal,
         },
         report,
         {

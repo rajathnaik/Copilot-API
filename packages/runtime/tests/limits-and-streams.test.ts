@@ -1,6 +1,67 @@
 import { expect, test } from 'bun:test'
 import { createGateway, SourceService } from '../src/runtime'
 import { readBoundedText } from '../src/sources/source-service'
+import { withStreamTimeouts } from '../src/sources/stream-timeouts'
+
+const sleep = (ms: number) =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms)
+  })
+
+// Streams `chunks` with `gap` ms between them, then stalls if `stall` is set.
+function trickle(chunks: Array<string>, gap: number, stall = false) {
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      for (const chunk of chunks) {
+        await sleep(gap)
+        controller.enqueue(new TextEncoder().encode(chunk))
+      }
+      if (!stall) controller.close()
+    },
+  })
+}
+
+test('stream timeouts let a long answer finish but stop a stalled one', async () => {
+  const limits = { headers: 100, idle: 60 }
+  // Eight 25 ms gaps outlast the 100 ms start limit and the 60 ms idle limit
+  // combined, yet no single wait reaches the idle limit.
+  const long = withStreamTimeouts(
+    async () =>
+      new Response(trickle(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'], 25)),
+    limits,
+  )
+  expect(await (await long('https://source.test')).text()).toBe('abcdefgh')
+
+  const stalled = withStreamTimeouts(
+    async () => new Response(trickle(['a'], 0, true)),
+    limits,
+  )
+  await expect((await stalled('https://source.test')).text()).rejects.toThrow(
+    'Upstream stream timed out.',
+  )
+
+  const silent = withStreamTimeouts(
+    (_url, init) =>
+      new Promise<Response>((_, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          reject(init.signal?.reason as Error)
+        })
+      }),
+    limits,
+  )
+  await expect(silent('https://source.test')).rejects.toThrow(
+    'Upstream response timed out.',
+  )
+
+  const client = new AbortController()
+  const cancelled = await withStreamTimeouts(
+    async () => new Response(trickle(['a'], 0, true)),
+    { headers: 1000, idle: 1000 },
+  )('https://source.test', { signal: client.signal })
+  const reading = cancelled.text()
+  client.abort(new Error('client left'))
+  await expect(reading).rejects.toThrow('client left')
+})
 
 test('catalog reads enforce the exact byte boundary and decode split UTF-8 without loss', async () => {
   expect(await readBoundedText(new Response(null), 1)).toBe('')

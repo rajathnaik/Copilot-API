@@ -101,3 +101,9 @@
   (`reasoning-signature.ts`), keep `cross-model-history.ts` for native
   Responses input, and verify model switching live in both directions
   (search, reasoning, compaction) because mocks cannot verify signatures.
+- Never put a total deadline (`AbortSignal.timeout`) on a streamed model
+  request: large turns stream for minutes, and cutting them shows up in Codex
+  as endless "Reconnecting…" retries. Use `withStreamTimeouts`
+  (`sources/stream-timeouts.ts`), which limits time to first byte and silence
+  between chunks only. Claude rejects any thinking block without a valid
+  signature, so never replay unsigned reasoning to it.

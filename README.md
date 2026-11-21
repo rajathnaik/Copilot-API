@@ -27,6 +27,28 @@ To build the unsigned Windows development installer locally, run
 candidate, not a verified production release; installation/upgrade/uninstall
 and the real two-machine acceptance test are still pending.
 
+## Unreleased: no more cut-off long turns, steadier model switches
+
+- **Long turns are no longer cut off.** Every model request used to have a
+  hard 120-second limit on the whole response, including the time spent
+  streaming the answer. Large Codex conversations with Claude or Gemini often
+  take longer than that, so the stream was cut, the request failed with a few
+  output tokens, and Codex showed "Reconnecting…" while it retried the same
+  request. Now a response must *start* within 120 seconds, and once it streams
+  it may run as long as it keeps producing output; it fails only if it goes
+  silent for 5 minutes. A client machine gives its host 5 minutes to start
+  and 5½ minutes of silence, so the host's own limits always report first.
+- **"Invalid `signature` in `thinking` block" after Gemini.** Gemini sometimes
+  streams its thought text without a signature. Claude rejects any thinking
+  block it cannot verify, so switching from Gemini to Claude failed. Unsigned
+  reasoning is now never replayed, and if Claude still rejects a signature I
+  could not foresee, ModelBridge retries that request once without the earlier
+  thinking (Claude continues fine without it, even mid tool loop).
+- **"function_call_output.call_id is required".** A tool call or tool output
+  that lost its ID no longer fails the turn: an ID-less output is paired with
+  the oldest ID-less call, and an output with no call to answer is kept as
+  plain context.
+
 ## What's new in 0.1.4: switch providers mid-conversation
 
 In Codex and any other Responses client, I can now switch between GPT and
@@ -283,8 +305,10 @@ Web search now works for every Copilot model, not only GPT models:
   When the model also requests client tools in the same turn, the response ends
   after the searches so Codex can run those tools; the search results are kept
   on the host for 24 hours (up to 500) so replayed history stays complete.
-- Each turn allows up to 8 searches. Each search and each continuation request
-  gets its own 120-second limit, so a multi-step search turn is not cut short.
+- Each turn allows up to 8 searches. Each search gets its own 120-second limit,
+  and each continuation request must start within 120 seconds and may then
+  stream for as long as output keeps arriving, so a multi-step search turn is
+  not cut short.
   A failed or timed-out search is reported to the model as a failed
   `web_search_call` rather than ending the turn; a failure while continuing
   after a search fails the response explicitly. The reported token usage is the
