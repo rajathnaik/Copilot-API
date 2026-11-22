@@ -7,25 +7,39 @@ The new desktop structure retains the original Copilot API's direct
 authentication, token exchange, forwarding and protocol translations.
 **There is no Copilot SDK integration.**
 
-**Development pre-release: 0.1.5**, the latest ModelBridge release.
+**Development pre-release: 0.1.6**, the latest ModelBridge release.
 
-Download the unsigned Windows installer from the
-[ModelBridge 0.1.5 release](https://github.com/rajathnaik/Copilot-API/releases/tag/modelbridge-v0.1.5):
+I download the unsigned Windows installer from the
+[ModelBridge 0.1.6 release](https://github.com/rajathnaik/Copilot-API/releases/tag/modelbridge-v0.1.6):
 
-- [Windows installer](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.5/ModelBridge.Setup.0.1.5.exe)
-- [SHA256 checksum](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.5/ModelBridge.Setup.0.1.5.exe.sha256)
+- [Windows installer](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.6/ModelBridge.Setup.0.1.6.exe)
+- [SHA256 checksum](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.6/ModelBridge.Setup.0.1.6.exe.sha256)
 
-Compare `Get-FileHash .\ModelBridge.Setup.0.1.5.exe -Algorithm SHA256`
+I compare `Get-FileHash .\ModelBridge.Setup.0.1.6.exe -Algorithm SHA256`
 with the downloaded checksum before running the installer. Windows may warn
 about an unknown publisher because this development build is not code-signed.
-Use the same installer on the host and client machines. If 0.1.3 or later is
-installed, use **Update to 0.1.5** in the app instead of reinstalling.
+I use the same installer on the host and client machines. If 0.1.3 or later is
+installed, I can use **Update to 0.1.6** in the app instead of reinstalling.
 
-To build the unsigned Windows development installer locally, run
+To build the unsigned Windows development installer locally, I run
 `bun run --cwd apps/modelbridge package:win`. Its output is
-`apps/modelbridge/release/ModelBridge.Setup.0.1.5.exe`. This is a test
+`apps/modelbridge/release/ModelBridge.Setup.0.1.6.exe`. This is a test
 candidate, not a verified production release; installation/upgrade/uninstall
 and the real two-machine acceptance test are still pending.
+
+## What's new in 0.1.6: credit-aware usage and client budgets
+
+- **Copilot quota.** For token-based billing, I show GitHub's AI-credit
+  allowance and consumption instead of calling them premium requests. I fetch
+  fresh quota data when opening the dashboard, every minute while it is open,
+  and when I select **Refresh quota**.
+- **Token monitoring.** I refresh recorded token counts and the daily graph
+  every five seconds after upstream requests finish. I can also select
+  **Refresh usage**. Partial Messages usage updates retain cached input counts.
+- **Client budgets.** I can set warn-only monthly AI-credit limits per client
+  and per model. Missing credit reports are flagged as incomplete; requests
+  are not blocked. Existing premium-request limits retain their original units
+  until I explicitly change them.
 
 ## What's new in 0.1.5: longer turns and steadier model switches
 
@@ -243,7 +257,7 @@ These changes are included in 0.1.0.
   informational only; it is not secret and grants no access.
 - **Clients and premium-request limits (hosts).** **Client machines this
   month** lists each client's last activity, requests and premium requests.
-  Under **Premium request limits** you can set a default monthly limit per
+  Under **Client usage limits** I can set a default monthly limit per
   client, per-client overrides (or exempt a client) and per-model limits. Limits
   only warn: clients near (80%) or over a limit are flagged, but requests are
   never blocked.
@@ -343,7 +357,25 @@ The original Gateway's visibility is back, in the same app:
   split between this machine and remote clients.
 - **Copilot quota (hosts).** Premium-request, chat and completion allowances,
   remaining amounts, plan, account and reset date from GitHub's Copilot account
-  endpoint, refreshed every minute while the dashboard is open or on demand.
+  endpoint. I fetch fresh quota data when opening the dashboard, every minute
+  while it is open, or with **Refresh quota**. For token-based billing, I show
+  **AI credits** and GitHub's reported credits used rather than labeling the
+  allowance as premium requests. This is account-wide usage, including activity
+  outside ModelBridge, and GitHub may update it with a delay.
+
+I refresh recorded token totals and the graph every five seconds after upstream
+requests finish, or immediately with **Refresh usage**. This does not estimate
+tokens for a request that is still streaming. The dashboard shows its last
+refresh time.
+
+Under **Client usage limits**, I can choose **Copilot credits** for warn-only
+monthly client and per-model budgets. Credits come from each response's reported
+AI units (one billion nano AI units per credit); one credit is $0.01 USD.
+Agent follow-ups also count when they report a credit charge. Missing credit
+reports are flagged, never treated as proof of free usage. These budgets do not
+block requests or change GitHub's billing limits. Existing saved premium-request
+budgets keep their original unit until I explicitly save a different one;
+changing units does not convert the numeric limits.
 
 Accounting is per upstream request, so a web search or a tool-continuation round
 that ModelBridge sends on your behalf is counted exactly once with its own
@@ -361,8 +393,8 @@ Usage history holds metadata only (time, source, model, token counts, status,
 duration and reported AI units, never prompts or responses). It is kept in
 monthly files under `%APPDATA%\ModelBridge\usage`, retained for about 13
 months, and can be deleted from **Settings**. The live Copilot quota response
-and the presence of AI units in live responses still need verification against
-a real subscription.
+can lag behind locally recorded requests. Client identity comes from the reported
+machine name, not a separate authenticated per-client credential.
 
 ## Current implementation
 

@@ -156,6 +156,33 @@ test('the meter reads Responses, Messages and Chat usage and Copilot AI units', 
   expect(new UsageMeter().result().reported).toBe(false)
 })
 
+test('Messages cache fields retain cumulative input when later usage is partial', () => {
+  const meter = new UsageMeter()
+  meter.observe({
+    type: 'message_start',
+    message: {
+      usage: {
+        input_tokens: 10,
+        cache_read_input_tokens: 50,
+        cache_creation_input_tokens: 5,
+        output_tokens: 0,
+      },
+    },
+  })
+  meter.observe({
+    type: 'message_delta',
+    usage: { cache_read_input_tokens: 60, output_tokens: 20 },
+  })
+  expect(meter.result().tokens).toMatchObject({
+    inputTokens: 75,
+    cachedInputTokens: 60,
+    cacheWriteTokens: 5,
+    outputTokens: 20,
+  })
+  meter.observe({ type: 'message_delta', usage: { input_tokens: 12 } })
+  expect(meter.result().tokens.inputTokens).toBe(77)
+})
+
 test('the response tap passes bodies through unchanged and reports once', async () => {
   const body = sse([
     { type: 'response.created', response: { id: 'r' } },
@@ -789,6 +816,7 @@ test('Copilot quota is parsed, cached for a minute and refreshed on demand', asy
       unlimited: false,
       overageCount: 0,
       overagePermitted: true,
+      creditsUsed: null,
     },
     chat: {
       entitlement: null,
@@ -797,8 +825,10 @@ test('Copilot quota is parsed, cached for a minute and refreshed on demand', asy
       unlimited: true,
       overageCount: 0,
       overagePermitted: false,
+      creditsUsed: null,
     },
     completions: null,
+    tokenBasedBilling: false,
   })
   clock += 30_000
   expect(await provider.quota(id)).toBe(quota)
@@ -833,4 +863,35 @@ test('requests are attributed to the calling app and summarized per app', async 
     ['hermes', 1],
     ['unknown', 1],
   ])
+})
+
+test('Copilot token-based quota preserves reported credits and UTC reset dates', async () => {
+  const vault = credentials()
+  await vault.set('credits', 'synthetic-github')
+  const provider = new CopilotProvider(vault, () =>
+    Promise.resolve(
+      Response.json({
+        token_based_billing: true,
+        quota_reset_date: '2031-02-01',
+        quota_reset_date_utc: '2031-02-01T00:00:00Z',
+        quota_snapshots: {
+          premium_interactions: {
+            entitlement: 9_000,
+            quota_remaining: 5_400,
+            credits_used: 3_600,
+            percent_remaining: 60,
+          },
+        },
+      }),
+    ),
+  )
+  expect(await provider.quota('credits')).toMatchObject({
+    tokenBasedBilling: true,
+    resetDate: '2031-02-01T00:00:00Z',
+    premium: {
+      entitlement: 9_000,
+      remaining: 5_400,
+      creditsUsed: 3_600,
+    },
+  })
 })

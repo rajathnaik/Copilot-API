@@ -218,6 +218,7 @@ test.skipIf(
             unlimited: false,
             overageCount: 0,
             overagePermitted: false,
+            creditsUsed: null,
           },
           chat: {
             entitlement: null,
@@ -226,8 +227,10 @@ test.skipIf(
             unlimited: true,
             overageCount: 0,
             overagePermitted: false,
+            creditsUsed: null,
           },
           completions: null,
+          tokenBasedBilling: false,
         },
       },
     ]
@@ -257,6 +260,7 @@ test.skipIf(
       )}
       let status = initial
       let cleared = false
+      let missingCredits = 0
       let limits = {defaultMonthly:null,models:{},clients:{}}
       const savedLimits = []
       const ranges = [], roles = []
@@ -271,10 +275,11 @@ test.skipIf(
       ipcMain.handle('modelbridge:usage', (_event, range) => {
         ranges.push(range)
         const used = cleared ? 0 : 3
+        const amount = limits.unit === 'credits' ? (cleared ? 0 : 8) : used
         return success({ summary: (cleared ? empties : summaries)[range], error: null, limits,
-          clients: [{client:'laptop',requests:used,premium:used,lastSeen:Date.now(),limit:limits.defaultMonthly,
-            state:limits.defaultMonthly === null ? 'none' : used > limits.defaultMonthly ? 'over' : 'ok',
-            models:[{model:'gpt-5.4',premium:used,limit:null,state:'none'}]}] })
+          clients: [{client:'laptop',requests:used,premium:used,used:amount,unpricedRequests:missingCredits,lastSeen:Date.now(),limit:limits.defaultMonthly,
+            state:limits.defaultMonthly === null ? 'none' : amount > limits.defaultMonthly ? 'over' : 'ok',
+            models:[{model:'gpt-5.4',premium:used,used:amount,limit:null,state:'none'}]}] })
       })
       ipcMain.handle('modelbridge:premium-limits', (_event, next) => {
         limits = next
@@ -363,6 +368,37 @@ test.skipIf(
         if (!(await read('JSON.stringify(' + button('Today') + '.getAttribute("aria-pressed"))')).includes('true')) throw new Error('Range not pressed')
         await click('Refresh quota')
         await wait('(' + button('Refresh quota') + ')?.disabled === false')
+        await read('(() => { const input = document.querySelector("#panel-dashboard select[name=budgetUnit]"); const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set; set.call(input, "credits"); input.dispatchEvent(new Event("change", {bubbles:true})) })()')
+        await click('Save budget unit')
+        await wait('(document.querySelector("#panel-dashboard .clients")?.innerText ?? "").includes("8 of 2")')
+        if (savedLimits[1]?.unit !== 'credits') throw new Error('Credit budget unit not saved')
+        if (!(await text('#panel-dashboard .metrics')).includes('PREMIUM REQUESTS')) throw new Error('Client budget unit changed the subscription billing metric')
+        await read('(() => { const input = document.querySelector("#panel-dashboard input[name=defaultMonthly]"); const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set; set.call(input, "100"); input.dispatchEvent(new Event("input", {bubbles:true})) })()')
+        missingCredits = 1
+        await click('Save default')
+        await wait('(document.querySelector("#panel-dashboard .clients")?.innerText ?? "").includes("Incomplete")')
+        if (!(await text('#panel-dashboard .clients')).includes('1 request without credits')) throw new Error('Missing credit count not shown')
+        missingCredits = 0
+        quotas[0].quota.tokenBasedBilling = true
+        quotas[0].quota.premium = {...quotas[0].quota.premium, entitlement:9000, remaining:5400, creditsUsed:3600, percentRemaining:60}
+        await click('Refresh quota')
+        await wait('(document.querySelector("#panel-dashboard .quota")?.innerText ?? "").includes("5,400 of 9,000 left")')
+        const creditQuota = await text('#panel-dashboard .quota')
+        for (const expected of ['AI credits','3,600 credits used'])
+          if (!creditQuota.includes(expected)) throw new Error('Credit quota missing ' + expected + ': ' + creditQuota)
+        await wait('(document.querySelector("#panel-dashboard .metrics")?.innerText ?? "").includes("COPILOT CREDITS")')
+        summaries.today.totals = {...summaries.today.totals, inputTokens:85000, totalTokens:87400}
+        await wait('(document.querySelector("#panel-dashboard .metrics")?.innerText ?? "").includes("85K")')
+        summaries.today.daily[0].totalTokens = 87400
+        await click('Refresh usage')
+        await wait('document.querySelector("#panel-dashboard .chart .point title")?.textContent.includes("87,400 tokens")')
+        await read('(() => { const original = window.setInterval; window.setInterval = (fn, ms) => original(fn, ms === 60000 ? 200 : ms) })()')
+        await read('document.querySelector("#tab-settings").click()')
+        await read('document.querySelector("#tab-dashboard").click()')
+        const automaticBefore = refreshes
+        quotas[0].quota.premium.remaining = 5000
+        await wait('(document.querySelector("#panel-dashboard .quota")?.innerText ?? "").includes("5,000 of 9,000 left")')
+        if (refreshes <= automaticBefore) throw new Error('Automatic quota refresh did not request fresh data')
 
         await read('document.querySelector("#tab-settings").click()')
         await click('Clear usage history…')
@@ -383,7 +419,7 @@ test.skipIf(
 
         if (JSON.stringify(roles) !== JSON.stringify(['host','client'])) throw new Error('Roles: ' + JSON.stringify(roles))
         if (!ranges.includes('7d') || !ranges.includes('today')) throw new Error('Ranges: ' + JSON.stringify(ranges))
-        if (refreshes !== 1) throw new Error('Quota refreshes: ' + refreshes)
+        if (refreshes < 4) throw new Error('Quota refreshes: ' + refreshes)
         process.stdout.write('MODELBRIDGE_DASHBOARD_UI_OK\\n', () => app.quit())
       }).catch(error => { console.error(error.stack || error.message); app.exit(1) })
     `,

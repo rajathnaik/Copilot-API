@@ -15,6 +15,7 @@ const dayMs = 24 * 60 * 60 * 1000
 // Copilot reports cost in nano AI units; the original gateway billed
 // 100 AI units per US dollar.
 export const nanoAiuPerUsd = 100_000_000_000
+export const nanoAiuPerCredit = 1_000_000_000
 
 // Coding tools ModelBridge recognizes in usage; anything else is `other`.
 export const usageApps = [
@@ -116,6 +117,9 @@ export interface MonthlyClientUsage {
   premium: number
   lastSeen: number
   models: Record<string, number>
+  credits: number
+  unpricedRequests: number
+  modelCredits: Record<string, number>
 }
 
 export const unnamedClientLabel = 'Unnamed client'
@@ -428,8 +432,7 @@ export class UsageLedger {
     }
   }
 
-  // Premium requests each remote client used in the current calendar month,
-  // for the host's warn-only limits.
+  // I total each remote client's reported charges this month for warn-only limits.
   month(): MonthlyClientUsage[] {
     const start = new Date(this.now())
     start.setHours(0, 0, 0, 0)
@@ -444,12 +447,22 @@ export class UsageLedger {
         premium: 0,
         lastSeen: 0,
         models: {},
+        credits: 0,
+        unpricedRequests: 0,
+        modelCredits: {},
       }
       const premium = record.premium ?? 0
       client.requests++
       client.premium += premium
       client.lastSeen = Math.max(client.lastSeen, record.at)
       client.models[record.model] = (client.models[record.model] ?? 0) + premium
+      if (record.nanoAiu === null) client.unpricedRequests++
+      else {
+        const credits = record.nanoAiu / nanoAiuPerCredit
+        client.credits += credits
+        client.modelCredits[record.model] =
+          (client.modelCredits[record.model] ?? 0) + credits
+      }
       clients.set(name, client)
     }
     return [...clients.values()].map((client) => ({

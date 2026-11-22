@@ -6,6 +6,7 @@ import type {
 } from '@modelbridge/runtime/limits'
 import {
   failure,
+  formatCredits,
   formatDateTime,
   formatInteger,
   formatPremium,
@@ -19,14 +20,27 @@ const states: Record<LimitState, string> = {
   over: 'Over limit',
 }
 
-function Badge({ state }: { state: LimitState }) {
-  return <span className={`badge ${state}`}>{states[state]}</span>
+function Badge({
+  state,
+  incomplete = false,
+}: {
+  state: LimitState
+  incomplete?: boolean
+}) {
+  const uncertain = incomplete && state === 'ok'
+  return (
+    <span className={`badge ${uncertain ? 'near' : state}`}>
+      {uncertain ? 'Incomplete' : states[state]}
+    </span>
+  )
 }
 
-const used = (premium: number, limit: number | null) =>
-  limit === null ?
-    formatPremium(premium)
-  : `${formatPremium(premium)} of ${formatPremium(limit)}`
+const used = (amount: number, limit: number | null, credits: boolean) => {
+  const format = credits ? formatCredits : formatPremium
+  return limit === null ?
+      format(amount)
+    : `${format(amount)} of ${format(limit)}`
+}
 
 function parseLimit(value: string): number | null | undefined {
   if (!value.trim()) return null
@@ -46,6 +60,7 @@ function LimitsEditor({
   onSaved: (limits: PremiumLimits) => void
 }) {
   const [draft, setDraft] = useState(limits)
+  const [unit, setUnit] = useState(limits.unit ?? 'premium-requests')
   const [defaultText, setDefaultText] = useState(
     limits.defaultMonthly === null ? '' : String(limits.defaultMonthly),
   )
@@ -77,16 +92,54 @@ function LimitsEditor({
   const defaultValue = parseLimit(defaultText)
   const clientValue = parseLimit(clientLimit)
   const modelValue = parseLimit(modelLimit)
+  const unitLabel =
+    draft.unit === 'credits' ? 'Copilot credits' : 'premium requests'
   const without = <T,>(record: Record<string, T>, key: string) =>
     Object.fromEntries(Object.entries(record).filter(([name]) => name !== key))
   return (
     <details className="limits-editor">
-      <summary>Premium request limits</summary>
+      <summary>Client usage limits</summary>
       <p className="muted">
-        Monthly Copilot premium requests each client may use. Limits only warn
-        here; requests are never blocked. Months follow this computer&apos;s
-        calendar.
+        Monthly {unitLabel} each client may use. Limits only warn here; requests
+        are never blocked. Months follow this computer&apos;s calendar.
       </p>
+      <form
+        className="inline-form"
+        onSubmit={(event) => {
+          event.preventDefault()
+          void save({ ...draft, unit })
+        }}
+      >
+        <label>
+          Budget unit
+          <select
+            name="budgetUnit"
+            value={unit}
+            onChange={(event) =>
+              setUnit(
+                event.target.value === 'credits' ?
+                  'credits'
+                : 'premium-requests',
+              )
+            }
+          >
+            <option value="credits">Copilot credits</option>
+            <option value="premium-requests">Legacy premium requests</option>
+          </select>
+        </label>
+        <button
+          disabled={saving || unit === (draft.unit ?? 'premium-requests')}
+          type="submit"
+        >
+          Save budget unit
+        </button>
+      </form>
+      {unit !== (draft.unit ?? 'premium-requests') && (
+        <p className="notice warn">
+          Changing units keeps the numeric limits unchanged; review every limit
+          before saving. Credits are not equivalent to premium requests.
+        </p>
+      )}
       <form
         className="inline-form"
         onSubmit={(event) => {
@@ -275,6 +328,8 @@ export function ClientUsage({
   models: string[]
   onLimitsSaved: (limits: PremiumLimits) => void
 }) {
+  const unitLabel =
+    limits.unit === 'credits' ? 'Copilot credits' : 'premium requests'
   const warnings = clients.filter(
     (client) =>
       client.state === 'over'
@@ -293,12 +348,20 @@ export function ClientUsage({
               const over =
                 client.state === 'over'
                 || client.models.some((item) => item.state === 'over')
-              return `${client.client} is ${over ? 'over' : 'near'} its premium request limit`
+              return `${client.client} is ${over ? 'over' : 'near'} its ${unitLabel} limit`
             })
             .join('. ')}
           .
         </p>
       )}
+      {limits.unit === 'credits'
+        && clients.some((client) => client.unpricedRequests > 0) && (
+          <p className="notice warn" role="status">
+            Some requests did not report AI credits. Budgets count reported
+            credits only and may understate consumption; GitHub&apos;s account
+            quota remains the authority.
+          </p>
+        )}
       {!clients.length ?
         <p className="muted">
           No client machine has used this host this month. Each client reports
@@ -311,7 +374,7 @@ export function ClientUsage({
                 <th>Client</th>
                 <th>Last seen</th>
                 <th>Requests</th>
-                <th>Premium requests</th>
+                <th>{unitLabel}</th>
                 <th>Status</th>
               </tr>
             </thead>
@@ -330,10 +393,20 @@ export function ClientUsage({
                             <li key={item.model}>
                               <code>{item.model}</code>{' '}
                               <span className="numeric">
-                                {used(item.premium, item.limit)}
+                                {used(
+                                  item.used,
+                                  item.limit,
+                                  limits.unit === 'credits',
+                                )}
                               </span>{' '}
                               {item.state !== 'none' && (
-                                <Badge state={item.state} />
+                                <Badge
+                                  state={item.state}
+                                  incomplete={
+                                    limits.unit === 'credits'
+                                    && client.unpricedRequests > 0
+                                  }
+                                />
                               )}
                             </li>
                           ))}
@@ -347,9 +420,31 @@ export function ClientUsage({
                     : formatDateTime(client.lastSeen)}
                   </td>
                   <td>{formatInteger(client.requests)}</td>
-                  <td>{used(client.premium, client.limit)}</td>
                   <td>
-                    <Badge state={client.state} />
+                    {(
+                      limits.unit === 'credits'
+                      && client.unpricedRequests === client.requests
+                      && client.requests > 0
+                    ) ?
+                      'Not reported'
+                    : used(client.used, client.limit, limits.unit === 'credits')
+                    }
+                    {limits.unit === 'credits'
+                      && client.unpricedRequests > 0 && (
+                        <span className="muted">
+                          {' '}
+                          · {plural(client.unpricedRequests, 'request')} without
+                          credits
+                        </span>
+                      )}
+                  </td>
+                  <td>
+                    <Badge
+                      state={client.state}
+                      incomplete={
+                        limits.unit === 'credits' && client.unpricedRequests > 0
+                      }
+                    />
                   </td>
                 </tr>
               ))}

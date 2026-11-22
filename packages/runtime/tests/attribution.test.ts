@@ -302,6 +302,9 @@ test('the ledger groups remote clients, plots daily series and totals the curren
     premium: 4,
     lastSeen: noon,
     models: { gpt: 1, claude: 3 },
+    credits: 0,
+    unpricedRequests: 3,
+    modelCredits: {},
   })
   expect(month).toHaveLength(3)
 })
@@ -324,6 +327,9 @@ test('premium limits warn per client and per model without blocking', () => {
       premium: 9,
       lastSeen: 5,
       models: { claude: 6, gpt: 3 },
+      credits: 90,
+      unpricedRequests: 0,
+      modelCredits: { claude: 60, gpt: 30 },
     },
     {
       client: 'Desk',
@@ -331,8 +337,20 @@ test('premium limits warn per client and per model without blocking', () => {
       premium: 2,
       lastSeen: 4,
       models: { gpt: 2 },
+      credits: 20,
+      unpricedRequests: 0,
+      modelCredits: { gpt: 20 },
     },
-    { client: 'Owner', requests: 50, premium: 50, lastSeen: 3, models: {} },
+    {
+      client: 'Owner',
+      requests: 50,
+      premium: 50,
+      lastSeen: 3,
+      models: {},
+      credits: 500,
+      unpricedRequests: 0,
+      modelCredits: {},
+    },
   ]
   const status = premiumLimitStatus(usage, {
     defaultMonthly: 10,
@@ -349,9 +367,93 @@ test('premium limits warn per client and per model without blocking', () => {
     ['Tablet', 20, 'ok'],
   ])
   expect(status[0]?.models).toEqual([
-    { model: 'claude', premium: 6, limit: 5, state: 'over' },
-    { model: 'gpt', premium: 3, limit: null, state: 'none' },
+    { model: 'claude', premium: 6, used: 6, limit: 5, state: 'over' },
+    { model: 'gpt', premium: 3, used: 3, limit: null, state: 'none' },
   ])
   expect(status[3]).toMatchObject({ requests: 0, lastSeen: null })
   expect(premiumLimitStatus(usage, noPremiumLimits)[0]?.state).toBe('none')
+  expect(
+    premiumLimitStatus(usage, {
+      unit: 'credits',
+      defaultMonthly: 100,
+      models: { claude: 50 },
+      clients: { Owner: null },
+    })[0],
+  ).toMatchObject({
+    client: 'Laptop',
+    used: 90,
+    state: 'over',
+    models: [
+      { model: 'claude', premium: 6, used: 60, state: 'over' },
+      { model: 'gpt', used: 30 },
+    ],
+  })
+})
+
+test('monthly credit budgets count reported charges, not premium estimates, across restarts', async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'mb-credit-usage-'))
+  directories.push(directory)
+  let clock = new Date(2026, 10, 22, 12).getTime()
+  const ledger = await UsageLedger.open(directory, () => clock)
+  const record = (overrides: Partial<UsageEntry>): UsageEntry => ({
+    sourceId: 'copilot',
+    source: 'Synthetic Copilot',
+    kind: 'copilot',
+    model: 'claude',
+    access: 'remote',
+    client: 'Laptop',
+    purpose: 'request',
+    status: 200,
+    outcome: 'completed',
+    durationMs: 10,
+    inputTokens: 100,
+    cachedInputTokens: 0,
+    cacheWriteTokens: 0,
+    outputTokens: 20,
+    reasoningTokens: 0,
+    nanoAiu: 2_500_000_000,
+    premium: null,
+    ...overrides,
+  })
+  ledger.record(record({}))
+  ledger.record(
+    record({ initiator: 'agent', nanoAiu: 750_000_000, premium: 0 }),
+  )
+  ledger.record(record({ nanoAiu: null }))
+  ledger.record(record({ access: 'local', nanoAiu: 50_000_000_000 }))
+  await ledger.flush()
+  const reopened = await UsageLedger.open(directory, () => clock)
+  expect(reopened.month()).toEqual([
+    {
+      client: 'Laptop',
+      requests: 3,
+      premium: 0,
+      lastSeen: clock,
+      models: { claude: 0 },
+      credits: 3.25,
+      unpricedRequests: 1,
+      modelCredits: { claude: 3.25 },
+    },
+  ])
+  expect(
+    premiumLimitStatus(reopened.month(), {
+      unit: 'credits',
+      defaultMonthly: 3,
+      models: {},
+      clients: {},
+    })[0],
+  ).toMatchObject({ used: 3.25, state: 'over', unpricedRequests: 1 })
+  reopened.record(record({ nanoAiu: 6_751_000_000 }))
+  const exact = premiumLimitStatus(reopened.month(), {
+    unit: 'credits',
+    defaultMonthly: 10,
+    models: { claude: 10 },
+    clients: {},
+  })[0]
+  expect(exact?.used).toBeCloseTo(10.001, 9)
+  expect(exact?.state).toBe('over')
+  expect(exact?.models[0]?.state).toBe('over')
+  await reopened.flush()
+  clock = new Date(2026, 11, 1, 0).getTime()
+  expect(reopened.month()).toEqual([])
 })

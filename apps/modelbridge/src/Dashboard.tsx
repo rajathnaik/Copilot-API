@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Role } from '@modelbridge/runtime/contracts'
 import type { CopilotQuotaDetail } from '@modelbridge/runtime/copilot'
 import type {
@@ -156,9 +156,21 @@ function QuotaCard({
           {item.quota && (
             <>
               <QuotaMeter
-                label="Premium requests"
+                label={
+                  item.quota.tokenBasedBilling ?
+                    'AI credits'
+                  : 'Premium requests'
+                }
                 detail={item.quota.premium}
               />
+              {item.quota.tokenBasedBilling
+                && item.quota.premium?.creditsUsed !== null
+                && item.quota.premium?.creditsUsed !== undefined && (
+                  <p className="numeric">
+                    {formatPremium(item.quota.premium.creditsUsed)} credits used
+                    (reported by GitHub).
+                  </p>
+                )}
               <QuotaMeter label="Chat" detail={item.quota.chat} />
               <QuotaMeter label="Completions" detail={item.quota.completions} />
               <p className="muted">
@@ -166,6 +178,10 @@ function QuotaCard({
                   `Resets ${formatDay(item.quota.resetDate.slice(0, 10))}. `
                 : ''}
                 Checked {formatTime(item.quota.checkedAt)}.
+              </p>
+              <p className="muted">
+                Account-wide allowance, including usage outside ModelBridge.
+                GitHub may update these amounts with a delay.
               </p>
             </>
           )}
@@ -345,6 +361,8 @@ export function Dashboard({
   const [quotas, setQuotas] = useState<CopilotQuotaStatus[] | null>(null)
   const [quotaError, setQuotaError] = useState('')
   const [refreshing, setRefreshing] = useState(false)
+  const [refreshUsage, setRefreshUsage] = useState(0)
+  const quotaPending = useRef(false)
 
   useEffect(() => {
     if (!active) return
@@ -375,9 +393,11 @@ export function Dashboard({
       live = false
       clearInterval(timer)
     }
-  }, [active, range])
+  }, [active, range, refreshUsage])
 
   const loadQuota = useCallback(async (refresh: boolean) => {
+    if (quotaPending.current) return
+    quotaPending.current = true
     try {
       const result = await window.modelbridge.copilotQuota(refresh)
       if (result.ok) {
@@ -386,18 +406,22 @@ export function Dashboard({
       } else setQuotaError(result.error)
     } catch (error) {
       setQuotaError(failure(error, 'Could not read Copilot quota.'))
+    } finally {
+      quotaPending.current = false
     }
   }, [])
 
   useEffect(() => {
     if (!active || role !== 'host') return
-    void loadQuota(false)
-    const timer = setInterval(() => void loadQuota(false), 60_000)
+    void loadQuota(true)
+    const timer = setInterval(() => void loadQuota(true), 60_000)
     return () => clearInterval(timer)
   }, [active, role, loadQuota])
 
   const summary = report?.summary.range === range ? report.summary : null
   const totals = summary?.totals
+  const creditBilling =
+    role === 'client' || quotas?.some((item) => item.quota?.tokenBasedBilling)
   return (
     <>
       <div className="dashboard-head">
@@ -421,6 +445,13 @@ export function Dashboard({
             </button>
           ))}
         </div>
+        <p className="muted">
+          Token usage refreshes every 5 seconds after upstream requests finish.
+          {summary && ` Last refreshed ${formatTime(summary.to)}.`}{' '}
+          <button onClick={() => setRefreshUsage((value) => value + 1)}>
+            Refresh usage
+          </button>
+        </p>
       </div>
       {usageError && (
         <p className="notice warn" role="status">
@@ -444,9 +475,19 @@ export function Dashboard({
               detail={`${formatInteger(totals.failed)} failed · ${plural(totals.webSearches, 'web search')}`}
             />
             <Metric
-              label="Premium requests"
-              value={formatPremium(totals.premiumRequests)}
-              detail={`${plural(totals.prompts, 'prompt')} · ${plural(totals.followUps, 'follow-up')}`}
+              label={creditBilling ? 'Copilot credits' : 'Premium requests'}
+              value={
+                creditBilling ?
+                  totals.costUsd === null ?
+                    '—'
+                  : formatPremium(totals.costUsd * 100)
+                : formatPremium(totals.premiumRequests)
+              }
+              detail={
+                creditBilling ?
+                  `${formatInteger(totals.costedRequests)} of ${formatInteger(totals.requests)} report credits`
+                : `${plural(totals.prompts, 'prompt')} · ${plural(totals.followUps, 'follow-up')}`
+              }
             />
             <Metric
               label="Input tokens"
@@ -507,18 +548,19 @@ export function Dashboard({
               clients={report.clients}
               limits={report.limits}
               models={[...new Set(summary.models.map((row) => row.model))]}
-              onLimitsSaved={(limits) =>
+              onLimitsSaved={(limits) => {
                 setReport((current) => current && { ...current, limits })
-              }
+                setRefreshUsage((value) => value + 1)
+              }}
             />
           )}
           {totals.requests > 0 && <RecentTable summary={summary} />}
           <p className="muted footnote">
-            Estimated cost uses the AI units Copilot reports with each response,
-            converted at 100 AI units per US dollar (the original gateway&apos;s
-            rate). Requests without reported AI units are not priced. Token
-            counts include web-search and tool-round requests made on your
-            behalf.
+            Copilot credits use reported AI units (1 billion nano AI units per
+            credit). One AI credit is $0.01 USD. Requests without reported AI
+            units are not priced, never assumed free. Local usage is separate
+            from GitHub&apos;s account-wide quota. Token counts include
+            web-search and tool-round requests.
           </p>
         </>
       }

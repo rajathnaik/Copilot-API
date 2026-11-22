@@ -59,5 +59,8 @@ export function formatDuration(ms: number | null) {
 const premium = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 })
 export const formatPremium = (value: number) => premium.format(value)
 
+const credits = new Intl.NumberFormat(undefined, { maximumFractionDigits: 9 })
+export const formatCredits = (value: number) => credits.format(value)
+
 export const plural = (count: number, word: string) =>
   `${integer.format(count)} ${word}${count === 1 ? '' : 's'}`

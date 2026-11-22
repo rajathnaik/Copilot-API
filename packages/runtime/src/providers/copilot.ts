@@ -143,6 +143,8 @@ const quotaDetailSchema = z
   .object({
     entitlement: z.number().optional(),
     remaining: z.number().optional(),
+    quota_remaining: z.number().optional(),
+    credits_used: z.number().nonnegative().optional(),
     percent_remaining: z.number().optional(),
     unlimited: z.boolean().optional(),
     overage_count: z.number().optional(),
@@ -154,6 +156,8 @@ const quotaSchema = z
     login: z.string().optional(),
     copilot_plan: z.string().optional(),
     quota_reset_date: z.string().optional(),
+    quota_reset_date_utc: z.string().optional(),
+    token_based_billing: z.boolean().optional(),
     quota_snapshots: z
       .object({
         premium_interactions: quotaDetailSchema.optional(),
@@ -172,6 +176,7 @@ export interface CopilotQuotaDetail {
   unlimited: boolean
   overageCount: number
   overagePermitted: boolean
+  creditsUsed: number | null
 }
 
 export interface CopilotQuota {
@@ -182,6 +187,7 @@ export interface CopilotQuota {
   premium: CopilotQuotaDetail | null
   chat: CopilotQuotaDetail | null
   completions: CopilotQuotaDetail | null
+  tokenBasedBilling: boolean
 }
 
 function quotaDetail(
@@ -190,11 +196,12 @@ function quotaDetail(
   if (!value) return null
   return {
     entitlement: value.entitlement ?? null,
-    remaining: value.remaining ?? null,
+    remaining: value.remaining ?? value.quota_remaining ?? null,
     percentRemaining: value.percent_remaining ?? null,
     unlimited: value.unlimited ?? false,
     overageCount: value.overage_count ?? 0,
     overagePermitted: value.overage_permitted ?? false,
+    creditsUsed: value.credits_used ?? null,
   }
 }
 
@@ -555,11 +562,12 @@ export class CopilotProvider {
     const quota: CopilotQuota = {
       login: value.login ?? null,
       plan: value.copilot_plan ?? null,
-      resetDate: value.quota_reset_date ?? null,
+      resetDate: value.quota_reset_date_utc ?? value.quota_reset_date ?? null,
       checkedAt: this.now(),
       premium: quotaDetail(value.quota_snapshots?.premium_interactions),
       chat: quotaDetail(value.quota_snapshots?.chat),
       completions: quotaDetail(value.quota_snapshots?.completions),
+      tokenBasedBilling: value.token_based_billing ?? false,
     }
     this.quotas.set(id, quota)
     return quota

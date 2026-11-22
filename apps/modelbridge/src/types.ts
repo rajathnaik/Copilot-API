@@ -78,7 +78,7 @@ export interface UsageReport {
   summary: UsageSummary
   error: string | null
   limits: PremiumLimits
-  // This month's premium use and limit state for each remote client.
+  // This month's reported usage and warn-only limit state for each remote client.
   clients: ClientLimitStatus[]
 }
 

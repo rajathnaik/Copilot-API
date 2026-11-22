@@ -70,6 +70,7 @@ export function emptyUsage(): UsageTokens {
 export class UsageMeter {
   private readonly fields: Partial<UsageTokens> = {}
   private nanoAiu: number | null = null
+  private messagesInput = 0
 
   observe(value: unknown): void {
     const event = record(value)
@@ -137,10 +138,16 @@ export class UsageMeter {
       const input = count(usage.input_tokens)
       const read = count(usage.cache_read_input_tokens)
       const write = count(usage.cache_creation_input_tokens)
-      if (input !== undefined || read !== undefined || write !== undefined)
-        set('inputTokens', (input ?? 0) + (read ?? 0) + (write ?? 0))
+      if (input !== undefined) this.messagesInput = input
       set('cachedInputTokens', read)
       set('cacheWriteTokens', write)
+      if (input !== undefined || read !== undefined || write !== undefined)
+        set(
+          'inputTokens',
+          this.messagesInput
+            + (this.fields.cachedInputTokens ?? 0)
+            + (this.fields.cacheWriteTokens ?? 0),
+        )
       set('outputTokens', count(usage.output_tokens))
       return
     }

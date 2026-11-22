@@ -3,10 +3,12 @@ import type { MonthlyClientUsage } from './usage-ledger'
 
 const allowance = z.number().nonnegative().max(1_000_000)
 
-// Monthly Copilot premium-request allowances for remote clients. Limits only
+// Monthly Copilot allowances for remote clients. Limits only
 // warn on the host dashboard; requests are never blocked.
 export const premiumLimitsSchema = z
   .object({
+    // I preserve old budgets in premium requests until explicitly changed.
+    unit: z.enum(['credits', 'premium-requests']).optional(),
     // Applies to every client without its own entry; null means no limit.
     defaultMonthly: allowance.nullable(),
     // Per-model allowance for each client.
@@ -18,6 +20,7 @@ export const premiumLimitsSchema = z
 export type PremiumLimits = z.infer<typeof premiumLimitsSchema>
 
 export const noPremiumLimits: PremiumLimits = {
+  unit: 'credits',
   defaultMonthly: null,
   models: {},
   clients: {},
@@ -30,6 +33,7 @@ export interface ModelLimitStatus {
   premium: number
   limit: number | null
   state: LimitState
+  used: number
 }
 
 export interface ClientLimitStatus {
@@ -40,6 +44,8 @@ export interface ClientLimitStatus {
   limit: number | null
   state: LimitState
   models: ModelLimitStatus[]
+  used: number
+  unpricedRequests: number
 }
 
 const severity: Record<LimitState, number> = {
@@ -69,6 +75,9 @@ export function premiumLimitStatus(
         premium: 0,
         lastSeen: 0,
         models: {},
+        credits: 0,
+        unpricedRequests: 0,
+        modelCredits: {},
       })
   return [...clients.values()]
     .map((client) => {
@@ -76,30 +85,31 @@ export function premiumLimitStatus(
         Object.hasOwn(limits.clients, client.client) ?
           (limits.clients[client.client] ?? null)
         : limits.defaultMonthly
+      const credits = limits.unit === 'credits'
+      const modelUsage = credits ? client.modelCredits : client.models
+      const used = credits ? client.credits : client.premium
       const models = [
-        ...new Set([
-          ...Object.keys(client.models),
-          ...Object.keys(limits.models),
-        ]),
+        ...new Set([...Object.keys(modelUsage), ...Object.keys(limits.models)]),
       ]
         .map((model) => {
           const premium = Math.round((client.models[model] ?? 0) * 100) / 100
+          const used = modelUsage[model] ?? 0
           const modelLimit = limits.models[model] ?? null
           return {
             model,
             premium,
+            used,
             limit: modelLimit,
-            state: limitState(premium, modelLimit),
+            state: limitState(used, modelLimit),
           }
         })
-        .filter((model) => model.premium > 0 || model.limit !== null)
+        .filter((model) => model.used > 0 || model.limit !== null)
         .sort(
           (left, right) =>
-            right.premium - left.premium
-            || left.model.localeCompare(right.model),
+            right.used - left.used || left.model.localeCompare(right.model),
         )
       const state = [
-        limitState(client.premium, limit),
+        limitState(used, limit),
         ...models.map((model) => model.state),
       ].reduce((worst, next) =>
         severity[next] > severity[worst] ? next : worst,
@@ -108,6 +118,8 @@ export function premiumLimitStatus(
         client: client.client,
         requests: client.requests,
         premium: client.premium,
+        used,
+        unpricedRequests: client.unpricedRequests,
         lastSeen: client.lastSeen || null,
         limit,
         state,
@@ -117,7 +129,7 @@ export function premiumLimitStatus(
     .sort(
       (left, right) =>
         severity[right.state] - severity[left.state]
-        || right.premium - left.premium
+        || right.used - left.used
         || left.client.localeCompare(right.client),
     )
 }
