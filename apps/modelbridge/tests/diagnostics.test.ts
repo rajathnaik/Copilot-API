@@ -31,6 +31,19 @@ test('diagnostics append ordered single-line events with elapsed time', async ()
   expect(lines[0]).toMatch(/^\d{4}-\d\d-\d\dT.+Z \+10ms app ready$/u)
   expect(lines[1]).toEndWith('+2500ms startup failed Error: line one line two')
   expect(describeError('not an error')).toBe('Unknown error')
+  expect(
+    describeError(
+      new Error('Source discovery failed', {
+        cause: new TypeError('fetch failed', {
+          cause: Object.assign(new Error('getaddrinfo ENOTFOUND host'), {
+            code: 'ENOTFOUND',
+          }),
+        }),
+      }),
+    ),
+  ).toBe(
+    'Error: Source discovery failed <- cause TypeError: fetch failed <- cause Error[ENOTFOUND]: getaddrinfo ENOTFOUND host',
+  )
   await log.write('long', 'x'.repeat(2000))
   expect(fs.readFileSync(log.file, 'utf8')).toEndWith(
     ` long ${'x'.repeat(500)}\n`,

@@ -180,6 +180,9 @@ export function parseHostUrl(output: string, port: number): string | null {
   return null
 }
 
+const hostWarning =
+  /disconnect|reconnect|connection (?:lost|closed|dropped)|relay|error|fail|exception|unable/iu
+
 export class TunnelProcess {
   private host: TunnelChild | null = null
   private loginProcess: TunnelChild | null = null
@@ -190,8 +193,12 @@ export class TunnelProcess {
   private accountCheck = 0
   error: string | null = null
   running = false
+  // Set when another host took over this tunnel; reconnecting would fight it.
+  replaced = false
   private stopping = false
   onUnexpectedStop: (() => void) | null = null
+  // Receives host output that suggests the relay connection changed.
+  onHostWarning: ((line: string) => void) | null = null
 
   constructor(private readonly processLauncher: TunnelLauncher = launcher) {}
 
@@ -305,10 +312,12 @@ export class TunnelProcess {
       return Promise.reject(new Error('A valid sharing port is required.'))
     this.error = null
     this.stopping = false
+    this.replaced = false
     return new Promise((resolve, reject) => {
       const child = this.processLauncher.spawn(['host', id])
       this.host = child
       let output = ''
+      let partial = ''
       let hostReady = false
       let settled = false
       const fail = (message: string) => {
@@ -330,10 +339,17 @@ export class TunnelProcess {
       const receive = (chunk: Buffer) => {
         output = (output + chunk.toString()).slice(-32_768)
         if (/Another host for the tunnel has connected/iu.test(output)) {
+          this.replaced = true
           fail('Another process replaced this tunnel host.')
           return
         }
-        if (settled) return
+        if (settled) {
+          const lines = (partial + chunk.toString()).split(/\r?\n/u)
+          partial = (lines.pop() ?? '').slice(-4096)
+          for (const line of lines)
+            if (hostWarning.test(line)) this.onHostWarning?.(line.trim())
+          return
+        }
         hostReady ||= /Ready to accept connections/iu.test(output)
         try {
           const url = parseHostUrl(output, port)

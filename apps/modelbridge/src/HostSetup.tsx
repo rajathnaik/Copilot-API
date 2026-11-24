@@ -16,6 +16,59 @@ function Step({ done, children }: { done: boolean; children: string }) {
   )
 }
 
+const time = (value: string) =>
+  new Date(value).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+
+function tunnelHealthText(health: AppStatus['tunnelHealth']): string {
+  if (health.phase === 'checking') return 'Checking the tunnel with Microsoft…'
+  if (health.phase === 'waiting')
+    return `${health.message ?? 'The tunnel is down.'}${health.retryAt ? ` Next attempt at ${time(health.retryAt)}.` : ''}`
+  if (health.message) return health.message
+  if (health.connected === true)
+    return `Tunnel connected to Microsoft’s relay${health.checkedAt ? ` (checked ${time(health.checkedAt)})` : ''}.`
+  if (health.connected === false)
+    return 'Microsoft’s relay reports no host connection. Clients cannot reach this machine.'
+  return health.autoReconnect ?
+      'ModelBridge checks the tunnel after sleep, network changes or tunnel warnings.'
+    : 'Automatic reconnect is off. Use Check tunnel now if a client cannot connect.'
+}
+
+function TunnelHealthLine({
+  status,
+  busy,
+  run,
+}: {
+  status: AppStatus
+  busy: boolean
+  run: Run
+}) {
+  const health = status.tunnelHealth
+  const working = ['checking', 'reconnecting'].includes(health.phase)
+  return (
+    <div className="actions">
+      <span
+        role="status"
+        aria-live="polite"
+        className={health.connected === false ? 'error' : undefined}
+      >
+        {tunnelHealthText(health)}
+        {health.reconnectedAt && !health.message?.startsWith('Reconnected') && (
+          <> Last reconnected at {time(health.reconnectedAt)}.</>
+        )}
+      </span>
+      <button
+        disabled={busy || working}
+        onClick={() => void run(() => window.modelbridge.checkTunnel())}
+      >
+        {working ? 'Checking…' : 'Check tunnel now'}
+      </button>
+    </div>
+  )
+}
+
 export function HostSetup({
   status,
   busy,
@@ -41,6 +94,7 @@ export function HostSetup({
   )
   const shared = sharedModelIds(status)
   const tunnelReady = !!status.tunnelUser && !status.tunnelAccountError
+  const sharingOn = status.sharing || status.tunnelHealth.pending
   const open = (url: string, fallback: string) =>
     void window.modelbridge
       .openLogin(url)
@@ -202,22 +256,25 @@ export function HostSetup({
             className={status.tunnelUser ? 'primary' : undefined}
             disabled={
               busy
-              || (!status.sharing
+              || (!sharingOn
                 && (status.tunnelSigningIn
                   || status.tunnelUserChecking
                   || !tunnelReady))
             }
             onClick={() =>
               void run(() =>
-                status.sharing ?
+                sharingOn ?
                   window.modelbridge.stopSharing()
                 : window.modelbridge.startSharing(),
               )
             }
           >
-            {status.sharing ? 'Stop sharing' : 'Enable remote access'}
+            {sharingOn ? 'Stop sharing' : 'Enable remote access'}
           </button>
         </div>
+        {sharingOn && (
+          <TunnelHealthLine status={status} busy={busy} run={run} />
+        )}
         {status.tunnelUser
           && !status.tunnelSigningIn
           && !status.tunnelUserChecking && (

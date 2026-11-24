@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { Role } from '@modelbridge/runtime/contracts'
+import type { Role, TunnelHealthSettings } from '@modelbridge/runtime/contracts'
 import type { AppStatus } from './types'
 import { failure, plural } from './format'
 import { CopyButton, copyText } from './gateway-client'
@@ -239,6 +239,62 @@ function DataFolder({
   )
 }
 
+function TunnelReconnect({
+  status,
+  busy,
+  run,
+}: Pick<Props, 'status' | 'busy' | 'run'>) {
+  const health = status.tunnelHealth
+  const save = (autoReconnect: boolean, checkMinutes: number) =>
+    void run(() =>
+      window.modelbridge.setTunnelHealth({
+        autoReconnect,
+        checkMinutes: checkMinutes as TunnelHealthSettings['checkMinutes'],
+      }),
+    )
+  return (
+    <section>
+      <h2>Tunnel connection</h2>
+      <p className="muted">
+        Sleep or a network change can silently disconnect this host from
+        Microsoft&apos;s relay while sharing still looks on. ModelBridge checks
+        the tunnel only after sleep, network changes or tunnel warnings, then
+        asks Microsoft once whether this host is attached and restarts the
+        tunnel if it is not. Changing networks is detected locally, without
+        network traffic.
+      </p>
+      <label className="checkbox">
+        <input
+          type="checkbox"
+          disabled={busy}
+          checked={health.autoReconnect}
+          onChange={(event) => save(event.target.checked, health.checkMinutes)}
+        />
+        Check and reconnect the tunnel automatically
+      </label>
+      <label>
+        Also check on a schedule
+        <select
+          disabled={busy || !health.autoReconnect}
+          value={health.checkMinutes}
+          onChange={(event) =>
+            save(health.autoReconnect, Number(event.target.value))
+          }
+        >
+          <option value={0}>Off</option>
+          <option value={15}>Every 15 minutes</option>
+          <option value={30}>Every 30 minutes</option>
+          <option value={60}>Every hour</option>
+        </select>
+      </label>
+      <p className="muted">
+        A scheduled check catches disconnects without an obvious cause. Each
+        check is one small request to Microsoft Dev Tunnels.
+      </p>
+    </section>
+  )
+}
+
 interface Props {
   status: AppStatus
   role: Role
@@ -298,6 +354,9 @@ export function SettingsPanel({
       </section>
       {role === 'client' && (
         <ClientName status={status} busy={busy} run={run} />
+      )}
+      {role === 'host' && (
+        <TunnelReconnect status={status} busy={busy} run={run} />
       )}
       <section>
         <h2>Role</h2>

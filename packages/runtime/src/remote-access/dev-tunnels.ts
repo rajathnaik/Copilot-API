@@ -9,6 +9,7 @@ export type TunnelCommand = (args: string[]) => Promise<CommandResult>
 const tunnelSchema = z.object({
   tunnel: z.object({
     tunnelId: z.string().min(1),
+    hostConnections: z.number().int().nonnegative().optional(),
     ports: z.array(z.object({ portNumber: z.number() })).default([]),
     accessControl: z
       .array(z.object({ type: z.string(), scopes: z.array(z.string()) }))
@@ -53,6 +54,25 @@ export class DevTunnels {
     if (start === -1)
       throw new Error('Dev Tunnels did not return tunnel metadata.')
     return tunnelSchema.parse(JSON.parse(output.slice(start))).tunnel
+  }
+
+  /**
+   * Asks Microsoft's relay how many hosts are attached to this tunnel. A live
+   * `devtunnel host` process can still report 0 after sleep or a network
+   * change, and then clients time out.
+   */
+  async hostConnections(): Promise<number> {
+    const shown = await this.command(['show', this.id, '-j'])
+    if (shown.code !== 0)
+      throw new Error(
+        'Could not ask Microsoft Dev Tunnels for the tunnel status. Check this machine’s internet connection and Dev Tunnels sign-in.',
+      )
+    const info = this.parse(shown.output)
+    if (info.tunnelId !== this.id && !info.tunnelId.startsWith(`${this.id}.`))
+      throw new Error('Microsoft returned a different tunnel identity.')
+    if (info.hostConnections === undefined)
+      throw new Error('Dev Tunnels did not report the tunnel host connection.')
+    return info.hostConnections
   }
 
   async provision(port: number): Promise<{ id: string }> {

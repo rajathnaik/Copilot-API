@@ -17,6 +17,7 @@ import {
   type SourceInput,
   type SourceUpdate,
 } from '../contracts'
+import { classifyNetworkFailure } from './network-failure'
 
 export type SourceFetch = (url: string, init?: RequestInit) => Promise<Response>
 
@@ -361,8 +362,13 @@ export class SourceService {
         signal: AbortSignal.timeout(30_000),
       })
     } catch (error) {
+      const failure = classifyNetworkFailure(error)
       throw new Error(
-        'Source discovery failed. Check the endpoint, network, and tunnel access.',
+        failure.kind === 'timeout' ?
+          'Source discovery failed: the endpoint did not respond within 30 seconds. If it is a ModelBridge host, its tunnel may have lost its connection; on the host, open Host setup and use Check tunnel now.'
+        : failure.kind === 'redirect' ?
+          'Source discovery failed: the endpoint answered with a redirect. Dev Tunnels redirects to a sign-in page when a tunnel does not allow anonymous access; check the URL and the host’s tunnel access.'
+        : `Source discovery failed: ${failure.reason}. Check the endpoint, network, and tunnel access.`,
         { cause: error },
       )
     }
@@ -543,7 +549,11 @@ export class SourceService {
     }
     const next = this.sources.map((source) =>
       source.id === id ?
-        { ...source, models: replacement.models, baseUrl: replacement.baseUrl }
+        {
+          ...source,
+          models: replacement.models,
+          baseUrl: replacement.baseUrl,
+        }
       : source,
     )
     this.persist(next)

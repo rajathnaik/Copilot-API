@@ -32,6 +32,9 @@ const api: ModelBridgeAPI = {
   checkTunnelLogin: () => ipcRenderer.invoke('modelbridge:tunnel-check-login'),
   startSharing: () => ipcRenderer.invoke('modelbridge:sharing-start'),
   stopSharing: () => ipcRenderer.invoke('modelbridge:sharing-stop'),
+  checkTunnel: () => ipcRenderer.invoke('modelbridge:tunnel-check'),
+  setTunnelHealth: (settings) =>
+    ipcRenderer.invoke('modelbridge:tunnel-settings', settings),
   loginCopilot: (label, shared) =>
     ipcRenderer.invoke('modelbridge:copilot-login', { label, shared }),
   cancelCopilotLogin: () => ipcRenderer.invoke('modelbridge:copilot-cancel'),

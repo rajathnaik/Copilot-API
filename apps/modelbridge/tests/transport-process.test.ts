@@ -346,11 +346,24 @@ test('tunnel CLI lifecycle reports device login, readiness, replacement, failure
       ),
     )
     await started
+    const warnings: string[] = []
+    transport.onHostWarning = (line) => warnings.push(line)
+    child().stdout.emit(
+      'data',
+      Buffer.from(
+        'Connection to host tunnel relay closed. Reconnecting\npartial',
+      ),
+    )
+    child().stdout.emit('data', Buffer.from(' line\nClient connected\n'))
+    expect(warnings).toEqual([
+      'Connection to host tunnel relay closed. Reconnecting',
+    ])
     child().stderr.emit(
       'data',
       Buffer.from('Another host for the tunnel has connected\n'),
     )
     expect(transport.error).toContain('replaced')
+    expect(transport.replaced).toBe(true)
     expect(stopped).toBe(1)
     started = transport.start('owned', 4322)
     child().emit('error', new Error('spawn error'))

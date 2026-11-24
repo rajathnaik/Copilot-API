@@ -7,6 +7,7 @@ import {
   Menu,
   nativeImage,
   net,
+  powerMonitor,
   Tray,
   shell,
 } from 'electron'
@@ -29,6 +30,8 @@ import {
   copilotInputSchema,
   roleSchema,
   stateSchema,
+  defaultTunnelHealthSettings,
+  tunnelHealthSettingsSchema,
 } from '@modelbridge/runtime/contracts'
 import type { CopilotLogin } from '@modelbridge/runtime/copilot'
 import { CodexConfigurations } from '@modelbridge/runtime/codex'
@@ -52,6 +55,7 @@ import type {
 } from '../src/types'
 import { AppState, credentialsFile } from './state'
 import { TunnelProcess } from './devtunnel-process'
+import { TunnelWatchdog } from './tunnel-watchdog'
 import { codexConfigPath, discoverCodex, inspectCodex } from './codex-discovery'
 import { createDiagnosticsLog, describeError } from './diagnostics'
 import {
@@ -119,6 +123,8 @@ const channels = [
   'modelbridge:tunnel-check-login',
   'modelbridge:sharing-start',
   'modelbridge:sharing-stop',
+  'modelbridge:tunnel-check',
+  'modelbridge:tunnel-settings',
   'modelbridge:set-role',
   'modelbridge:set-client-name',
   'modelbridge:usage',
@@ -290,7 +296,102 @@ async function initialize(): Promise<void> {
       log('tunnel account check failed', describeError(error))
     })
   void refreshTunnelUser()
+  // The user's intent; stays true while an automatic reconnect is pending.
+  let sharingWanted = false
+  let remotePort = 4322
+  const tunnelSettings = () =>
+    state.value.tunnelHealth ?? defaultTunnelHealthSettings
+  const openSharing = async () => {
+    if (!sources.models(true).length)
+      throw new Error(
+        'Choose at least one model to share before enabling remote access.',
+      )
+    if (!remoteServer) {
+      const remote = await listen(
+        createGateway(sources, state.vault.get('remote-access'), true, usage),
+        4322,
+      )
+      remoteServer = remote.server
+      remotePort = remote.port
+    }
+    await transport.prepare()
+    const resource = await new DevTunnels(state.value.tunnelId, (args) =>
+      transport.command(args),
+    ).provision(remotePort)
+    const url = await transport.start(resource.id, remotePort)
+    if (!transport.running)
+      throw new Error(
+        transport.error
+          ?? 'The tunnel host stopped during startup. Remote access was not enabled.',
+      )
+    remoteUrl = url
+  }
+  const closeSharing = async () => {
+    await transport.stop()
+    await closeServer(remoteServer)
+    remoteServer = null
+    remoteUrl = null
+  }
+  const watchdog = new TunnelWatchdog({
+    settings: tunnelSettings,
+    active: () => sharingWanted && !quitting,
+    hostConnections: () =>
+      new DevTunnels(state.value.tunnelId, (args) =>
+        transport.command(args),
+      ).hostConnections(),
+    reconnect: async () => {
+      if (sharingBusy)
+        throw new Error('Remote sharing is starting or stopping.')
+      sharingBusy = true
+      try {
+        await transport.stop()
+        await openSharing()
+      } catch (error) {
+        await closeSharing().catch(() => undefined)
+        throw error
+      } finally {
+        sharingBusy = false
+      }
+    },
+    log,
+  })
+  powerMonitor.on('resume', () => {
+    watchdog.notify('resumed from sleep')
+  })
+  // Only reads local adapters; nothing is sent over the network.
+  const networkSignature = () =>
+    Object.values(os.networkInterfaces())
+      .flat()
+      .filter((address) => address && !address.internal)
+      .map((address) => `${address?.family}:${address?.address}`)
+      .sort()
+      .join(',')
+  let network = networkSignature()
+  setInterval(() => {
+    const next = networkSignature()
+    if (next === network) return
+    network = next
+    watchdog.notify('network changed')
+  }, 30_000).unref()
+  transport.onHostWarning = (line) => {
+    log(
+      'tunnel host output',
+      line.replace(/[A-Za-z0-9+/=_.-]{40,}/gu, '[redacted]'),
+    )
+    watchdog.notify('tunnel host reported a problem', { delayMs: 30_000 })
+  }
   transport.onUnexpectedStop = () => {
+    log('tunnel host exited unexpectedly', transport.error ?? undefined)
+    if (transport.replaced || !tunnelSettings().autoReconnect) {
+      sharingWanted = false
+      watchdog.reset()
+    } else {
+      transport.error = 'The tunnel host stopped. Reconnecting automatically…'
+      watchdog.notify('tunnel host exited', {
+        delayMs: 5_000,
+        confirmed: true,
+      })
+    }
     const server = remoteServer
     remoteServer = null
     remoteUrl = null
@@ -376,6 +477,10 @@ async function initialize(): Promise<void> {
     tunnelUserChecking: transport.checkingUser,
     tunnelSigningIn: transport.signingIn,
     tunnelAccountError: transport.accountError,
+    tunnelHealth: {
+      ...watchdog.health(),
+      pending: sharingWanted && !transport.running,
+    },
     copilotLogin,
     copilotError,
   })
@@ -583,25 +688,14 @@ async function initialize(): Promise<void> {
         'Choose at least one model to share before enabling remote access.',
       )
     sharingBusy = true
+    watchdog.reset()
     try {
-      const remote = await listen(
-        createGateway(sources, state.vault.get('remote-access'), true, usage),
-        4322,
-      )
-      remoteServer = remote.server
-      await transport.prepare()
-      const resource = await new DevTunnels(state.value.tunnelId, (args) =>
-        transport.command(args),
-      ).provision(remote.port)
-      const url = await transport.start(resource.id, remote.port)
-      if (!transport.running)
-        throw new Error(
-          transport.error
-            ?? 'The tunnel host stopped during startup. Remote access was not enabled.',
-        )
-      remoteUrl = url
+      await openSharing()
+      sharingWanted = true
+      watchdog.configure()
       return snapshot()
     } catch (error) {
+      sharingWanted = false
       await transport.stop()
       await closeServer(remoteServer)
       remoteServer = null
@@ -616,10 +710,21 @@ async function initialize(): Promise<void> {
       throw new Error(
         'Wait for remote sharing startup to finish before stopping it.',
       )
-    await transport.stop()
-    await closeServer(remoteServer)
-    remoteServer = null
-    remoteUrl = null
+    sharingWanted = false
+    watchdog.reset()
+    await closeSharing()
+    return snapshot()
+  })
+  handle('modelbridge:tunnel-check', async () => {
+    await watchdog.checkNow()
+    return snapshot()
+  })
+  handle('modelbridge:tunnel-settings', (input) => {
+    state.save({
+      ...state.value,
+      tunnelHealth: tunnelHealthSettingsSchema.parse(input),
+    })
+    watchdog.configure()
     return snapshot()
   })
   handle('modelbridge:set-role', (input) => {

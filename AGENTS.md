@@ -44,7 +44,7 @@
 
 ## Product scope and releases
 
-- `0.1.6` (a pre-release) is a development foundation, not a shipped universal product.
+- `0.1.7` (a pre-release) is a development foundation, not a shipped universal product.
   Direct Copilot hosting and revision-safe Codex configuration are implemented
   with synthetic/native isolated checks. Do not claim real subscription,
   tunnel or two-machine acceptance before live verification. Additional harness
@@ -111,3 +111,8 @@
   model multipliers: `total_nano_aiu / 1e9` is credits and one credit is $0.01.
   I preserve legacy budgets' units, flag missing charge reports, and keep the
   account-wide quota separate from ModelBridge's recorded client usage.
+- A live `devtunnel host` process does not prove that the tunnel is reachable:
+  after sleep or a network change the relay can report 0 host connections while
+  the process keeps running. `TunnelWatchdog` checks `hostConnections()` on
+  events, confirms twice before restarting, and never restarts after a failed
+  check. Keep periodic checks opt-in (the default is Off).

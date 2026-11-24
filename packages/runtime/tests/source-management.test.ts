@@ -244,3 +244,56 @@ test('removing a source deletes it and its key, and keeps both if saving fails',
   expect(sources.list()).toHaveLength(1)
   expect(vault.get(second.id)).toBe('second-key')
 })
+
+test('discovery failures name the transport cause instead of a generic failure', async () => {
+  const cases: Array<[Error, string]> = [
+    [
+      new DOMException('The operation timed out.', 'TimeoutError'),
+      'did not respond within 30 seconds',
+    ],
+    [
+      new TypeError('fetch failed', {
+        cause: Object.assign(new Error('getaddrinfo ENOTFOUND host'), {
+          code: 'ENOTFOUND',
+        }),
+      }),
+      'could not be resolved (DNS)',
+    ],
+    [
+      new TypeError('fetch failed', {
+        cause: Object.assign(new Error('certificate has expired'), {
+          code: 'CERT_HAS_EXPIRED',
+        }),
+      }),
+      'secure connection failed (CERT_HAS_EXPIRED)',
+    ],
+    [
+      new TypeError('fetch failed', {
+        cause: new Error('unexpected redirect'),
+      }),
+      'answered with a redirect',
+    ],
+    [
+      new TypeError('fetch failed', {
+        cause: Object.assign(new Error('other side closed'), {
+          code: 'UND_ERR_SOCKET',
+        }),
+      }),
+      'closed unexpectedly',
+    ],
+    [new Error('offline'), 'network error'],
+  ]
+  for (const [failure, message] of cases) {
+    const sources = new SourceService(
+      [],
+      credentials(),
+      () => {},
+      () => Promise.reject(failure),
+    )
+    const added = sources.add(
+      remote('https://first.devtunnels.ms', 'first-key'),
+    )
+    await expect(added).rejects.toThrow(message)
+    await expect(added).rejects.toMatchObject({ cause: failure })
+  }
+})

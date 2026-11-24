@@ -7,25 +7,45 @@ The new desktop structure retains the original Copilot API's direct
 authentication, token exchange, forwarding and protocol translations.
 **There is no Copilot SDK integration.**
 
-**Development pre-release: 0.1.6**, the latest ModelBridge release.
+**Development pre-release: 0.1.7**, the latest ModelBridge release.
 
 I download the unsigned Windows installer from the
-[ModelBridge 0.1.6 release](https://github.com/rajathnaik/Copilot-API/releases/tag/modelbridge-v0.1.6):
+[ModelBridge 0.1.7 release](https://github.com/rajathnaik/Copilot-API/releases/tag/modelbridge-v0.1.7):
 
-- [Windows installer](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.6/ModelBridge.Setup.0.1.6.exe)
-- [SHA256 checksum](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.6/ModelBridge.Setup.0.1.6.exe.sha256)
+- [Windows installer](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.7/ModelBridge.Setup.0.1.7.exe)
+- [SHA256 checksum](https://github.com/rajathnaik/Copilot-API/releases/download/modelbridge-v0.1.7/ModelBridge.Setup.0.1.7.exe.sha256)
 
-I compare `Get-FileHash .\ModelBridge.Setup.0.1.6.exe -Algorithm SHA256`
+I compare `Get-FileHash .\ModelBridge.Setup.0.1.7.exe -Algorithm SHA256`
 with the downloaded checksum before running the installer. Windows may warn
 about an unknown publisher because this development build is not code-signed.
 I use the same installer on the host and client machines. If 0.1.3 or later is
-installed, I can use **Update to 0.1.6** in the app instead of reinstalling.
+installed, I can use **Update to 0.1.7** in the app instead of reinstalling.
 
 To build the unsigned Windows development installer locally, I run
 `bun run --cwd apps/modelbridge package:win`. Its output is
-`apps/modelbridge/release/ModelBridge.Setup.0.1.6.exe`. This is a test
+`apps/modelbridge/release/ModelBridge.Setup.0.1.7.exe`. This is a test
 candidate, not a verified production release; installation/upgrade/uninstall
 and the real two-machine acceptance test are still pending.
+
+## What's new in 0.1.7: tunnel reconnect and clearer connection errors
+
+- **Dropped tunnels recover.** After sleep or a network change, the
+  `devtunnel host` process could stay alive while the relay had **0 host
+  connections**, so clients timed out. I now check the relay's host connection
+  count (`devtunnel show`, a single management call that sends no traffic through
+  the tunnel) when the PC wakes, when a local network adapter changes, and when
+  the tunnel prints a connection warning. I confirm a missing host
+  a second time before restarting sharing on the same URL. I back off retries
+  (1, 2, 5, then 10 minutes), and I never restart the tunnel because a check
+  itself failed.
+- **No polling by default.** In **Settings → Tunnel reconnect**, I can turn
+  automatic reconnect off or add a backstop check every 15, 30 or 60 minutes
+  (Off by default). **Check tunnel now** on the host checks immediately and
+  reconnects if needed, even when automatic reconnect is off.
+- **Clearer client errors.** Discovery and request failures now name the
+  cause, for example a timeout, DNS failure, refused connection, TLS failure or
+  redirect, instead of a generic "check the endpoint". The diagnostics log
+  records the full error cause chain.
 
 ## What's new in 0.1.6: credit-aware usage and client budgets
 
@@ -498,6 +518,18 @@ startup timings, window responsiveness and renderer/child-process failures; it
 never records keys or tokens. If the window stays on "Starting ModelBridge…" or
 startup fails, check this file first. ModelBridge is single-instance: launching
 it again focuses the running window, including one hidden in the tray.
+
+## Troubleshooting client connections
+
+When a client cannot reach its host, I first check the client's diagnostics log.
+It now records why the request failed. If the failure is a timeout, I run
+`curl.exe -I --max-time 15 "<host URL>/v1/models"` from both machines. If
+the request also times out on the host, the relay has lost the host even
+though sharing still looks active. I select **Check tunnel now** on the host
+(or stop and start sharing). The URL stays the same. `devtunnel show <tunnel>`
+should report at least one host connection. I keep the Dev Tunnels CLI current
+(`winget upgrade Microsoft.devtunnel`), because older versions warn on every
+command.
 
 ## Pending live verification and subsequent work
 

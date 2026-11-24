@@ -7,9 +7,19 @@ export interface DiagnosticsLog {
 }
 
 export function describeError(error: unknown): string {
-  return error instanceof Error ?
-      `${error.name}: ${error.message}`
-    : 'Unknown error'
+  if (!(error instanceof Error)) return 'Unknown error'
+  const parts = [`${error.name}: ${error.message}`]
+  // Fetch failures hide the useful part (DNS, TLS, timeout) in their causes.
+  let cause: unknown = error.cause
+  for (let depth = 0; depth < 4 && cause; depth++) {
+    if (!(cause instanceof Error)) break
+    const code = (cause as { code?: unknown }).code
+    parts.push(
+      `cause ${cause.name}${typeof code === 'string' || typeof code === 'number' ? `[${code}]` : ''}: ${cause.message}`,
+    )
+    cause = cause.cause
+  }
+  return parts.join(' <- ')
 }
 
 /**

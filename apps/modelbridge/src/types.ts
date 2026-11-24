@@ -22,8 +22,10 @@ import type {
 } from '@modelbridge/runtime/limits'
 import type { CodexInstallation } from '../electron/codex-discovery'
 import type { UpdateState } from '../electron/updates'
+import type { TunnelHealth } from '../electron/tunnel-watchdog'
+import type { TunnelHealthSettings } from '@modelbridge/runtime/contracts'
 
-export type { UpdateState }
+export type { UpdateState, TunnelHealth }
 
 export interface DataLocationStatus {
   path: string
@@ -55,6 +57,10 @@ export interface AppStatus {
   tunnelUserChecking: boolean
   tunnelSigningIn: boolean
   tunnelAccountError: string | null
+  tunnelHealth: TunnelHealth & {
+    // Sharing is wanted but the tunnel is down and waiting to reconnect.
+    pending: boolean
+  }
   copilotLogin: CopilotLogin | null
   copilotError: string | null
 }
@@ -129,6 +135,9 @@ export interface ModelBridgeAPI {
   checkTunnelLogin(): Promise<Result<AppStatus>>
   startSharing(): Promise<Result<AppStatus>>
   stopSharing(): Promise<Result<AppStatus>>
+  // Asks Microsoft whether this host is attached and reconnects if not.
+  checkTunnel(): Promise<Result<AppStatus>>
+  setTunnelHealth(settings: TunnelHealthSettings): Promise<Result<AppStatus>>
   loginCopilot(label: string, shared: boolean): Promise<Result<AppStatus>>
   cancelCopilotLogin(): Promise<Result<AppStatus>>
   refreshSource(sourceId: string): Promise<Result<AppStatus>>

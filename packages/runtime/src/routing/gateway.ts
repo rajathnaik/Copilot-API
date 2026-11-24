@@ -36,6 +36,7 @@ import {
 } from '../sources/source-service'
 import { meteredFetch, type UpstreamUsage } from '../usage/usage-meter'
 import { withStreamTimeouts } from '../sources/stream-timeouts'
+import { classifyNetworkFailure } from '../sources/network-failure'
 import { stabilizeResponseItemIds } from './stable-item-ids'
 import {
   unnamedClientLabel,
@@ -369,7 +370,7 @@ export function createGateway(
         return fail(
           protocol,
           502,
-          'The selected source could not be reached. No fallback source was used.',
+          `The selected source could not be reached: ${classifyNetworkFailure(error).reason}. No fallback source was used.`,
         )
       }
       const headers = new Headers()

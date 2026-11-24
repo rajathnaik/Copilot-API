@@ -175,3 +175,35 @@ test('tunnel failures do not invent URLs, claim readiness, modify unrelated reso
   expect(() => validateTunnelUrl('http://host.devtunnels.ms')).toThrow()
   expect(() => validateTunnelUrl('https://attacker.example')).toThrow()
 })
+
+test('host connection checks report the relay count and refuse foreign or incomplete metadata', async () => {
+  const shown = (tunnel: Record<string, unknown>) =>
+    new DevTunnels(id, async (args) => {
+      expect(args).toEqual(['show', id, '-j'])
+      return {
+        code: 0,
+        output: `Welcome\n${JSON.stringify({ tunnel: { ports: [], ...tunnel } })}`,
+      }
+    })
+  expect(
+    await shown({
+      tunnelId: `${id}.inc1`,
+      hostConnections: 0,
+    }).hostConnections(),
+  ).toBe(0)
+  expect(
+    await shown({ tunnelId: id, hostConnections: 1 }).hostConnections(),
+  ).toBe(1)
+  await expect(
+    shown({ tunnelId: 'someone-else', hostConnections: 1 }).hostConnections(),
+  ).rejects.toThrow('different tunnel')
+  await expect(shown({ tunnelId: id }).hostConnections()).rejects.toThrow(
+    'did not report',
+  )
+  await expect(
+    new DevTunnels(id, async () => ({
+      code: 1,
+      output: 'Unauthorized',
+    })).hostConnections(),
+  ).rejects.toThrow('internet connection')
+})

@@ -206,6 +206,25 @@ export interface Credentials {
 export const roleSchema = z.enum(['host', 'client'])
 export type Role = z.infer<typeof roleSchema>
 
+export const tunnelCheckMinutes = [0, 15, 30, 60] as const
+export const tunnelHealthSettingsSchema = z
+  .object({
+    autoReconnect: z.boolean(),
+    // 0 turns the scheduled backstop check off; events still trigger checks.
+    checkMinutes: z.union([
+      z.literal(0),
+      z.literal(15),
+      z.literal(30),
+      z.literal(60),
+    ]),
+  })
+  .strict()
+export type TunnelHealthSettings = z.infer<typeof tunnelHealthSettingsSchema>
+export const defaultTunnelHealthSettings: TunnelHealthSettings = {
+  autoReconnect: true,
+  checkMinutes: 0,
+}
+
 export const stateSchema = z
   .object({
     version: z.literal(1),
@@ -214,6 +233,7 @@ export const stateSchema = z
     // Name this machine reports to remote hosts; defaults to the hostname.
     clientName: z.string().trim().min(1).max(64).optional(),
     premiumLimits: premiumLimitsSchema.optional(),
+    tunnelHealth: tunnelHealthSettingsSchema.optional(),
     sources: z.array(sourceSchema),
   })
   .strict()

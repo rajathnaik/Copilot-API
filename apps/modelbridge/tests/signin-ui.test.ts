@@ -49,6 +49,17 @@ test.skipIf(
       tunnelUserChecking: true,
       tunnelSigningIn: false,
       tunnelAccountError: null,
+      tunnelHealth: {
+        autoReconnect: true,
+        checkMinutes: 0,
+        phase: 'idle',
+        connected: null,
+        checkedAt: null,
+        reconnectedAt: null,
+        message: null,
+        retryAt: null,
+        pending: false,
+      },
       copilotLogin: null,
       copilotError: null,
     }
